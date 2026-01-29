@@ -21,6 +21,7 @@
 | Backend | Hono | https://hono.dev/docs |
 | Frontend | React + Vite | https://vite.dev/guide |
 | Terminal | ghostty-web | https://github.com/coder/ghostty-web |
+| WebSocket Client | PartySocket | https://github.com/cloudflare/partykit/tree/main/packages/partysocket |
 | Database | Drizzle + SQLite | https://orm.drizzle.team/docs/overview |
 | Auth | Better Auth | https://www.better-auth.com/docs |
 | UI Components | shadcn/ui + Tailwind | https://ui.shadcn.com/docs |
@@ -312,9 +313,26 @@ async function deleteImage(imageId: string): Promise<void>
 
 1. **Terminal.tsx**
    - Wrapper for ghostty-web
-   - WebSocket connection to `/api/vms/:id/terminal`
+   - WebSocket connection via PartySocket (`useWebSocket` hook)
+   - Auto-reconnection on network changes (critical for mobile)
+   - Message buffering during brief disconnects
    - Handles resize events
    - Full-height on mobile
+
+   ```typescript
+   // Example usage with PartySocket
+   import useWebSocket from 'partysocket/react';
+   
+   const socket = useWebSocket(
+     () => `${baseUrl}/api/vms/${vmId}/terminal`,
+     [],
+     {
+       onMessage: (e) => terminal.write(e.data),
+       onOpen: () => console.log('Terminal connected'),
+       onClose: () => console.log('Terminal disconnected'),
+     }
+   );
+   ```
 
 2. **VMList.tsx**
    - Fetches and displays VMs
@@ -980,6 +998,7 @@ When implementing any component:
 | shadcn/ui | https://ui.shadcn.com/docs |
 | Clack | https://bomb.sh/docs/clack/basics/getting-started |
 | ghostty-web | https://github.com/coder/ghostty-web |
+| PartySocket | https://github.com/cloudflare/partykit/tree/main/packages/partysocket |
 | Firecracker API | https://github.com/firecracker-microvm/firecracker/blob/main/src/firecracker/swagger/firecracker.yaml |
 | Slicer (agent API) | https://docs.slicervm.com/reference/api |
 | Slicer (images) | https://docs.slicervm.com/reference/images |
