@@ -39,19 +39,24 @@ bonfire/
 │   │   │   ├── index.ts        # Entry point, Hono app setup
 │   │   │   ├── routes/
 │   │   │   │   ├── vms.ts      # VM CRUD + actions
+│   │   │   │   ├── vms.test.ts             # Unit tests
+│   │   │   │   ├── vms.integration.test.ts # Integration tests
 │   │   │   │   ├── images.ts   # Image pull/list/delete
 │   │   │   │   └── auth.ts     # Better Auth routes
 │   │   │   ├── services/
 │   │   │   │   ├── firecracker.ts  # Spawn/manage FC processes
+│   │   │   │   ├── firecracker.test.ts     # Unit tests
 │   │   │   │   ├── network.ts      # TAP/bridge helpers
+│   │   │   │   ├── network.test.ts         # Unit tests
 │   │   │   │   ├── agent.ts        # Proxy to guest agent
 │   │   │   │   └── registry.ts     # OCI image pull
 │   │   │   ├── db/
 │   │   │   │   ├── schema.ts   # Drizzle schema
 │   │   │   │   └── index.ts    # DB connection
-│   │   │   └── lib/
-│   │   │       ├── auth.ts     # Better Auth config
-│   │   │       └── config.ts   # App configuration
+│   │   │   ├── lib/
+│   │   │   │   ├── auth.ts     # Better Auth config
+│   │   │   │   └── config.ts   # App configuration
+│   │   │   └── test-utils.ts   # Test helpers, mock factories
 │   │   ├── package.json
 │   │   └── tsconfig.json
 │   │
@@ -102,11 +107,19 @@ bonfire/
 │
 ├── scripts/
 │   ├── setup.sh                # Install firecracker, setup bridge
-│   └── generate-sdk.ts         # Generate SDK from OpenAPI
+│   ├── generate-sdk.ts         # Generate SDK from OpenAPI
+│   └── run-e2e.sh              # E2E test runner script
 │
 ├── docker/
-│   ├── Dockerfile
-│   └── docker-compose.yml
+│   ├── Dockerfile              # Production image
+│   ├── docker-compose.yml      # Production stack
+│   ├── test.Dockerfile         # Integration test image
+│   ├── e2e.Dockerfile          # E2E test image (with Firecracker)
+│   └── docker-compose.test.yml # Test stack
+│
+├── e2e/                        # End-to-end tests (require KVM)
+│   ├── vm-lifecycle.test.ts
+│   └── terminal.test.ts
 │
 ├── package.json                # Workspace root
 ├── turbo.json                  # Turborepo config
@@ -506,6 +519,418 @@ volumes:
 
 ---
 
+## Testing Strategy
+
+> **Agent Note**: Tests must be safe to run anywhere. Never write tests that modify the host system, create real network devices, or require KVM unless explicitly in the E2E test container.
+
+### Test Philosophy
+
+- **Only write tests that add real confidence and value**
+- **No fake tests** that just read files, check documentation exists, or test trivial getters/setters
+- **Mock only what's necessary** to isolate the module under test - don't mock the world
+- **Tests must be deterministic** - no flaky tests, no timing dependencies
+
+### Test Layers
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                         Test Environments                            │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  ┌───────────────────┐  ┌────────────────────┐  ┌────────────────┐  │
+│  │    Unit Tests     │  │ Integration Tests  │  │   E2E Tests    │  │
+│  │                   │  │                    │  │                │  │
+│  │  bun test         │  │  docker compose    │  │ docker + KVM   │  │
+│  │                   │  │  run test-int      │  │                │  │
+│  │  - No I/O         │  │                    │  │  - Real FCs    │  │
+│  │  - No network     │  │  - Isolated DB     │  │  - Real TAPs   │  │
+│  │  - No DB          │  │  - Mocked FC       │  │  - Isolated    │  │
+│  │  - Pure functions │  │  - Real routes     │  │    network     │  │
+│  │                   │  │                    │  │                │  │
+│  │  Runs: anywhere   │  │  Runs: Docker      │  │  Runs: Linux   │  │
+│  │                   │  │                    │  │  + KVM host    │  │
+│  └───────────────────┘  └────────────────────┘  └────────────────┘  │
+│                                                                      │
+│  Command:              Command:                 Command:             │
+│  bun test              bun run test:int         bun run test:e2e    │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### 1. Unit Tests
+
+**Location**: `packages/*/src/**/*.test.ts` (co-located with source)
+
+**Run with**: `bun test`
+
+**Rules**:
+- **NO** filesystem writes
+- **NO** network requests
+- **NO** database connections
+- **NO** spawning processes
+- **NO** environment variable dependencies
+- **YES** pure functions, business logic, data transformations
+
+**What to test**:
+```typescript
+// packages/api/src/services/network.test.ts
+// Testing pure IP allocation logic (no actual network calls)
+describe('IP allocation', () => {
+  it('allocates next available IP from pool', () => {
+    const pool = createIPPool('10.0.100.0/24');
+    expect(pool.allocate()).toBe('10.0.100.2');  // .1 is gateway
+    expect(pool.allocate()).toBe('10.0.100.3');
+  });
+
+  it('throws when pool exhausted', () => {
+    const pool = createIPPool('10.0.100.0/30');  // Only 2 usable IPs
+    pool.allocate();
+    pool.allocate();
+    expect(() => pool.allocate()).toThrow('IP pool exhausted');
+  });
+});
+
+// packages/api/src/services/firecracker.test.ts
+// Testing config generation (no actual Firecracker calls)
+describe('VM config generation', () => {
+  it('generates valid machine config', () => {
+    const config = generateMachineConfig({ vcpus: 2, memoryMib: 1024 });
+    expect(config).toEqual({
+      vcpu_count: 2,
+      mem_size_mib: 1024,
+    });
+  });
+});
+
+// packages/cli/src/commands/vm.test.ts
+// Testing argument parsing (no actual API calls)
+describe('vm create argument parsing', () => {
+  it('parses vcpus flag', () => {
+    const args = parseVMCreateArgs(['my-vm', '--vcpus=4']);
+    expect(args.vcpus).toBe(4);
+  });
+});
+```
+
+**What NOT to test**:
+```typescript
+// BAD: Testing that a file exists
+it('has a README', () => {
+  expect(fs.existsSync('README.md')).toBe(true);  // Useless test
+});
+
+// BAD: Testing trivial code
+it('returns the name', () => {
+  const vm = { name: 'test' };
+  expect(vm.name).toBe('test');  // Tests nothing meaningful
+});
+
+// BAD: Testing library code
+it('drizzle inserts data', () => {
+  // Don't test that Drizzle works - test YOUR logic
+});
+```
+
+### 2. Integration Tests
+
+**Location**: `packages/*/src/**/*.integration.test.ts`
+
+**Run with**: `bun run test:int` (runs inside Docker container)
+
+**Rules**:
+- Run inside `docker/test.Dockerfile` container
+- Each test file gets a fresh temp SQLite database: `/tmp/bonfire-test-{random}.db`
+- Tests are independent - no shared state between test files
+- Firecracker service is mocked (no KVM required)
+- Network service is mocked (no TAP devices)
+- HTTP routes are tested with real Hono app
+
+**What to test**:
+```typescript
+// packages/api/src/routes/vms.integration.test.ts
+import { describe, it, expect, beforeEach } from 'bun:test';
+import { createTestApp } from '../test-utils';
+
+describe('POST /api/vms', () => {
+  let app: ReturnType<typeof createTestApp>;
+
+  beforeEach(async () => {
+    // Creates fresh DB, mocked services
+    app = await createTestApp();
+  });
+
+  it('creates a VM and returns it', async () => {
+    const res = await app.request('/api/vms', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'test-vm', imageId: 'img-123' }),
+    });
+
+    expect(res.status).toBe(201);
+    const vm = await res.json();
+    expect(vm.name).toBe('test-vm');
+    expect(vm.status).toBe('creating');
+  });
+
+  it('rejects duplicate VM names', async () => {
+    await app.request('/api/vms', {
+      method: 'POST',
+      body: JSON.stringify({ name: 'dupe', imageId: 'img-123' }),
+    });
+
+    const res = await app.request('/api/vms', {
+      method: 'POST',
+      body: JSON.stringify({ name: 'dupe', imageId: 'img-123' }),
+    });
+
+    expect(res.status).toBe(409);
+  });
+});
+```
+
+**Test utilities** (`packages/api/src/test-utils.ts`):
+```typescript
+import { drizzle } from 'drizzle-orm/bun:sqlite';
+import { Database } from 'bun:sqlite';
+import { randomUUID } from 'crypto';
+import { createApp } from './index';
+
+export async function createTestApp() {
+  // Fresh database for each test
+  const dbPath = `/tmp/bonfire-test-${randomUUID()}.db`;
+  const sqlite = new Database(dbPath);
+  const db = drizzle(sqlite);
+
+  // Run migrations
+  await migrate(db);
+
+  // Create app with mocked services
+  const app = createApp({
+    db,
+    firecracker: createMockFirecrackerService(),
+    network: createMockNetworkService(),
+  });
+
+  return {
+    app,
+    db,
+    request: app.request.bind(app),
+    cleanup: () => {
+      sqlite.close();
+      fs.unlinkSync(dbPath);
+    },
+  };
+}
+
+function createMockFirecrackerService() {
+  return {
+    createVM: async () => ({ socketPath: '/tmp/mock.sock', pid: 12345 }),
+    startVM: async () => {},
+    stopVM: async () => {},
+  };
+}
+
+function createMockNetworkService() {
+  let nextIP = 2;
+  return {
+    createTap: async () => ({ tapName: 'tap-mock', mac: '00:00:00:00:00:01' }),
+    deleteTap: async () => {},
+    allocateIP: async () => `10.0.100.${nextIP++}`,
+    releaseIP: async () => {},
+  };
+}
+```
+
+### 3. End-to-End Tests
+
+**Location**: `e2e/*.test.ts`
+
+**Run with**: `bun run test:e2e` (manual) or in CI with KVM-enabled runner
+
+**Rules**:
+- **Only run on Linux hosts with KVM**
+- Run inside `docker/e2e.Dockerfile` container with:
+  - `/dev/kvm` passed through
+  - Isolated network namespace
+  - Separate bridge `bonfire-test0`
+  - Separate directories `/tmp/bonfire-e2e/`
+- Codebase mounted read-only
+- Tests real Firecracker VMs
+- Cleanup must be thorough (VMs, TAPs, bridge, files)
+
+**What to test**:
+```typescript
+// e2e/vm-lifecycle.test.ts
+import { describe, it, expect, afterAll } from 'bun:test';
+import { BonfireClient } from '@bonfire/sdk';
+
+describe('VM lifecycle (E2E)', () => {
+  const client = new BonfireClient({ baseUrl: 'http://localhost:3000' });
+  const createdVMs: string[] = [];
+
+  afterAll(async () => {
+    // Cleanup all VMs created during tests
+    for (const id of createdVMs) {
+      await client.vms.delete(id).catch(() => {});
+    }
+  });
+
+  it('creates, starts, executes command, and stops a VM', async () => {
+    // Create
+    const vm = await client.vms.create({
+      name: `e2e-test-${Date.now()}`,
+      imageId: 'default',
+    });
+    createdVMs.push(vm.id);
+    expect(vm.status).toBe('creating');
+
+    // Start
+    await client.vms.start(vm.id);
+    
+    // Wait for agent to be healthy
+    await waitForHealth(client, vm.id, { timeout: 30000 });
+
+    // Execute command
+    const result = await client.vms.exec(vm.id, {
+      command: 'echo',
+      args: ['hello'],
+    });
+    expect(result.stdout.trim()).toBe('hello');
+    expect(result.exitCode).toBe(0);
+
+    // Stop
+    await client.vms.stop(vm.id);
+    const stopped = await client.vms.get(vm.id);
+    expect(stopped.status).toBe('stopped');
+  });
+}, { timeout: 60000 });
+```
+
+### Test Infrastructure Files
+
+**`docker/test.Dockerfile`** (for integration tests):
+```dockerfile
+FROM oven/bun:latest
+
+WORKDIR /app
+
+# No KVM needed, no special privileges
+# Just runs the app with mocked services
+
+COPY . .
+RUN bun install
+
+CMD ["bun", "test", "--grep", "integration"]
+```
+
+**`docker/e2e.Dockerfile`** (for E2E tests):
+```dockerfile
+FROM ubuntu:24.04
+
+# Install Bun
+RUN curl -fsSL https://bun.sh/install | bash
+
+# Install Firecracker
+RUN curl -fsSL https://github.com/firecracker-microvm/firecracker/releases/download/v1.14.1/firecracker-v1.14.1-x86_64.tgz | tar -xz
+RUN mv release-*/firecracker-* /usr/local/bin/firecracker
+
+# Network tools
+RUN apt-get update && apt-get install -y iproute2 iptables
+
+WORKDIR /app
+
+# Codebase mounted at runtime
+CMD ["./scripts/run-e2e.sh"]
+```
+
+**`docker/docker-compose.test.yml`**:
+```yaml
+version: '3.8'
+
+services:
+  test-integration:
+    build:
+      context: ..
+      dockerfile: docker/test.Dockerfile
+    volumes:
+      - ../:/app:ro
+      - /tmp/bonfire-test:/tmp/bonfire-test
+    environment:
+      - NODE_ENV=test
+
+  test-e2e:
+    build:
+      context: ..
+      dockerfile: docker/e2e.Dockerfile
+    privileged: true
+    devices:
+      - /dev/kvm:/dev/kvm
+    cap_add:
+      - NET_ADMIN
+      - SYS_ADMIN
+    volumes:
+      - ../:/app:ro
+      - /tmp/bonfire-e2e:/var/lib/bonfire
+    environment:
+      - NODE_ENV=test
+      - BONFIRE_BRIDGE=bonfire-test0
+      - BONFIRE_SUBNET=10.0.200.0/24
+```
+
+### Package.json Scripts
+
+```json
+{
+  "scripts": {
+    "test": "bun test --ignore '**/*.integration.test.ts'",
+    "test:int": "docker compose -f docker/docker-compose.test.yml run --rm test-integration",
+    "test:e2e": "docker compose -f docker/docker-compose.test.yml run --rm test-e2e",
+    "test:all": "bun run test && bun run test:int"
+  }
+}
+```
+
+### Test File Naming Convention
+
+| Pattern | Type | Runs In |
+|---------|------|---------|
+| `*.test.ts` | Unit | `bun test` (anywhere) |
+| `*.integration.test.ts` | Integration | Docker container |
+| `e2e/*.test.ts` | End-to-end | Docker + KVM |
+
+### CI Configuration
+
+```yaml
+# .github/workflows/test.yml
+name: Tests
+
+on: [push, pull_request]
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+      - run: bun install
+      - run: bun test
+
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose -f docker/docker-compose.test.yml run --rm test-integration
+
+  e2e:
+    runs-on: [self-hosted, kvm]  # Requires self-hosted runner with KVM
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose -f docker/docker-compose.test.yml run --rm test-e2e
+```
+
+---
+
 ## Agent Instructions Summary
 
 When implementing any component:
@@ -518,6 +943,31 @@ When implementing any component:
 6. **Type safety** - leverage TypeScript strictly
 7. **Error handling** - provide meaningful error messages
 8. **Logging** - add structured logs for debugging
+
+### Testing Rules for Agents
+
+> **CRITICAL**: Tests must be safe to run anywhere. Violating these rules can damage the host system.
+
+1. **Unit tests (`*.test.ts`)**:
+   - NO filesystem writes, NO network calls, NO database connections
+   - Test pure functions and business logic only
+   - Must pass with just `bun test`
+
+2. **Integration tests (`*.integration.test.ts`)**:
+   - Use `createTestApp()` helper which provides isolated temp database
+   - Mock Firecracker and Network services
+   - Never create real TAP devices or network bridges
+
+3. **E2E tests (`e2e/*.test.ts`)**:
+   - Only create these for full VM lifecycle testing
+   - They ONLY run in the E2E Docker container with KVM
+   - Always clean up VMs in `afterAll`
+
+4. **No fake tests**:
+   - Don't test that files exist
+   - Don't test trivial getters/setters
+   - Don't test library code (Drizzle, Hono, etc.)
+   - Every test must add real confidence
 
 ### Key Documentation URLs to Fetch
 
