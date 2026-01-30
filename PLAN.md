@@ -961,6 +961,57 @@ When implementing any component:
 6. **Type safety** - leverage TypeScript strictly
 7. **Error handling** - provide meaningful error messages
 8. **Logging** - add structured logs for debugging
+9. **Use available skills** - Load relevant skills for specific code domains (see Skills section below)
+
+---
+
+## Skills for Code Domains
+
+This project has specialized skills available for specific code domains. **Always use the appropriate skill when working on relevant code** to follow best practices and avoid common mistakes.
+
+### Available Skills
+
+| Skill Name | When to Use | Skill Command |
+|------------|-------------|---------------|
+| **vercel-react-best-practices** | Writing/reviewing React or Next.js components, data fetching, performance optimization | Use when touching any React/Next.js code |
+| **vercel-composition-patterns** | Refactoring components with many boolean props, building flexible component APIs, compound components | Use when designing component architecture |
+| **turborepo** | Configuring tasks, setting up monorepo, managing packages, debugging cache, CI configuration | Use when working with turbo.json or package structure |
+
+### How to Use Skills
+
+Before implementing features in these domains:
+
+1. **Load the relevant skill** to get detailed best practices
+2. **Follow the skill's guidance** for patterns and anti-patterns
+3. **Apply the skill's rules** to your implementation
+
+Example scenarios:
+
+- **Creating a new React component in `packages/web/`**: Load `vercel-react-best-practices` and `vercel-composition-patterns`
+- **Adding a new package or configuring tasks**: Load `turborepo`
+- **Optimizing data fetching or bundle size**: Load `vercel-react-best-practices`
+- **Setting up CI or debugging cache**: Load `turborepo`
+
+### Key Skill Rules to Remember
+
+#### React/Next.js (vercel-react-best-practices)
+- Eliminate waterfalls: Use `Promise.all()` for independent operations, defer `await` until needed
+- Bundle optimization: Import directly from source (avoid barrel files), use dynamic imports for heavy components
+- Server-side: Use `React.cache()` for deduplication, authenticate server actions like API routes
+- Re-renders: Use functional setState, derive state during render, extract to memoized components
+
+#### Component Architecture (vercel-composition-patterns)
+- Avoid boolean prop proliferation: Use composition instead of `isEditing`, `isThread`, etc.
+- Use compound components with shared context for flexible composition
+- Lift state into provider components for sibling access
+- Define generic context interfaces (state, actions, meta) for dependency injection
+
+#### Turborepo (turborepo)
+- **CRITICAL**: Always create package tasks, not root tasks
+- Always use `turbo run` in code (never shorthand `turbo <task>`)
+- Declare workspace dependencies to enable automatic build ordering
+- Use `dependsOn: ["^build"]` for dependency build ordering
+- Specify `outputs` for all tasks that produce files
 
 ### Testing Rules for Agents
 
