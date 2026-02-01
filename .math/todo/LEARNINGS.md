@@ -153,3 +153,13 @@ Use this knowledge to avoid repeating mistakes and build on what works.
 - **Polling pattern**: Use `useEffect` with `setInterval` for polling, with cleanup via `return () => clearInterval(interval)`. Fast-forward timers in tests with `vi.advanceTimersByTimeAsync(3000)`.
 
 - **Navigation structure**: Add new routes to both `Layout.tsx` (navItems array) and `App.tsx` (Routes component) following existing patterns.
+
+## ja2d72xw - Phase 6: Polish and hardening (Task 6.1 - Config Injection)
+
+- **OpenCode config injection via systemd**: To inject environment variables into systemd user services, use the pattern: `export VAR='value' && systemctl --user import-environment VAR && systemctl --user start service`. This sets the env var in the current shell, imports it into systemd's environment, then starts the service.
+
+- **JSON config serialization**: When serializing JSON for shell commands, ensure proper escaping. Using single quotes around the JSON in the shell command avoids most escaping issues: `export VAR='{"key":"value"}'`.
+
+- **Config structure for OpenCode**: The MVP config should disable sharing (`share: "disabled"`), allow all operations (`permission: "allow"`), disable auto-updates (`autoupdate: false`), and bind to all interfaces on port 4096.
+
+- **Testing env var injection**: Mock SSH services can track executed commands and verify that environment variable patterns are present in the command string. Look for patterns like `OPENCODE_CONFIG_CONTENT` and `systemctl --user import-environment`.

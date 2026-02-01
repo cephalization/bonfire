@@ -7,7 +7,7 @@
  *    a. Create workspace directory
  *    b. Clone repository
  *    c. Checkout branch if specified
- *    d. Start OpenCode via systemctl
+ *    d. Start OpenCode via systemctl with config injection
  * 3. Poll health endpoint until ready
  * 4. Update session status
  */
@@ -18,6 +18,41 @@ import type { SSHService, SSHConfig } from "./ssh";
 import { sshService } from "./ssh";
 import * as schema from "../db/schema";
 import { agentSessions } from "../db/schema";
+
+/**
+ * OpenCode configuration structure
+ */
+export interface OpenCodeConfig {
+  share: "disabled" | "enabled";
+  permission: "allow" | "deny" | "ask";
+  autoupdate: boolean;
+  server: {
+    port: number;
+    hostname: string;
+  };
+}
+
+/**
+ * Generate OpenCode configuration for a session
+ */
+export function generateOpenCodeConfig(workspacePath: string): OpenCodeConfig {
+  return {
+    share: "disabled",
+    permission: "allow",
+    autoupdate: false,
+    server: {
+      port: 4096,
+      hostname: "0.0.0.0",
+    },
+  };
+}
+
+/**
+ * Serialize OpenCode config for environment variable injection
+ */
+export function serializeOpenCodeConfig(config: OpenCodeConfig): string {
+  return JSON.stringify(config);
+}
 
 export interface BootstrapConfig {
   sessionId: string;
@@ -132,10 +167,15 @@ export class RealBootstrapService implements BootstrapService {
           }
         }
 
-        // 4. Start OpenCode via systemctl
+        // 4. Generate OpenCode config and start via systemctl with env var injection
+        const openCodeConfig = generateOpenCodeConfig(workspacePath);
+        const configContent = serializeOpenCodeConfig(openCodeConfig);
+
+        // Set the environment variable and start OpenCode
+        // Using systemd's --user environment with export and systemctl set-environment
         const startResult = await this.sshService.exec(
           conn,
-          `systemctl --user start opencode@${sessionId}`
+          `export OPENCODE_CONFIG_CONTENT='${configContent}' && systemctl --user import-environment OPENCODE_CONFIG_CONTENT && systemctl --user start opencode@${sessionId}`
         );
         if (startResult.code !== 0) {
           throw new Error(`Failed to start OpenCode: ${startResult.stderr}`);

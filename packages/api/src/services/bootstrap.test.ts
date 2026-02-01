@@ -11,7 +11,12 @@ import { randomUUID } from "crypto";
 import { unlinkSync } from "fs";
 import * as schema from "../db/schema";
 import { createMockSSHService } from "./ssh";
-import { RealBootstrapService, createMockBootstrapService } from "./bootstrap";
+import {
+  RealBootstrapService,
+  createMockBootstrapService,
+  generateOpenCodeConfig,
+  serializeOpenCodeConfig,
+} from "./bootstrap";
 
 // Migration SQL from drizzle/0000_brave_maestro.sql + Better Auth tables
 const MIGRATION_SQL = `
@@ -349,9 +354,92 @@ describe("Bootstrap Service", () => {
 
       const systemctlCall = mockSSH.calls.exec.find((call) => call.command.includes("systemctl"));
       expect(systemctlCall).toBeDefined();
-      expect(systemctlCall!.command).toBe("systemctl --user start opencode@sess-123");
+      expect(systemctlCall!.command).toContain("systemctl --user start opencode@sess-123");
 
       cleanupTestDb(sqlite, dbPath);
+    });
+
+    it("should inject OpenCode config via OPENCODE_CONFIG_CONTENT env var", async () => {
+      const { db, sqlite, dbPath } = await createTestDb();
+      const mockSSH = createMockSSHService();
+      const bootstrapService = new RealBootstrapService(db, mockSSH);
+
+      // Insert a VM
+      const now = new Date();
+      sqlite.exec(`
+        INSERT INTO vms (id, name, status, ip_address, created_at, updated_at)
+        VALUES ('vm-123', 'test-vm', 'running', '192.168.1.1', ${now.getTime()}, ${now.getTime()})
+      `);
+
+      // Insert a session
+      sqlite.exec(`
+        INSERT INTO agent_sessions (id, user_id, repo_url, status, created_at, updated_at)
+        VALUES ('sess-123', 'test-user', 'https://github.com/org/repo', 'creating', ${now.getTime()}, ${now.getTime()})
+      `);
+
+      // Override pollHealthEndpoint
+      bootstrapService.pollHealthEndpoint = async () => true;
+
+      await bootstrapService.bootstrap({
+        sessionId: "sess-123",
+        repoUrl: "https://github.com/org/repo",
+        vmId: "vm-123",
+        vmIp: "192.168.1.1",
+      });
+
+      // Verify OpenCode config was injected via environment variable
+      const configCall = mockSSH.calls.exec.find((call) =>
+        call.command.includes("OPENCODE_CONFIG_CONTENT")
+      );
+      expect(configCall).toBeDefined();
+      expect(configCall!.command).toContain("OPENCODE_CONFIG_CONTENT");
+      expect(configCall!.command).toContain("systemctl --user import-environment");
+      expect(configCall!.command).toContain("systemctl --user start opencode@sess-123");
+
+      // Verify the config contains expected values
+      expect(configCall!.command).toContain('"share":"disabled"');
+      expect(configCall!.command).toContain('"permission":"allow"');
+      expect(configCall!.command).toContain('"autoupdate":false');
+      expect(configCall!.command).toContain('"port":4096');
+      expect(configCall!.command).toContain('"hostname":"0.0.0.0"');
+
+      cleanupTestDb(sqlite, dbPath);
+    });
+  });
+
+  describe("OpenCode Config Generation", () => {
+    it("should generate config with correct defaults", () => {
+      const config = generateOpenCodeConfig("/home/agent/workspaces/sess-123");
+
+      expect(config.share).toBe("disabled");
+      expect(config.permission).toBe("allow");
+      expect(config.autoupdate).toBe(false);
+      expect(config.server.port).toBe(4096);
+      expect(config.server.hostname).toBe("0.0.0.0");
+    });
+
+    it("should serialize config to JSON string", () => {
+      const config = generateOpenCodeConfig("/home/agent/workspaces/sess-123");
+      const serialized = serializeOpenCodeConfig(config);
+
+      // Verify it's valid JSON
+      const parsed = JSON.parse(serialized);
+      expect(parsed.share).toBe("disabled");
+      expect(parsed.permission).toBe("allow");
+      expect(parsed.autoupdate).toBe(false);
+      expect(parsed.server.port).toBe(4096);
+      expect(parsed.server.hostname).toBe("0.0.0.0");
+    });
+
+    it("should produce consistent serialized output", () => {
+      const config1 = generateOpenCodeConfig("/path/1");
+      const config2 = generateOpenCodeConfig("/path/2");
+
+      const serialized1 = serializeOpenCodeConfig(config1);
+      const serialized2 = serializeOpenCodeConfig(config2);
+
+      // Both should have same structure (workspace path not in config)
+      expect(serialized1).toBe(serialized2);
     });
   });
 });
