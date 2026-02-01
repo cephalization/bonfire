@@ -92,3 +92,33 @@ Use this knowledge to avoid repeating mistakes and build on what works.
 - **Foreign key constraints in tests**: When creating test databases, include all tables referenced by foreign keys (like `images` table for VMs) to avoid "no such table" errors during INSERT operations.
 
 - **Dependency injection for testing**: Services accept their dependencies via constructor parameters with defaults, enabling easy injection of mocks: `new RealBootstrapService(db, mockSSHService)`.
+
+## ooq0a1e3 - Phase 4: OpenCode proxy
+
+- **Hono wildcard route parameters**: When using wildcard routes (`*`) in Hono, the captured path is available via `c.req.param("*")`, not as a named parameter. However, this can be inconsistent depending on route registration order. A more reliable approach is to extract the path from the request URL using regex.
+
+- **OpenAPI route conflicts with wildcards**: OpenAPI routes with parameterized paths (e.g., `{proxyPath+}`) can conflict with wildcard routes. When both are registered, the OpenAPI route may match first but fail validation if the parameter isn't captured correctly. For proxy routes with dynamic paths, it's often better to skip OpenAPI documentation or use wildcard routes exclusively.
+
+- **Proxy path extraction**: For a reverse proxy at `/api/agent/sessions/:id/opencode/*`, extract the proxy path using regex on the request URL:
+
+  ```typescript
+  const pathMatch = url.pathname.match(/\/api\/agent\/sessions\/[^/]+\/opencode\/?(.*)$/);
+  const proxyPath = pathMatch?.[1] ?? "";
+  ```
+
+- **HTML base href injection**: When proxying HTML content, inject a `<base href>` tag to ensure relative assets load correctly. Check if a base tag already exists to avoid duplication, and handle cases where `<head>` is missing by creating one.
+
+- **Hop-by-hop header stripping**: Proxy responses should strip hop-by-hop headers like `connection`, `keep-alive`, `proxy-authenticate`, `proxy-authorization`, `te`, `trailer`, `transfer-encoding`, and `upgrade` to prevent issues with connection management.
+
+- **Mock fetch pattern for proxy testing**: Create mock fetch functions that track calls in an array and allow setting responses via URL patterns. This enables testing proxy behavior without real network calls:
+
+  ```typescript
+  const calls: Array<{ url: string; options: RequestInit }> = [];
+  const responses = new Map<string, Response>();
+  const mockFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    calls.push({ url: input.toString(), options: init || {} });
+    return responses.get(url)?.clone() ?? new Response("Not Found", { status: 404 });
+  };
+  ```
+
+- **SSE streaming in proxies**: Server-Sent Event responses should be passed through directly without reading the body, preserving the stream for the client to consume.
