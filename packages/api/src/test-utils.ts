@@ -464,6 +464,10 @@ export interface TestAppConfig {
   network?: MockNetworkService;
   serialConsole?: MockSerialConsoleService;
   skipAuth?: boolean;
+  /**
+   * Fetch function for proxy requests (can be mocked in tests)
+   */
+  proxyFetch?: typeof fetch;
 }
 
 /**
@@ -536,6 +540,7 @@ export async function createTestApp(config: TestAppConfig = {}): Promise<TestApp
     stopVMProcessFn: firecracker.stopVMProcess as any,
     skipAuth: config.skipAuth ?? true,
     mockUserId,
+    fetchFn: config.proxyFetch,
   });
 
   // Cleanup function

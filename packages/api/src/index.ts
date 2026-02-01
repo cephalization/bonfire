@@ -15,6 +15,7 @@ import { createImagesRouter } from "./routes/images";
 import { createVMsRouter } from "./routes/vms";
 import { createTerminalRouter } from "./routes/terminal";
 import { createAgentSessionsRouter } from "./routes/agent-sessions";
+import { createOpencodeProxyRouter } from "./routes/opencode-proxy";
 import type { BootstrapService } from "./services/bootstrap";
 import { RealBootstrapService } from "./services/bootstrap";
 import { RegistryService } from "./services/registry";
@@ -94,6 +95,10 @@ export interface AppConfig {
   stopVMProcessFn?: typeof stopVMProcess;
   skipAuth?: boolean;
   mockUserId?: string;
+  /** Fetch function for proxy requests (can be mocked in tests) */
+  fetchFn?: typeof fetch;
+  /** OpenCode basic auth credentials */
+  opencodeCredentials?: string;
 }
 
 export function createApp(appConfig: AppConfig = {}) {
@@ -168,11 +173,17 @@ export function createApp(appConfig: AppConfig = {}) {
       db: appConfig.db,
       bootstrapService,
     });
+    const opencodeProxyRouter = createOpencodeProxyRouter({
+      db: appConfig.db,
+      fetchFn: appConfig.fetchFn,
+      opencodeCredentials: appConfig.opencodeCredentials,
+    });
 
     app.route("/api", imagesRouter);
     app.route("/api", vmsRouter);
     app.route("/api", terminalRouter);
     app.route("/api", agentSessionsRouter);
+    app.route("/api", opencodeProxyRouter);
   } else if (process.env.DATABASE_URL || typeof window === "undefined") {
     // Try to create default database connection in production/server context
     try {
@@ -209,11 +220,17 @@ export function createApp(appConfig: AppConfig = {}) {
       const terminalRouter = createTerminalRouter({ db });
       const bootstrapService = new RealBootstrapService(db);
       const agentSessionsRouter = createAgentSessionsRouter({ db, bootstrapService });
+      const opencodeProxyRouter = createOpencodeProxyRouter({
+        db,
+        fetchFn: appConfig.fetchFn,
+        opencodeCredentials: appConfig.opencodeCredentials,
+      });
 
       app.route("/api", imagesRouter);
       app.route("/api", vmsRouter);
       app.route("/api", terminalRouter);
       app.route("/api", agentSessionsRouter);
+      app.route("/api", opencodeProxyRouter);
     } catch {
       // Database not available, skip mounting routes
       // This allows the app to work in test environments without a database
