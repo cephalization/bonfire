@@ -20,6 +20,7 @@
     "typescript/no-explicit-any": "warn",
     "react/jsx-key": "error",
     "react/no-children-prop": "error",
+    "react/react-in-jsx-scope": "off",
     "import/no-cycle": "error",
     "import/no-self-import": "error",
     "promise/no-return-wrap": "error"
