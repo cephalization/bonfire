@@ -26,4 +26,4 @@ RUN pnpm install --frozen-lockfile
 COPY . .
 
 # Run integration tests
-CMD ["pnpm", "-C", "packages/api", "exec", "vitest", "run", "--config", "vitest.integration.config.mjs"]
+CMD ["pnpm", "exec", "vitest", "run", "--config", "packages/api/vitest.integration.config.mjs"]
