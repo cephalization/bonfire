@@ -122,3 +122,34 @@ Use this knowledge to avoid repeating mistakes and build on what works.
   ```
 
 - **SSE streaming in proxies**: Server-Sent Event responses should be passed through directly without reading the body, preserving the stream for the client to consume.
+
+## 7ltzgbeu - Phase 5: Web UI
+
+- **Test library patterns in this codebase**: The project uses `fireEvent` from `@testing-library/react` instead of `userEvent`. Tests use basic matchers like `toBeTruthy()` rather than jest-dom matchers like `toBeInTheDocument()`. Import the test setup with `import "../../test-setup"` at the top of test files.
+
+- **Mock API pattern**: Use `vi.mock` to mock the entire API module, then use `vi.mocked()` to get typed mock functions:
+
+  ```typescript
+  vi.mock("@/lib/api", async () => {
+    const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
+    return {
+      ...actual,
+      listAgentSessions: vi.fn(),
+    };
+  });
+  const mockListAgentSessions = vi.mocked(api.listAgentSessions);
+  ```
+
+- **Component test structure**: Tests use `MemoryRouter` for routing and mock API responses via the vi.mock pattern. Use `waitFor` for async assertions and avoid testing implementation details like internal state.
+
+- **Responsive design patterns**: Use Tailwind responsive prefixes (`sm:`, `md:`, `lg:`) for responsive layouts. Mobile-first approach with drawer components for mobile and dialog components for desktop using a media query hook.
+
+- **Status badge colors**: Use consistent badge variants for status states:
+  - `default` (blue) for "ready"
+  - `secondary` (gray) for "creating"
+  - `destructive` (red) for "error"
+  - `outline` for "archived"
+
+- **Polling pattern**: Use `useEffect` with `setInterval` for polling, with cleanup via `return () => clearInterval(interval)`. Fast-forward timers in tests with `vi.advanceTimersByTimeAsync(3000)`.
+
+- **Navigation structure**: Add new routes to both `Layout.tsx` (navItems array) and `App.tsx` (Routes component) following existing patterns.

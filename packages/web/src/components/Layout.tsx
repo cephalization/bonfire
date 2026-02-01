@@ -1,6 +1,16 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Menu, LayoutDashboard, Image, Settings, LogOut, User, Flame, Shield } from "lucide-react";
+import {
+  Menu,
+  LayoutDashboard,
+  Image,
+  Settings,
+  LogOut,
+  User,
+  Flame,
+  Shield,
+  Bot,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Drawer,
@@ -26,6 +36,7 @@ interface LayoutProps {
 
 const navItems = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard },
+  { path: "/agent/sessions", label: "Agent", icon: Bot },
   { path: "/images", label: "Images", icon: Image },
   { path: "/settings", label: "Settings", icon: Settings },
 ];

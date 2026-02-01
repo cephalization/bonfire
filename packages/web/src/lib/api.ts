@@ -100,6 +100,28 @@ export interface APIError {
   status?: number;
 }
 
+// Agent Session Types
+export interface AgentSession {
+  id: string;
+  userId: string;
+  title: string | null;
+  repoUrl: string;
+  branch: string | null;
+  vmId: string | null;
+  workspacePath: string | null;
+  status: "creating" | "ready" | "error" | "archived";
+  errorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateAgentSessionRequest {
+  title?: string;
+  repoUrl: string;
+  branch?: string;
+  vmId?: string;
+}
+
 // Custom error class for API errors
 export class BonfireAPIError extends Error {
   public readonly status: number;
@@ -283,6 +305,44 @@ export async function deleteImage(id: string, config?: APIClientConfig): Promise
   return apiFetch<SuccessResponse>(`/api/images/${id}`, { method: "DELETE" }, config);
 }
 
+// Agent Session Endpoints
+
+export async function listAgentSessions(config?: APIClientConfig): Promise<AgentSession[]> {
+  return apiFetch<AgentSession[]>("/api/agent/sessions", { method: "GET" }, config);
+}
+
+export async function getAgentSession(id: string, config?: APIClientConfig): Promise<AgentSession> {
+  return apiFetch<AgentSession>(`/api/agent/sessions/${id}`, { method: "GET" }, config);
+}
+
+export async function createAgentSession(
+  request: CreateAgentSessionRequest,
+  config?: APIClientConfig
+): Promise<AgentSession> {
+  return apiFetch<AgentSession>(
+    "/api/agent/sessions",
+    {
+      method: "POST",
+      body: JSON.stringify(request),
+    },
+    config
+  );
+}
+
+export async function archiveAgentSession(
+  id: string,
+  config?: APIClientConfig
+): Promise<AgentSession> {
+  return apiFetch<AgentSession>(`/api/agent/sessions/${id}/archive`, { method: "POST" }, config);
+}
+
+export async function retryAgentSession(
+  id: string,
+  config?: APIClientConfig
+): Promise<AgentSession> {
+  return apiFetch<AgentSession>(`/api/agent/sessions/${id}/retry`, { method: "POST" }, config);
+}
+
 // Create a configured API client instance
 export function createAPIClient(config: APIClientConfig = {}) {
   return {
@@ -302,6 +362,14 @@ export function createAPIClient(config: APIClientConfig = {}) {
       list: () => listImages(config),
       pull: (req: PullImageRequest) => pullImage(req, config),
       delete: (id: string) => deleteImage(id, config),
+    },
+    // Agent Sessions
+    agentSessions: {
+      list: () => listAgentSessions(config),
+      get: (id: string) => getAgentSession(id, config),
+      create: (req: CreateAgentSessionRequest) => createAgentSession(req, config),
+      archive: (id: string) => archiveAgentSession(id, config),
+      retry: (id: string) => retryAgentSession(id, config),
     },
   };
 }
