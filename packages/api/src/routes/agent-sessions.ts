@@ -6,6 +6,7 @@
  * - POST /api/agent/sessions - Create a new session
  * - GET /api/agent/sessions/:id - Get single session details
  * - POST /api/agent/sessions/:id/archive - Archive a session
+ * - POST /api/agent/sessions/:id/retry - Retry bootstrap for a failed session
  */
 
 import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
@@ -13,8 +14,10 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { eq, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import * as schema from "../db/schema";
-import { agentSessions } from "../db/schema";
+import { agentSessions, vms } from "../db/schema";
 import type { AuthUser } from "../middleware/auth";
+import type { BootstrapService } from "../services/bootstrap";
+import { RealBootstrapService } from "../services/bootstrap";
 
 // ============================================================================
 // OpenAPI Schemas
@@ -82,6 +85,10 @@ const CreateAgentSessionRequestSchema = z
     branch: z.string().min(1).max(255).optional().openapi({
       example: "main",
       description: "Git branch (optional, defaults to repo default)",
+    }),
+    vmId: z.string().optional().openapi({
+      example: "vm-abc123",
+      description: "VM ID to use for this session (optional, for retry)",
     }),
   })
   .openapi("CreateAgentSessionRequest");
@@ -296,17 +303,77 @@ const archiveAgentSessionRoute = createRoute({
   },
 });
 
+const retryAgentSessionRoute = createRoute({
+  method: "post",
+  path: "/agent/sessions/{id}/retry",
+  tags: ["Agent Sessions"],
+  summary: "Retry bootstrap for an agent session",
+  description: "Retries the bootstrap process for a failed session",
+  request: {
+    params: z.object({
+      id: z.string().openapi({
+        example: "sess-abc123",
+        description: "Session ID",
+      }),
+    }),
+  },
+  responses: {
+    200: {
+      description: "Retry initiated successfully",
+      content: {
+        "application/json": {
+          schema: AgentSessionSchema,
+        },
+      },
+    },
+    400: {
+      description: "Session cannot be retried (not in error state)",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+    401: {
+      description: "Unauthorized",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+    404: {
+      description: "Session not found",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+    500: {
+      description: "Internal server error",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+  },
+});
+
 // ============================================================================
 // Router Factory
 // ============================================================================
 
 export interface AgentSessionsRouterConfig {
   db: BetterSQLite3Database<typeof schema>;
+  bootstrapService?: BootstrapService;
 }
 
 export function createAgentSessionsRouter(config: AgentSessionsRouterConfig): OpenAPIHono {
   const app = new OpenAPIHono();
   const { db } = config;
+  const bootstrapService = config.bootstrapService ?? new RealBootstrapService(db);
 
   // Helper to serialize session for JSON response
   function serializeSession(session: typeof schema.agentSessions.$inferSelect) {
@@ -365,7 +432,7 @@ export function createAgentSessionsRouter(config: AgentSessionsRouterConfig): Op
         );
       }
 
-      const { title, repoUrl, branch } = validationResult.data;
+      const { title, repoUrl, branch, vmId } = validationResult.data;
 
       // Generate UUID for the session
       const sessionId = randomUUID();
@@ -378,7 +445,7 @@ export function createAgentSessionsRouter(config: AgentSessionsRouterConfig): Op
         title: title ?? null,
         repoUrl,
         branch: branch ?? null,
-        vmId: null,
+        vmId: vmId ?? null,
         workspacePath: null,
         status: "creating" as const,
         errorMessage: null,
@@ -387,6 +454,27 @@ export function createAgentSessionsRouter(config: AgentSessionsRouterConfig): Op
       };
 
       await db.insert(agentSessions).values(newSession);
+
+      // If a VM ID was provided, trigger bootstrap asynchronously
+      if (vmId) {
+        // Get VM details
+        const [vm] = await db.select().from(vms).where(eq(vms.id, vmId));
+
+        if (vm && vm.ipAddress) {
+          // Trigger bootstrap in the background
+          bootstrapService
+            .bootstrap({
+              sessionId,
+              repoUrl,
+              branch,
+              vmId,
+              vmIp: vm.ipAddress,
+            })
+            .catch((error) => {
+              console.error(`Bootstrap failed for session ${sessionId}:`, error);
+            });
+        }
+      }
 
       return c.json(serializeSession(newSession), 201);
     } catch (error) {
@@ -454,6 +542,85 @@ export function createAgentSessionsRouter(config: AgentSessionsRouterConfig): Op
     } catch (error) {
       console.error("Failed to archive agent session:", error);
       const message = error instanceof Error ? error.message : "Failed to archive agent session";
+      return c.json({ error: message }, 500);
+    }
+  });
+
+  // POST /api/agent/sessions/:id/retry - Retry bootstrap for a failed session
+  app.openapi(retryAgentSessionRoute, async (c) => {
+    try {
+      const user = getUser(c);
+      const id = c.req.param("id");
+
+      // Check if session exists and belongs to user
+      const [existingSession] = await db
+        .select()
+        .from(agentSessions)
+        .where(and(eq(agentSessions.id, id), eq(agentSessions.userId, user.id)));
+
+      if (!existingSession) {
+        return c.json({ error: "Session not found" }, 404);
+      }
+
+      // Can only retry sessions in error state
+      if (existingSession.status !== "error") {
+        return c.json(
+          {
+            error: `Cannot retry session with status '${existingSession.status}'. Must be 'error'.`,
+          },
+          400
+        );
+      }
+
+      // Must have a VM assigned
+      if (!existingSession.vmId) {
+        return c.json({ error: "Session has no VM assigned" }, 400);
+      }
+
+      // Get VM details
+      const [vm] = await db.select().from(vms).where(eq(vms.id, existingSession.vmId));
+      if (!vm) {
+        return c.json({ error: "Associated VM not found" }, 400);
+      }
+
+      if (!vm.ipAddress) {
+        return c.json({ error: "VM has no IP address" }, 400);
+      }
+
+      // Reset status to creating
+      const now = new Date();
+      await db
+        .update(agentSessions)
+        .set({
+          status: "creating",
+          errorMessage: null,
+          updatedAt: now,
+        })
+        .where(eq(agentSessions.id, id));
+
+      // Get updated session
+      const [updatedSession] = await db
+        .select()
+        .from(agentSessions)
+        .where(eq(agentSessions.id, id));
+
+      // Trigger bootstrap in the background
+      bootstrapService
+        .bootstrap({
+          sessionId: id,
+          repoUrl: existingSession.repoUrl,
+          branch: existingSession.branch,
+          vmId: existingSession.vmId,
+          vmIp: vm.ipAddress,
+        })
+        .catch((error) => {
+          console.error(`Retry bootstrap failed for session ${id}:`, error);
+        });
+
+      return c.json(serializeSession(updatedSession), 200);
+    } catch (error) {
+      console.error("Failed to retry agent session:", error);
+      const message = error instanceof Error ? error.message : "Failed to retry agent session";
       return c.json({ error: message }, 500);
     }
   });

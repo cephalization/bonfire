@@ -1,12 +1,12 @@
 /**
  * Agent Sessions Routes Tests
  *
- * Unit tests for Agent Session CRUD endpoints.
+ * Unit tests for Agent Session CRUD endpoints including SSH bootstrap and retry.
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import { createTestApp } from "../test-utils";
-import { agentSessions, user } from "../db/schema";
+import { agentSessions, user, vms, images } from "../db/schema";
 import { eq } from "drizzle-orm";
 
 describe("Agent Sessions API", () => {
@@ -18,7 +18,7 @@ describe("Agent Sessions API", () => {
   ) {
     const now = new Date();
     const sessionId = `sess-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
-    
+
     await testApp.db.insert(agentSessions).values({
       id: sessionId,
       userId,
@@ -34,6 +34,33 @@ describe("Agent Sessions API", () => {
     });
 
     return sessionId;
+  }
+
+  // Helper to create a VM
+  async function createVM(
+    testApp: Awaited<ReturnType<typeof createTestApp>>,
+    vmData: Partial<typeof vms.$inferInsert> = {}
+  ) {
+    const now = new Date();
+    const vmId = `vm-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+
+    await testApp.db.insert(vms).values({
+      id: vmId,
+      name: vmData.name ?? `test-vm-${vmId}`,
+      status: vmData.status ?? "running",
+      vcpus: vmData.vcpus ?? 1,
+      memoryMib: vmData.memoryMib ?? 512,
+      imageId: vmData.imageId ?? null,
+      pid: vmData.pid ?? null,
+      socketPath: vmData.socketPath ?? null,
+      tapDevice: vmData.tapDevice ?? null,
+      macAddress: vmData.macAddress ?? null,
+      ipAddress: vmData.ipAddress ?? null,
+      createdAt: vmData.createdAt ?? now,
+      updatedAt: vmData.updatedAt ?? now,
+    });
+
+    return vmId;
   }
 
   describe("GET /api/agent/sessions", () => {
@@ -135,6 +162,46 @@ describe("Agent Sessions API", () => {
       expect(body.title).toBe("My Project");
       expect(body.repoUrl).toBe("https://github.com/org/repo");
       expect(body.branch).toBe("develop");
+      expect(body.status).toBe("creating");
+
+      testApp.cleanup();
+    });
+
+    it("should create a session with vmId and trigger bootstrap", async () => {
+      const testApp = await createTestApp();
+
+      // Create an image first (required by VMs)
+      await testApp.db.insert(images).values({
+        id: "img-123",
+        reference: "test-image",
+        kernelPath: "/path/to/kernel",
+        rootfsPath: "/path/to/rootfs",
+        pulledAt: new Date(),
+      });
+
+      // Create a VM with IP
+      const vmId = await createVM(testApp, {
+        status: "running",
+        ipAddress: "192.168.100.10",
+        imageId: "img-123",
+      });
+
+      const res = await testApp.request("/api/agent/sessions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          title: "My Project",
+          repoUrl: "https://github.com/org/repo",
+          branch: "main",
+          vmId: vmId,
+        }),
+      });
+
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.vmId).toBe(vmId);
       expect(body.status).toBe("creating");
 
       testApp.cleanup();
@@ -350,6 +417,153 @@ describe("Agent Sessions API", () => {
 
       const updatedAt = new Date(body.updatedAt).getTime();
       expect(updatedAt).toBeGreaterThanOrEqual(beforeArchive - 1000); // Allow 1 second tolerance
+
+      testApp.cleanup();
+    });
+  });
+
+  describe("POST /api/agent/sessions/:id/retry", () => {
+    it("should retry a failed session", async () => {
+      const testApp = await createTestApp();
+      const userId = testApp.mockUserId;
+
+      // Create an image first
+      await testApp.db.insert(images).values({
+        id: "img-123",
+        reference: "test-image",
+        kernelPath: "/path/to/kernel",
+        rootfsPath: "/path/to/rootfs",
+        pulledAt: new Date(),
+      });
+
+      // Create a VM with IP
+      const vmId = await createVM(testApp, {
+        status: "running",
+        ipAddress: "192.168.100.10",
+        imageId: "img-123",
+      });
+
+      // Create a failed session with VM
+      const sessionId = await createSession(testApp, userId, {
+        repoUrl: "https://github.com/org/repo",
+        vmId: vmId,
+        status: "error",
+        errorMessage: "Previous failure",
+      });
+
+      const res = await testApp.request(`/api/agent/sessions/${sessionId}/retry`, {
+        method: "POST",
+      });
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.id).toBe(sessionId);
+      expect(body.status).toBe("creating");
+      expect(body.errorMessage).toBeNull();
+
+      // Verify in database
+      const sessions = await testApp.db
+        .select()
+        .from(agentSessions)
+        .where(eq(agentSessions.id, sessionId));
+
+      expect(sessions[0].status).toBe("creating");
+      expect(sessions[0].errorMessage).toBeNull();
+
+      testApp.cleanup();
+    });
+
+    it("should return 404 for non-existent session", async () => {
+      const testApp = await createTestApp();
+
+      const res = await testApp.request("/api/agent/sessions/non-existent-id/retry", {
+        method: "POST",
+      });
+
+      expect(res.status).toBe(404);
+      const body = await res.json();
+      expect(body.error).toBe("Session not found");
+
+      testApp.cleanup();
+    });
+
+    it("should return 400 for non-error sessions", async () => {
+      const testApp = await createTestApp();
+      const userId = testApp.mockUserId;
+
+      // Create a ready session
+      const sessionId = await createSession(testApp, userId, {
+        repoUrl: "https://github.com/org/repo",
+        status: "ready",
+      });
+
+      const res = await testApp.request(`/api/agent/sessions/${sessionId}/retry`, {
+        method: "POST",
+      });
+
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain("Cannot retry session");
+
+      testApp.cleanup();
+    });
+
+    it("should return 400 if session has no VM", async () => {
+      const testApp = await createTestApp();
+      const userId = testApp.mockUserId;
+
+      // Create an error session without VM
+      const sessionId = await createSession(testApp, userId, {
+        repoUrl: "https://github.com/org/repo",
+        status: "error",
+        errorMessage: "No VM assigned",
+      });
+
+      const res = await testApp.request(`/api/agent/sessions/${sessionId}/retry`, {
+        method: "POST",
+      });
+
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe("Session has no VM assigned");
+
+      testApp.cleanup();
+    });
+
+    it("should return 400 if VM has no IP", async () => {
+      const testApp = await createTestApp();
+      const userId = testApp.mockUserId;
+
+      // Create an image
+      await testApp.db.insert(images).values({
+        id: "img-123",
+        reference: "test-image",
+        kernelPath: "/path/to/kernel",
+        rootfsPath: "/path/to/rootfs",
+        pulledAt: new Date(),
+      });
+
+      // Create a VM without IP
+      const vmId = await createVM(testApp, {
+        status: "running",
+        ipAddress: null,
+        imageId: "img-123",
+      });
+
+      // Create an error session
+      const sessionId = await createSession(testApp, userId, {
+        repoUrl: "https://github.com/org/repo",
+        vmId: vmId,
+        status: "error",
+      });
+
+      const res = await testApp.request(`/api/agent/sessions/${sessionId}/retry`, {
+        method: "POST",
+      });
+
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe("VM has no IP address");
 
       testApp.cleanup();
     });

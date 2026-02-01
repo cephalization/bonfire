@@ -45,6 +45,7 @@ Use this knowledge to avoid repeating mistakes and build on what works.
 - **agent-browser CLI installation**: The agent-browser tool is installed globally via `npm install -g agent-browser`. It depends on Playwright, which needs browsers installed via `npx playwright install chromium`.
 
 - **Dockerfile placement matters**: The agent-browser and Playwright installation should happen after the main pnpm install but before the build, as shown in docker/Dockerfile lines 74-78:
+
   ```dockerfile
   RUN npm install -g agent-browser
   RUN npx playwright install chromium
@@ -75,3 +76,19 @@ Use this knowledge to avoid repeating mistakes and build on what works.
 - **corepack/pnpm setup**: Enable corepack with `corepack enable && corepack prepare pnpm@latest --activate`. This provides pnpm without a separate npm install.
 
 - **Docker build context**: When building images, the entire project is sent as build context. Use `.dockerignore` to exclude large files like `images/` and `node_modules/` to speed up builds.
+
+## d7gipbfh - Phase 3: SSH bootstrap service
+
+- **SSH abstraction pattern**: Abstract SSH operations behind an interface (`SSHService`) with `connect()`, `exec()`, `disconnect()`, and `testConnection()` methods. This allows both real SSH (using ssh2) and mock implementations for testing without code changes.
+
+- **Mock service pattern**: Create mock services that track calls in arrays and allow setting custom responses via regex patterns. This enables precise test assertions about what commands were executed without requiring actual network calls.
+
+- **Bootstrap sequence idempotency**: The bootstrap process updates the database at each step (workspace path, status transitions). On failure, it updates status to 'error' with the error message, allowing retry via the POST `/api/agent/sessions/:id/retry` endpoint.
+
+- **Background bootstrap execution**: Bootstrap runs asynchronously after session creation returns. The client polls the session status endpoint to track progress from 'creating' -> 'ready' or 'error'.
+
+- **Health polling implementation**: The health endpoint polls `http://<vmIp>:4096/global/health` with configurable timeout (default 60s) and interval (default 2s). Uses standard fetch API with try/catch to handle connection failures gracefully.
+
+- **Foreign key constraints in tests**: When creating test databases, include all tables referenced by foreign keys (like `images` table for VMs) to avoid "no such table" errors during INSERT operations.
+
+- **Dependency injection for testing**: Services accept their dependencies via constructor parameters with defaults, enabling easy injection of mocks: `new RealBootstrapService(db, mockSSHService)`.
