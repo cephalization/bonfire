@@ -103,6 +103,22 @@ export async function spawnFirecracker(options: SpawnOptions): Promise<Firecrack
 
     console.log(`[Firecracker] Process spawned with PID ${pid}`);
 
+    // Close the file descriptors in the parent process since they've been passed to the child
+    // The child now owns these fds, and keeping them open in the parent can cause issues
+    // with pipe reopening (e.g., for serial console reconnection)
+    try {
+      await stdinFd.close();
+      stdinFd = null;
+    } catch {
+      // Ignore close errors
+    }
+    try {
+      await stdoutFd.close();
+      stdoutFd = null;
+    } catch {
+      // Ignore close errors
+    }
+
     // Capture stderr for debugging
     let stderrData = "";
 
@@ -154,7 +170,8 @@ export async function spawnFirecracker(options: SpawnOptions): Promise<Firecrack
     console.error(`[Firecracker] Spawn failed, cleaning up pipes`);
     await cleanupPipes({ vmId: options.vmId, pipeDir: socketDir });
 
-    // Close file handles if opened
+    // File handles are already closed after successful spawn, but close them here
+    // in case the error occurred before the spawn completed
     if (stdinFd) {
       try {
         await stdinFd.close();
