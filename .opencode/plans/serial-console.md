@@ -3,61 +3,75 @@
 ## Overview
 
 > NOTE: This plan is historical (written during the Bun-based era). Bonfire has migrated to Node 24+.
-Replace Slicer agent-based terminal with Firecracker native serial console support. This enables terminal access with ANY VM image (quickstart, custom, Slicer, etc.) without requiring a guest agent.
+> Replace Slicer agent-based terminal with Firecracker native serial console support. This enables terminal access with ANY VM image (quickstart, custom, Slicer, etc.) without requiring a guest agent.
 
 ## Current State Analysis
 
 ### Existing Implementation
+
 - **Location**: `packages/api/src/services/agent/shell.ts` + `packages/api/src/routes/terminal.ts`
 - **Protocol**: WebSocket connection to Slicer agent at port 8080
 - **Requirements**: VM must have Slicer agent running (proprietary, costs money)
 - **Problem**: Does not work with Firecracker quickstart images or custom images
 
 ### Firecracker Serial Console Architecture
+
 Browser (WebSocket) -> Bonfire API -> Serial Console Service -> Named Pipes <-> Firecracker Process -> VM Serial Console (ttyS0)
 
 ## Implementation Plan
 
 ### Phase 1: Serial Console Service
+
 Create `packages/api/src/services/firecracker/serial.ts` to manage serial console I/O via named pipes.
 
 Key implementation:
+
 - Use Node file handles / streams for reading/writing FIFO pipes
 - Create FIFOs using mkfifo system call
 - Handle backpressure and buffering for WebSocket bridge
 
 ### Phase 2: VM Configuration Updates
+
 Update `packages/api/src/services/firecracker/process.ts`:
+
 1. Create serial pipes on VM start (.stdin and .stdout FIFOs)
 2. Redirect Firecracker stdio to these pipes when spawning process
 3. Boot args already include ip=dhcp for network
 
 ### Phase 3: Terminal Route Refactoring
+
 Update `packages/api/src/routes/terminal.ts`:
+
 - Replace agent WebSocket connection with serial console file I/O
 - Keep WebSocket protocol unchanged for frontend compatibility
 - Support resize messages (send xterm escape sequences)
 
 ### Phase 4: Cleanup
+
 - Remove `packages/api/src/services/agent/` directory
 - Remove Slicer references from documentation
 - Deprecate or remove exec/cp endpoints that required agent
 
 ### Phase 5: Frontend
+
 No changes needed - WebSocket protocol remains the same.
 
 ## Testing Strategy
 
 ### Test Architecture Overview
+
 The project has 3 test layers:
-1. **Unit Tests**: Pure functions, no I/O, co-located with source (*.test.ts)
-2. **Integration Tests**: Mocked services, real routes, isolated DB (.integration/*.test.ts)
-3. **E2E Tests**: Real Firecracker VMs, requires KVM (e2e/*.test.ts)
+
+1. **Unit Tests**: Pure functions, no I/O, co-located with source (\*.test.ts)
+2. **Integration Tests**: Mocked services, real routes, isolated DB (.integration/\*.test.ts)
+3. **E2E Tests**: Real Firecracker VMs, requires KVM (e2e/\*.test.ts)
 
 ### Test Files to Create/Update
 
 #### Unit Tests
+
 Create `packages/api/src/services/firecracker/serial.test.ts`:
+
 - Test pipe path generation
 - Test data formatting utilities
 - Test error classes (SerialConsoleError)
@@ -65,30 +79,37 @@ Create `packages/api/src/services/firecracker/serial.test.ts`:
 - Test resize escape sequence generation
 
 Update `packages/api/src/services/firecracker/process.test.ts`:
+
 - Add tests for pipe creation logic
 - Add tests for stdio redirection
 - Mock spawn calls to verify arguments
 - Test cleanup of pipes on VM stop
 
 #### Integration Tests
+
 Update `packages/api/src/test-utils.ts`:
+
 - Replace `MockAgentClient` with `MockSerialConsole`
 - Mock serial console methods: `create()`, `write()`, `onData()`, `close()`
 - Track pipe creation/removal calls
 - Remove agent-related mock helpers
 
 Update `packages/api/.integration/vms.integration.test.ts`:
+
 - Remove tests for agent-based exec/cp/health endpoints
 - Add tests for VM start/stop with serial console pipes
 - Verify pipe paths are stored in DB or derived correctly
 - Test WebSocket terminal endpoint with mocked serial console
 
 Update `packages/api/.integration/auth.integration.test.ts`:
+
 - Ensure auth middleware works with terminal WebSocket route
 - Test auth token validation on WebSocket upgrade
 
 #### E2E Tests
+
 Rewrite `e2e/terminal.test.ts`:
+
 - Remove agent health check dependency
 - Use quickstart image instead of Slicer image
 - Test: Create VM -> Start VM -> Connect WebSocket -> Send echo command -> Verify output
@@ -101,7 +122,9 @@ Rewrite `e2e/terminal.test.ts`:
 ### Test Migration Plan
 
 #### Step 1: Create Serial Console Unit Tests
+
 File: `packages/api/src/services/firecracker/serial.test.ts`
+
 ```typescript
 // Tests for:
 - generatePipePaths(vmId) returns correct paths
@@ -112,7 +135,9 @@ File: `packages/api/src/services/firecracker/serial.test.ts`
 ```
 
 #### Step 2: Update Process Unit Tests
+
 File: `packages/api/src/services/firecracker/process.test.ts`
+
 ```typescript
 // Add tests for:
 - spawnFirecracker creates stdin/stdout pipes
@@ -122,7 +147,9 @@ File: `packages/api/src/services/firecracker/process.test.ts`
 ```
 
 #### Step 3: Update Test Utilities
+
 File: `packages/api/src/test-utils.ts`
+
 ```typescript
 // Replace:
 export interface MockAgentClient { ... }
@@ -143,7 +170,9 @@ export function createMockSerialConsole(): MockSerialConsole
 ```
 
 #### Step 4: Update Integration Tests
+
 File: `packages/api/.integration/vms.integration.test.ts`
+
 ```typescript
 // Remove:
 - Tests for /api/vms/:id/exec
@@ -159,7 +188,9 @@ File: `packages/api/.integration/vms.integration.test.ts`
 ```
 
 #### Step 5: Rewrite E2E Tests
+
 File: `e2e/terminal.test.ts`
+
 ```typescript
 // Remove:
 - waitForVMAgentHealth() helper
@@ -183,11 +214,13 @@ File: `e2e/terminal.test.ts`
 ### Testing Checklist
 
 Before implementation:
+
 - [ ] Review all existing agent tests
 - [ ] Document current test coverage
 - [ ] Identify tests that must be rewritten
 
 During implementation:
+
 - [ ] Write unit tests for serial service
 - [ ] Update process tests for pipe handling
 - [ ] Update test-utils with serial console mocks
@@ -195,6 +228,7 @@ During implementation:
 - [ ] Rewrite E2E tests for serial console
 
 After implementation:
+
 - [ ] All unit tests pass: `pnpm -r test`
 - [ ] All integration tests pass: `pnpm run test:int`
 - [ ] All E2E tests pass: `pnpm run test:e2e`
@@ -205,14 +239,18 @@ After implementation:
 ## Technical Details
 
 ### Pipe Creation
+
 Use mkfifo via Bun spawn to create named pipes before starting VM.
 
 ### Firecracker Spawning
+
 Modify spawnFirecracker to redirect:
+
 - stdin from VM_DIR/{vmId}.stdin pipe
 - stdout/stderr to VM_DIR/{vmId}.stdout pipe
 
 ### Serial Protocol
+
 - Input: Raw keystrokes written to stdin pipe
 - Output: Read from stdout pipe and forward to WebSocket
 - Resize: Send xterm escape sequence (ESC[8;rows;colst)
@@ -255,10 +293,12 @@ Modify spawnFirecracker to redirect:
 ## Files
 
 Create:
+
 - packages/api/src/services/firecracker/serial.ts
 - packages/api/src/services/firecracker/serial.test.ts
 
 Modify:
+
 - packages/api/src/services/firecracker/process.ts
 - packages/api/src/services/firecracker/process.test.ts
 - packages/api/src/routes/terminal.ts
@@ -268,6 +308,7 @@ Modify:
 - e2e/terminal.test.ts
 
 Archive:
+
 - packages/api/src/services/agent/
 
 ## Effort Estimate

@@ -140,7 +140,7 @@ Use this knowledge to avoid repeating mistakes and build on what works.
 
 ## txsoqbht
 
-- Bun workspaces require full source copy before `bun install` - workspace:* dependencies need linked source
+- Bun workspaces require full source copy before `bun install` - workspace:\* dependencies need linked source
 - Multi-stage Dockerfile: Builder stage with `oven/bun:1.3.8`, runtime with `oven/bun:1.3.8-slim`
 - Firecracker containers need: iproute2, iptables, curl for network/VM management
 - Health check: `curl -f http://localhost:3000/health` returns `{"status":"ok"}`
@@ -246,7 +246,7 @@ Use this knowledge to avoid repeating mistakes and build on what works.
 
 - Parent task completion: When all subtasks are marked [x], verify builds and tests pass before completing the parent
 - Phase 5 components: SDK generation from OpenAPI (@bonfire/sdk), Registry service for OCI image pull, Image API endpoints, CLI with core/VM/Image/Login commands
-- Package naming: @bonfire/sdk and @bonfire/cli (not @flame/*) - use correct names in turbo filters
+- Package naming: @bonfire/sdk and @bonfire/cli (not @flame/\*) - use correct names in turbo filters
 - SDK build: TypeScript compilation only (`tsc`), CLI build: Bun bundling (`bun build --target bun`)
 - 335 tests passing across SDK and CLI packages confirms Phase 5 implementation is complete
 - OCI Registry service: Implements pull from Docker Hub compatible registries, stores metadata in SQLite
@@ -390,11 +390,13 @@ Use this knowledge to avoid repeating mistakes and build on what works.
 - Browser E2E tests use `spawn()` from child_process to run agent-browser commands and parse stdout/stderr
 - Terminal is canvas-based (ghostty-web), so text verification requires WebSocket E2E tests, not browser snapshot
 - Screenshot with `agent-browser screenshot <path>` captures terminal visual state for debugging
+
 # NOTE (Post-Migration)
 
 This file contains historical learnings from the Bun-based implementation.
 
 Bonfire has since migrated to Node 24+ and pnpm. Expect some commands and runtime notes below to be outdated. Prefer:
+
 - `README.md` for current commands
 - `AGENT.md` for current agent guidance
 - `MIGRATION_PLAN.md` for the migration runbook

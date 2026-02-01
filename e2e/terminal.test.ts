@@ -91,16 +91,13 @@ async function waitForVMRunning(
 /**
  * Create a WebSocket connection and wait for it to open
  */
-async function createWebSocketConnection(
-  vmId: string,
-  timeout = 10000
-): Promise<WebSocket> {
+async function createWebSocketConnection(vmId: string, timeout = 10000): Promise<WebSocket> {
   // Build WebSocket URL with auth cookie as query parameter
-  const wsUrl = new URL(`${API_URL.replace('http', 'ws')}/api/vms/${vmId}/terminal`);
-  
+  const wsUrl = new URL(`${API_URL.replace("http", "ws")}/api/vms/${vmId}/terminal`);
+
   // Pass auth cookie as query parameter for WebSocket authentication
   wsUrl.searchParams.set("cookie", authCookie);
-  
+
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(wsUrl.toString());
 
@@ -131,9 +128,7 @@ async function waitForWebSocketMessage(
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
-      reject(
-        new Error(`Timeout waiting for WebSocket message after ${timeout}ms`)
-      );
+      reject(new Error(`Timeout waiting for WebSocket message after ${timeout}ms`));
     }, timeout);
 
     const handler = (event: MessageEvent) => {
@@ -152,10 +147,7 @@ async function waitForWebSocketMessage(
 /**
  * Collect all WebSocket messages for a duration
  */
-async function collectMessages(
-  ws: WebSocket,
-  duration: number
-): Promise<string> {
+async function collectMessages(ws: WebSocket, duration: number): Promise<string> {
   return new Promise((resolve) => {
     let output = "";
 
@@ -187,9 +179,7 @@ async function sendCommandAndWaitForOutput(
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
-      reject(
-        new Error(`Timeout waiting for command output after ${timeout}ms`)
-      );
+      reject(new Error(`Timeout waiting for command output after ${timeout}ms`));
     }, timeout);
 
     let output = "";
@@ -260,7 +250,7 @@ describe("Terminal WebSocket - Serial Console (E2E)", () => {
     client = new BonfireClient({ baseUrl: API_URL, cookie });
     authCookie = cookie; // Store for WebSocket use
     console.log("Authentication successful");
-    
+
     // Check API health
     const health = await client.getHealth();
     expect(health.status).toBe("ok");
@@ -439,11 +429,7 @@ describe("Terminal WebSocket - Serial Console (E2E)", () => {
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
       // Verify terminal still works after resize
-      const output = await sendCommandAndWaitForOutput(
-        ws,
-        "echo AFTER_RESIZE",
-        "AFTER_RESIZE"
-      );
+      const output = await sendCommandAndWaitForOutput(ws, "echo AFTER_RESIZE", "AFTER_RESIZE");
 
       expect(output).toContain("AFTER_RESIZE");
 
@@ -586,27 +572,15 @@ describe("Terminal WebSocket - Serial Console (E2E)", () => {
       await new Promise((resolve) => setTimeout(resolve, VM_BOOT_WAIT));
 
       // Test command with quotes
-      const output1 = await sendCommandAndWaitForOutput(
-        ws,
-        'echo "hello world"',
-        "hello world"
-      );
+      const output1 = await sendCommandAndWaitForOutput(ws, 'echo "hello world"', "hello world");
       expect(output1).toContain("hello world");
 
       // Test command with pipe
-      const output2 = await sendCommandAndWaitForOutput(
-        ws,
-        "echo 'test' | tr 'a-z' 'A-Z'",
-        "TEST"
-      );
+      const output2 = await sendCommandAndWaitForOutput(ws, "echo 'test' | tr 'a-z' 'A-Z'", "TEST");
       expect(output2).toContain("TEST");
 
       // Test UTF-8 characters (basic latin + extended)
-      const output3 = await sendCommandAndWaitForOutput(
-        ws,
-        "echo 'cafe'",
-        "cafe"
-      );
+      const output3 = await sendCommandAndWaitForOutput(ws, "echo 'cafe'", "cafe");
       expect(output3).toContain("cafe");
 
       // Close connection

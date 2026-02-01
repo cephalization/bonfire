@@ -3,14 +3,7 @@ import { Plus, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { VMList } from "@/components/VMList";
 import { CreateVMDialog } from "@/components/CreateVMDialog";
-import {
-  listVMs,
-  startVM,
-  stopVM,
-  deleteVM,
-  type VM,
-  BonfireAPIError,
-} from "@/lib/api";
+import { listVMs, startVM, stopVM, deleteVM, type VM, BonfireAPIError } from "@/lib/api";
 
 export function Dashboard() {
   const [vms, setVms] = useState<VM[]>([]);
@@ -26,9 +19,7 @@ export function Dashboard() {
       setVms(data);
     } catch (err) {
       const message =
-        err instanceof BonfireAPIError
-          ? err.message
-          : "Failed to fetch VMs. Please try again.";
+        err instanceof BonfireAPIError ? err.message : "Failed to fetch VMs. Please try again.";
       setError(message);
     } finally {
       setIsLoading(false);
@@ -45,8 +36,7 @@ export function Dashboard() {
       await startVM(id);
       await fetchVMs();
     } catch (err) {
-      const message =
-        err instanceof BonfireAPIError ? err.message : "Failed to start VM";
+      const message = err instanceof BonfireAPIError ? err.message : "Failed to start VM";
       setError(message);
     } finally {
       setActionLoading((prev) => ({ ...prev, [id]: false }));
@@ -59,8 +49,7 @@ export function Dashboard() {
       await stopVM(id);
       await fetchVMs();
     } catch (err) {
-      const message =
-        err instanceof BonfireAPIError ? err.message : "Failed to stop VM";
+      const message = err instanceof BonfireAPIError ? err.message : "Failed to stop VM";
       setError(message);
     } finally {
       setActionLoading((prev) => ({ ...prev, [id]: false }));
@@ -73,8 +62,7 @@ export function Dashboard() {
       await deleteVM(id);
       await fetchVMs();
     } catch (err) {
-      const message =
-        err instanceof BonfireAPIError ? err.message : "Failed to delete VM";
+      const message = err instanceof BonfireAPIError ? err.message : "Failed to delete VM";
       setError(message);
     } finally {
       setActionLoading((prev) => ({ ...prev, [id]: false }));
@@ -91,15 +79,10 @@ export function Dashboard() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Virtual Machines</h1>
-          <p className="text-muted-foreground">
-            Manage your Firecracker microVMs
-          </p>
+          <p className="text-muted-foreground">Manage your Firecracker microVMs</p>
         </div>
         <CreateVMDialog onSuccess={handleCreateVMSuccess}>
-          <Button
-            className="min-h-[44px] w-full sm:w-auto"
-            data-testid="create-vm-btn"
-          >
+          <Button className="min-h-[44px] w-full sm:w-auto" data-testid="create-vm-btn">
             <Plus className="mr-2 size-4" />
             Create VM
           </Button>
@@ -117,12 +100,7 @@ export function Dashboard() {
             <p className="font-medium">Error</p>
             <p className="text-sm">{error}</p>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setError(null)}
-            className="shrink-0"
-          >
+          <Button variant="ghost" size="sm" onClick={() => setError(null)} className="shrink-0">
             Dismiss
           </Button>
         </div>

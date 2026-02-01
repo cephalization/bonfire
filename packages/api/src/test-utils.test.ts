@@ -250,14 +250,10 @@ describe("createTestApp", () => {
 
     // Query to check if tables exist
     const vmsTable = testApp.sqlite
-      .prepare(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='vms'"
-      )
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='vms'")
       .get();
     const imagesTable = testApp.sqlite
-      .prepare(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='images'"
-      )
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='images'")
       .get();
 
     expect(vmsTable).toBeDefined();
@@ -278,9 +274,9 @@ describe("createTestApp", () => {
       .run("img-1", "test-image:latest", "/kernel", "/rootfs", Date.now());
 
     // Query the image
-    const image = testApp.sqlite
-      .prepare("SELECT * FROM images WHERE id = ?")
-      .get("img-1") as { reference: string } | undefined;
+    const image = testApp.sqlite.prepare("SELECT * FROM images WHERE id = ?").get("img-1") as
+      | { reference: string }
+      | undefined;
 
     expect(image).toBeDefined();
     expect(image!.reference).toBe("test-image:latest");

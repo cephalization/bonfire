@@ -7,23 +7,27 @@ Thank you for your interest in contributing to Bonfire! This document provides g
 ### Setting Up Development Environment
 
 1. Fork and clone the repository:
+
 ```bash
 git clone https://github.com/yourusername/bonfire.git
 cd bonfire
 ```
 
 2. Install dependencies:
+
 ```bash
 corepack enable
 pnpm install
 ```
 
 3. Run the setup script (requires root for network/VM setup):
+
 ```bash
 sudo ./scripts/setup.sh
 ```
 
 4. Start development servers:
+
 ```bash
 # Terminal 1 - API server
 pnpm --filter @bonfire/api dev
@@ -71,6 +75,7 @@ All changes must include tests:
 ### Making Changes
 
 1. Create a feature branch:
+
 ```bash
 git checkout -b feature/your-feature-name
 ```
@@ -78,17 +83,20 @@ git checkout -b feature/your-feature-name
 2. Make your changes and add tests
 
 3. Run tests to ensure everything passes:
+
 ```bash
 pnpm -r test
 ```
 
 4. Run linting and type checking:
+
 ```bash
 pnpm run lint
 pnpm run typecheck
 ```
 
 5. Commit your changes:
+
 ```bash
 git add .
 git commit -m "feat: add your feature description"
@@ -106,6 +114,7 @@ Use conventional commits format:
 - `chore:` - Maintenance tasks
 
 Example:
+
 ```
 feat: add terminal resize handling
 
@@ -176,12 +185,12 @@ import { createTestApp } from "../test-utils";
 describe("POST /api/vms", () => {
   it("creates a VM", async () => {
     const { app, cleanup } = await createTestApp();
-    
+
     const res = await app.request("/api/vms", {
       method: "POST",
       body: JSON.stringify({ name: "test-vm" }),
     });
-    
+
     expect(res.status).toBe(201);
     cleanup();
   });

@@ -4,12 +4,12 @@ services:
       context: ..
       dockerfile: docker/Dockerfile
     ports:
-      - "3000:3000"      # API
-      - "5173:5173"      # Web UI (dev)
+      - "3000:3000" # API
+      - "5173:5173" # Web UI (dev)
     volumes:
       - bonfire-data:/var/lib/bonfire
       - /dev/kvm:/dev/kvm
-    privileged: true      # Required for network/VM management
+    privileged: true # Required for network/VM management
     cap_add:
       - NET_ADMIN
       - SYS_ADMIN

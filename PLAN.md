@@ -15,18 +15,18 @@
 
 ## Tech Stack
 
-| Component | Technology | Docs URL |
-|-----------|------------|----------|
-| Runtime | Node.js (24+) | https://nodejs.org/docs/latest/api/ |
-| Backend | Hono | https://hono.dev/docs |
-| Frontend | React + Vite | https://vite.dev/guide |
-| Terminal | ghostty-web | https://github.com/coder/ghostty-web |
-| WebSocket Client | PartySocket | https://github.com/cloudflare/partykit/tree/main/packages/partysocket |
-| Database | Drizzle + SQLite | https://orm.drizzle.team/docs/overview |
-| Auth | Better Auth | https://www.better-auth.com/docs |
-| UI Components | shadcn/ui + Tailwind | https://ui.shadcn.com/docs |
-| CLI | Clack | https://bomb.sh/docs/clack/basics/getting-started |
-| VM Images | Firecracker quickstart images | https://github.com/firecracker-microvm/firecracker/blob/main/docs/getting-started.md |
+| Component        | Technology                    | Docs URL                                                                             |
+| ---------------- | ----------------------------- | ------------------------------------------------------------------------------------ |
+| Runtime          | Node.js (24+)                 | https://nodejs.org/docs/latest/api/                                                  |
+| Backend          | Hono                          | https://hono.dev/docs                                                                |
+| Frontend         | React + Vite                  | https://vite.dev/guide                                                               |
+| Terminal         | ghostty-web                   | https://github.com/coder/ghostty-web                                                 |
+| WebSocket Client | PartySocket                   | https://github.com/cloudflare/partykit/tree/main/packages/partysocket                |
+| Database         | Drizzle + SQLite              | https://orm.drizzle.team/docs/overview                                               |
+| Auth             | Better Auth                   | https://www.better-auth.com/docs                                                     |
+| UI Components    | shadcn/ui + Tailwind          | https://ui.shadcn.com/docs                                                           |
+| CLI              | Clack                         | https://bomb.sh/docs/clack/basics/getting-started                                    |
+| VM Images        | Firecracker quickstart images | https://github.com/firecracker-microvm/firecracker/blob/main/docs/getting-started.md |
 
 ---
 
@@ -136,36 +136,38 @@ bonfire/
 ```typescript
 // packages/api/src/db/schema.ts
 
-import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
 
-export const vms = sqliteTable('vms', {
-  id: text('id').primaryKey(),                    // UUID
-  name: text('name').notNull().unique(),
-  status: text('status', { 
-    enum: ['creating', 'running', 'stopped', 'error'] 
-  }).notNull().default('creating'),
-  vcpus: integer('vcpus').notNull().default(1),
-  memoryMib: integer('memory_mib').notNull().default(512),
-  imageId: text('image_id').references(() => images.id),
-  
+export const vms = sqliteTable("vms", {
+  id: text("id").primaryKey(), // UUID
+  name: text("name").notNull().unique(),
+  status: text("status", {
+    enum: ["creating", "running", "stopped", "error"],
+  })
+    .notNull()
+    .default("creating"),
+  vcpus: integer("vcpus").notNull().default(1),
+  memoryMib: integer("memory_mib").notNull().default(512),
+  imageId: text("image_id").references(() => images.id),
+
   // Runtime state (set when VM starts)
-  pid: integer('pid'),
-  socketPath: text('socket_path'),
-  tapDevice: text('tap_device'),
-  macAddress: text('mac_address'),
-  ipAddress: text('ip_address'),
-  
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
-  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+  pid: integer("pid"),
+  socketPath: text("socket_path"),
+  tapDevice: text("tap_device"),
+  macAddress: text("mac_address"),
+  ipAddress: text("ip_address"),
+
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });
 
-export const images = sqliteTable('images', {
-  id: text('id').primaryKey(),
-  reference: text('reference').notNull().unique(),  // e.g., firecracker-quickstart:ubuntu-24.04
-  kernelPath: text('kernel_path').notNull(),
-  rootfsPath: text('rootfs_path').notNull(),
-  sizeBytes: integer('size_bytes'),
-  pulledAt: integer('pulled_at', { mode: 'timestamp' }).notNull(),
+export const images = sqliteTable("images", {
+  id: text("id").primaryKey(),
+  reference: text("reference").notNull().unique(), // e.g., firecracker-quickstart:ubuntu-24.04
+  kernelPath: text("kernel_path").notNull(),
+  rootfsPath: text("rootfs_path").notNull(),
+  sizeBytes: integer("size_bytes"),
+  pulledAt: integer("pulled_at", { mode: "timestamp" }).notNull(),
 });
 
 // Better Auth will create its own tables for users/sessions
@@ -177,26 +179,26 @@ export const images = sqliteTable('images', {
 
 ### VMs (`/api/vms`)
 
-| Method | Path | Description | Request Body | Response |
-|--------|------|-------------|--------------|----------|
-| `GET` | `/api/vms` | List all VMs | - | `VM[]` |
-| `POST` | `/api/vms` | Create VM | `{ name, vcpus?, memoryMib?, imageId }` | `VM` |
-| `GET` | `/api/vms/:id` | Get VM details | - | `VM` |
-| `DELETE` | `/api/vms/:id` | Delete VM | - | `{ success: true }` |
-| `POST` | `/api/vms/:id/start` | Start VM | - | `VM` |
-| `POST` | `/api/vms/:id/stop` | Stop VM | - | `VM` |
-| `WS` | `/api/vms/:id/terminal` | Terminal WebSocket (serial console) | - | WebSocket |
+| Method   | Path                    | Description                         | Request Body                            | Response            |
+| -------- | ----------------------- | ----------------------------------- | --------------------------------------- | ------------------- |
+| `GET`    | `/api/vms`              | List all VMs                        | -                                       | `VM[]`              |
+| `POST`   | `/api/vms`              | Create VM                           | `{ name, vcpus?, memoryMib?, imageId }` | `VM`                |
+| `GET`    | `/api/vms/:id`          | Get VM details                      | -                                       | `VM`                |
+| `DELETE` | `/api/vms/:id`          | Delete VM                           | -                                       | `{ success: true }` |
+| `POST`   | `/api/vms/:id/start`    | Start VM                            | -                                       | `VM`                |
+| `POST`   | `/api/vms/:id/stop`     | Stop VM                             | -                                       | `VM`                |
+| `WS`     | `/api/vms/:id/terminal` | Terminal WebSocket (serial console) | -                                       | WebSocket           |
 
 > **Note**: Terminal access uses Firecracker's serial console via named pipes, not an in-VM agent.
 > This eliminates the need for agent installation and network-based communication with the VM.
 
 ### Images (`/api/images`)
 
-| Method | Path | Description | Request Body | Response |
-|--------|------|-------------|--------------|----------|
-| `GET` | `/api/images` | List cached images | - | `Image[]` |
-| `POST` | `/api/images/pull` | Pull from registry | `{ reference: string }` | `Image` |
-| `DELETE` | `/api/images/:id` | Remove image | - | `{ success: true }` |
+| Method   | Path               | Description        | Request Body            | Response            |
+| -------- | ------------------ | ------------------ | ----------------------- | ------------------- |
+| `GET`    | `/api/images`      | List cached images | -                       | `Image[]`           |
+| `POST`   | `/api/images/pull` | Pull from registry | `{ reference: string }` | `Image`             |
+| `DELETE` | `/api/images/:id`  | Remove image       | -                       | `{ success: true }` |
 
 ### Auth (`/api/auth/*`)
 
@@ -211,6 +213,7 @@ export const images = sqliteTable('images', {
 > **Agent Note**: Fetch Firecracker API spec: https://github.com/firecracker-microvm/firecracker/blob/main/src/firecracker/swagger/firecracker.yaml
 
 Responsibilities:
+
 - Spawn `firecracker` process with `--api-sock` option
 - Configure VM via Unix socket (PUT `/machine-config`, `/boot-source`, `/drives`, `/network-interfaces`)
 - Start VM (PUT `/actions` with `InstanceStart`)
@@ -218,27 +221,30 @@ Responsibilities:
 - Track process lifecycle
 
 Key functions:
+
 ```typescript
-async function createVM(config: VMConfig): Promise<string>  // Returns socket path
-async function startVM(socketPath: string): Promise<void>
-async function stopVM(socketPath: string, pid: number): Promise<void>
-async function configureVM(socketPath: string, config: VMConfig): Promise<void>
+async function createVM(config: VMConfig): Promise<string>; // Returns socket path
+async function startVM(socketPath: string): Promise<void>;
+async function stopVM(socketPath: string, pid: number): Promise<void>;
+async function configureVM(socketPath: string, config: VMConfig): Promise<void>;
 ```
 
 ### 2. Network Service (`packages/api/src/services/network.ts`)
 
 Responsibilities:
+
 - Create TAP device for each VM
 - Attach TAP to bridge `bonfire0`
 - Assign IP addresses from pool `10.0.100.0/24`
 - Generate MAC addresses
 
 Key functions:
+
 ```typescript
-async function createTap(vmId: string): Promise<{ tapName: string, mac: string }>
-async function deleteTap(tapName: string): Promise<void>
-async function allocateIP(): Promise<string>
-async function releaseIP(ip: string): Promise<void>
+async function createTap(vmId: string): Promise<{ tapName: string; mac: string }>;
+async function deleteTap(tapName: string): Promise<void>;
+async function allocateIP(): Promise<string>;
+async function releaseIP(ip: string): Promise<void>;
 ```
 
 ### 3. Serial Console Service (`packages/api/src/services/firecracker/serial.ts`)
@@ -247,26 +253,32 @@ async function releaseIP(ip: string): Promise<void>
 > eliminating the need for in-VM agents.
 
 Responsibilities:
+
 - Create named pipes for stdin/stdout to Firecracker process
 - Proxy WebSocket data to/from serial console
 - Handle terminal resize via xterm escape sequences
 - Manage connection lifecycle
 
 Key functions:
+
 ```typescript
-function generatePipePaths(vmId: string, pipeDir?: string): { stdinPath: string, stdoutPath: string }
-function formatResizeMessage(cols: number, rows: number): Uint8Array  // xterm escape sequence
-async function createSerialConsole(options: SerialConsoleOptions): Promise<SerialConsole>
+function generatePipePaths(
+  vmId: string,
+  pipeDir?: string
+): { stdinPath: string; stdoutPath: string };
+function formatResizeMessage(cols: number, rows: number): Uint8Array; // xterm escape sequence
+async function createSerialConsole(options: SerialConsoleOptions): Promise<SerialConsole>;
 ```
 
 The serial console interface:
+
 ```typescript
 interface SerialConsole {
-  write(data: Uint8Array): void;      // Send to VM stdin
-  onData(callback: (data: Uint8Array) => void): void;  // Receive from VM stdout
+  write(data: Uint8Array): void; // Send to VM stdin
+  onData(callback: (data: Uint8Array) => void): void; // Receive from VM stdout
   close(): void;
   isActive(): boolean;
-  getPaths(): { stdin: string, stdout: string };
+  getPaths(): { stdin: string; stdout: string };
 }
 ```
 
@@ -275,21 +287,24 @@ interface SerialConsole {
 > **Agent Note**: OCI distribution spec for pulling images. Slicer images are on ghcr.io.
 
 Responsibilities:
+
 - Pull OCI images (kernel + rootfs layers)
 - Extract and store in `/var/lib/bonfire/images/`
 - Track pulled images in database
 
 Key functions:
+
 ```typescript
-async function pullImage(reference: string): Promise<Image>
-async function deleteImage(imageId: string): Promise<void>
+async function pullImage(reference: string): Promise<Image>;
+async function deleteImage(imageId: string): Promise<void>;
 ```
 
 ---
 
 ## Web UI Pages & Components
 
-> **Agent Note**: 
+> **Agent Note**:
+>
 > - Use shadcn/ui CLI to add components: `pnpm dlx shadcn@latest add <component>`
 > - Fetch shadcn docs: https://ui.shadcn.com/docs
 > - Fetch ghostty-web docs: https://github.com/coder/ghostty-web
@@ -331,17 +346,13 @@ async function deleteImage(imageId: string): Promise<void>
 
    ```typescript
    // Example usage with PartySocket
-   import useWebSocket from 'partysocket/react';
-   
-   const socket = useWebSocket(
-     () => `${baseUrl}/api/vms/${vmId}/terminal`,
-     [],
-     {
-       onMessage: (e) => terminal.write(e.data),
-       onOpen: () => console.log('Terminal connected'),
-       onClose: () => console.log('Terminal disconnected'),
-     }
-   );
+   import useWebSocket from "partysocket/react";
+
+   const socket = useWebSocket(() => `${baseUrl}/api/vms/${vmId}/terminal`, [], {
+     onMessage: (e) => terminal.write(e.data),
+     onOpen: () => console.log("Terminal connected"),
+     onClose: () => console.log("Terminal disconnected"),
+   });
    ```
 
 2. **VMList.tsx**
@@ -394,6 +405,7 @@ bonfire
 ```
 
 CLI config stored at: `~/.bonfire/config.json`
+
 ```json
 {
   "apiUrl": "http://localhost:3000",
@@ -449,18 +461,18 @@ echo "Bonfire host setup complete!"
 > **Agent Note**: Bonfire requires access to `/dev/kvm` and network capabilities. The container needs to be privileged or have specific capabilities.
 
 ```yaml
-version: '3.8'
+version: "3.8"
 
 services:
   bonfire:
     build: .
     ports:
-      - "3000:3000"      # API
-      - "5173:5173"      # Web UI (dev)
+      - "3000:3000" # API
+      - "5173:5173" # Web UI (dev)
     volumes:
       - bonfire-data:/var/lib/bonfire
       - /dev/kvm:/dev/kvm
-    privileged: true      # Required for network/VM management
+    privileged: true # Required for network/VM management
     cap_add:
       - NET_ADMIN
       - SYS_ADMIN
@@ -477,6 +489,7 @@ volumes:
 ## Implementation Phases
 
 ### Phase 1: Foundation
+
 - [ ] Initialize Node.js monorepo with pnpm workspaces
 - [ ] Configure Turborepo for build orchestration
 - [ ] Create package skeletons (`api`, `web`, `sdk`, `cli`)
@@ -486,6 +499,7 @@ volumes:
 - [ ] Add OpenAPI spec generation (for SDK)
 
 ### Phase 2: VM Management Core
+
 - [ ] Implement Firecracker service (spawn, configure, start, stop)
 - [ ] Implement Network service (TAP creation, IP allocation)
 - [ ] Create VM CRUD endpoints
@@ -494,6 +508,7 @@ volumes:
 - [ ] Test VM creation and lifecycle manually
 
 ### Phase 3: Serial Console Communication
+
 - [x] Implement Serial Console service (named pipes for Firecracker)
 - [x] Implement WebSocket terminal proxy (`/vms/:id/terminal`)
 - [x] Handle terminal resize via xterm escape sequences
@@ -504,6 +519,7 @@ volumes:
 > needing an in-VM agent.
 
 ### Phase 4: Web UI
+
 - [ ] Initialize React + Vite app
 - [ ] Configure Tailwind CSS
 - [ ] Add shadcn/ui components (Button, Card, Dialog, Input, etc.)
@@ -515,6 +531,7 @@ volumes:
 - [ ] Test on mobile viewport (375px)
 
 ### Phase 5: Images, SDK & CLI
+
 - [ ] Implement Registry service (OCI pull)
 - [ ] Add image endpoints
 - [ ] Add image management to Web UI
@@ -523,6 +540,7 @@ volumes:
 - [ ] Test CLI commands end-to-end
 
 ### Phase 6: Deployment & Polish
+
 - [ ] Create Dockerfile
 - [ ] Create Docker Compose stack
 - [ ] Document setup process
@@ -533,19 +551,19 @@ volumes:
 
 ## Default Configuration
 
-| Setting | Default Value |
-|---------|---------------|
-| VM vCPUs | 1 |
-| VM Memory | 512 MiB |
-| Bridge Name | `bonfire0` |
-| Bridge Subnet | `10.0.100.0/24` |
-| Gateway IP | `10.0.100.1` |
-| VM IP Range | `10.0.100.2` - `10.0.100.254` |
-| Images Directory | `/var/lib/bonfire/images/` |
-| VMs Directory | `/var/lib/bonfire/vms/` |
-| Database Path | `/var/lib/bonfire/bonfire.db` |
-| API Port | `3000` |
-| Default Image | `firecracker-quickstart:ubuntu-24.04` |
+| Setting          | Default Value                         |
+| ---------------- | ------------------------------------- |
+| VM vCPUs         | 1                                     |
+| VM Memory        | 512 MiB                               |
+| Bridge Name      | `bonfire0`                            |
+| Bridge Subnet    | `10.0.100.0/24`                       |
+| Gateway IP       | `10.0.100.1`                          |
+| VM IP Range      | `10.0.100.2` - `10.0.100.254`         |
+| Images Directory | `/var/lib/bonfire/images/`            |
+| VMs Directory    | `/var/lib/bonfire/vms/`               |
+| Database Path    | `/var/lib/bonfire/bonfire.db`         |
+| API Port         | `3000`                                |
+| Default Image    | `firecracker-quickstart:ubuntu-24.04` |
 
 ---
 
@@ -594,6 +612,7 @@ volumes:
 **Run with**: `pnpm -r test`
 
 **Rules**:
+
 - **NO** filesystem writes
 - **NO** network requests
 - **NO** database connections
@@ -602,28 +621,29 @@ volumes:
 - **YES** pure functions, business logic, data transformations
 
 **What to test**:
+
 ```typescript
 // packages/api/src/services/network.test.ts
 // Testing pure IP allocation logic (no actual network calls)
-describe('IP allocation', () => {
-  it('allocates next available IP from pool', () => {
-    const pool = createIPPool('10.0.100.0/24');
-    expect(pool.allocate()).toBe('10.0.100.2');  // .1 is gateway
-    expect(pool.allocate()).toBe('10.0.100.3');
+describe("IP allocation", () => {
+  it("allocates next available IP from pool", () => {
+    const pool = createIPPool("10.0.100.0/24");
+    expect(pool.allocate()).toBe("10.0.100.2"); // .1 is gateway
+    expect(pool.allocate()).toBe("10.0.100.3");
   });
 
-  it('throws when pool exhausted', () => {
-    const pool = createIPPool('10.0.100.0/30');  // Only 2 usable IPs
+  it("throws when pool exhausted", () => {
+    const pool = createIPPool("10.0.100.0/30"); // Only 2 usable IPs
     pool.allocate();
     pool.allocate();
-    expect(() => pool.allocate()).toThrow('IP pool exhausted');
+    expect(() => pool.allocate()).toThrow("IP pool exhausted");
   });
 });
 
 // packages/api/src/services/firecracker.test.ts
 // Testing config generation (no actual Firecracker calls)
-describe('VM config generation', () => {
-  it('generates valid machine config', () => {
+describe("VM config generation", () => {
+  it("generates valid machine config", () => {
     const config = generateMachineConfig({ vcpus: 2, memoryMib: 1024 });
     expect(config).toEqual({
       vcpu_count: 2,
@@ -634,29 +654,30 @@ describe('VM config generation', () => {
 
 // packages/cli/src/commands/vm.test.ts
 // Testing argument parsing (no actual API calls)
-describe('vm create argument parsing', () => {
-  it('parses vcpus flag', () => {
-    const args = parseVMCreateArgs(['my-vm', '--vcpus=4']);
+describe("vm create argument parsing", () => {
+  it("parses vcpus flag", () => {
+    const args = parseVMCreateArgs(["my-vm", "--vcpus=4"]);
     expect(args.vcpus).toBe(4);
   });
 });
 ```
 
 **What NOT to test**:
+
 ```typescript
 // BAD: Testing that a file exists
-it('has a README', () => {
-  expect(fs.existsSync('README.md')).toBe(true);  // Useless test
+it("has a README", () => {
+  expect(fs.existsSync("README.md")).toBe(true); // Useless test
 });
 
 // BAD: Testing trivial code
-it('returns the name', () => {
-  const vm = { name: 'test' };
-  expect(vm.name).toBe('test');  // Tests nothing meaningful
+it("returns the name", () => {
+  const vm = { name: "test" };
+  expect(vm.name).toBe("test"); // Tests nothing meaningful
 });
 
 // BAD: Testing library code
-it('drizzle inserts data', () => {
+it("drizzle inserts data", () => {
   // Don't test that Drizzle works - test YOUR logic
 });
 ```
@@ -668,6 +689,7 @@ it('drizzle inserts data', () => {
 **Run with**: `pnpm run test:int` (runs inside Docker container)
 
 **Rules**:
+
 - Run inside `docker/test.Dockerfile` container
 - Each test file gets a fresh temp SQLite database: `/tmp/bonfire-test-{random}.db`
 - Tests are independent - no shared state between test files
@@ -676,12 +698,13 @@ it('drizzle inserts data', () => {
 - HTTP routes are tested with real Hono app
 
 **What to test**:
+
 ```typescript
 // packages/api/src/routes/vms.integration.test.ts
-import { describe, it, expect, beforeEach } from 'vitest';
-import { createTestApp } from '../test-utils';
+import { describe, it, expect, beforeEach } from "vitest";
+import { createTestApp } from "../test-utils";
 
-describe('POST /api/vms', () => {
+describe("POST /api/vms", () => {
   let app: ReturnType<typeof createTestApp>;
 
   beforeEach(async () => {
@@ -689,28 +712,28 @@ describe('POST /api/vms', () => {
     app = await createTestApp();
   });
 
-  it('creates a VM and returns it', async () => {
-    const res = await app.request('/api/vms', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'test-vm', imageId: 'img-123' }),
+  it("creates a VM and returns it", async () => {
+    const res = await app.request("/api/vms", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "test-vm", imageId: "img-123" }),
     });
 
     expect(res.status).toBe(201);
     const vm = await res.json();
-    expect(vm.name).toBe('test-vm');
-    expect(vm.status).toBe('creating');
+    expect(vm.name).toBe("test-vm");
+    expect(vm.status).toBe("creating");
   });
 
-  it('rejects duplicate VM names', async () => {
-    await app.request('/api/vms', {
-      method: 'POST',
-      body: JSON.stringify({ name: 'dupe', imageId: 'img-123' }),
+  it("rejects duplicate VM names", async () => {
+    await app.request("/api/vms", {
+      method: "POST",
+      body: JSON.stringify({ name: "dupe", imageId: "img-123" }),
     });
 
-    const res = await app.request('/api/vms', {
-      method: 'POST',
-      body: JSON.stringify({ name: 'dupe', imageId: 'img-123' }),
+    const res = await app.request("/api/vms", {
+      method: "POST",
+      body: JSON.stringify({ name: "dupe", imageId: "img-123" }),
     });
 
     expect(res.status).toBe(409);
@@ -719,11 +742,12 @@ describe('POST /api/vms', () => {
 ```
 
 **Test utilities** (`packages/api/src/test-utils.ts`):
+
 ```typescript
-import { drizzle } from 'drizzle-orm/better-sqlite3';
-import Database from 'better-sqlite3';
-import { randomUUID } from 'crypto';
-import { createApp } from './index';
+import { drizzle } from "drizzle-orm/better-sqlite3";
+import Database from "better-sqlite3";
+import { randomUUID } from "crypto";
+import { createApp } from "./index";
 
 export async function createTestApp() {
   // Fresh database for each test
@@ -754,7 +778,7 @@ export async function createTestApp() {
 
 function createMockFirecrackerService() {
   return {
-    createVM: async () => ({ socketPath: '/tmp/mock.sock', pid: 12345 }),
+    createVM: async () => ({ socketPath: "/tmp/mock.sock", pid: 12345 }),
     startVM: async () => {},
     stopVM: async () => {},
   };
@@ -763,7 +787,7 @@ function createMockFirecrackerService() {
 function createMockNetworkService() {
   let nextIP = 2;
   return {
-    createTap: async () => ({ tapName: 'tap-mock', mac: '00:00:00:00:00:01' }),
+    createTap: async () => ({ tapName: "tap-mock", mac: "00:00:00:00:00:01" }),
     deleteTap: async () => {},
     allocateIP: async () => `10.0.100.${nextIP++}`,
     releaseIP: async () => {},
@@ -778,6 +802,7 @@ function createMockNetworkService() {
 **Run with**: `pnpm run test:e2e` (manual) or in CI with KVM-enabled runner
 
 **Rules**:
+
 - **Only run on Linux hosts with KVM**
 - Run inside `docker/e2e.Dockerfile` container with:
   - `/dev/kvm` passed through
@@ -789,56 +814,62 @@ function createMockNetworkService() {
 - Cleanup must be thorough (VMs, TAPs, bridge, files)
 
 **What to test**:
+
 ```typescript
 // e2e/vm-lifecycle.test.ts
-import { describe, it, expect, afterAll } from 'vitest';
-import { BonfireClient } from '@bonfire/sdk';
+import { describe, it, expect, afterAll } from "vitest";
+import { BonfireClient } from "@bonfire/sdk";
 
-describe('VM lifecycle (E2E)', () => {
-  const client = new BonfireClient({ baseUrl: 'http://localhost:3000' });
-  const createdVMs: string[] = [];
+describe(
+  "VM lifecycle (E2E)",
+  () => {
+    const client = new BonfireClient({ baseUrl: "http://localhost:3000" });
+    const createdVMs: string[] = [];
 
-  afterAll(async () => {
-    // Cleanup all VMs created during tests
-    for (const id of createdVMs) {
-      await client.vms.delete(id).catch(() => {});
-    }
-  });
-
-  it('creates, starts, executes command, and stops a VM', async () => {
-    // Create
-    const vm = await client.vms.create({
-      name: `e2e-test-${Date.now()}`,
-      imageId: 'default',
+    afterAll(async () => {
+      // Cleanup all VMs created during tests
+      for (const id of createdVMs) {
+        await client.vms.delete(id).catch(() => {});
+      }
     });
-    createdVMs.push(vm.id);
-    expect(vm.status).toBe('creating');
 
-    // Start
-    await client.vms.start(vm.id);
-    
-    // Wait for agent to be healthy
-    await waitForHealth(client, vm.id, { timeout: 30000 });
+    it("creates, starts, executes command, and stops a VM", async () => {
+      // Create
+      const vm = await client.vms.create({
+        name: `e2e-test-${Date.now()}`,
+        imageId: "default",
+      });
+      createdVMs.push(vm.id);
+      expect(vm.status).toBe("creating");
 
-    // Execute command
-    const result = await client.vms.exec(vm.id, {
-      command: 'echo',
-      args: ['hello'],
+      // Start
+      await client.vms.start(vm.id);
+
+      // Wait for agent to be healthy
+      await waitForHealth(client, vm.id, { timeout: 30000 });
+
+      // Execute command
+      const result = await client.vms.exec(vm.id, {
+        command: "echo",
+        args: ["hello"],
+      });
+      expect(result.stdout.trim()).toBe("hello");
+      expect(result.exitCode).toBe(0);
+
+      // Stop
+      await client.vms.stop(vm.id);
+      const stopped = await client.vms.get(vm.id);
+      expect(stopped.status).toBe("stopped");
     });
-    expect(result.stdout.trim()).toBe('hello');
-    expect(result.exitCode).toBe(0);
-
-    // Stop
-    await client.vms.stop(vm.id);
-    const stopped = await client.vms.get(vm.id);
-    expect(stopped.status).toBe('stopped');
-  });
-}, { timeout: 60000 });
+  },
+  { timeout: 60000 }
+);
 ```
 
 ### Test Infrastructure Files
 
 **`docker/test.Dockerfile`** (for integration tests):
+
 ```dockerfile
 FROM node:24-bookworm
 
@@ -855,6 +886,7 @@ CMD ["pnpm", "-C", "packages/api", "exec", "vitest", "run", "--config", "vitest.
 ```
 
 **`docker/e2e.Dockerfile`** (for E2E tests):
+
 ```dockerfile
 FROM node:24-bookworm
 
@@ -875,8 +907,9 @@ CMD ["./scripts/run-e2e.sh"]
 ```
 
 **`docker/docker-compose.test.yml`**:
+
 ```yaml
-version: '3.8'
+version: "3.8"
 
 services:
   test-integration:
@@ -923,11 +956,11 @@ services:
 
 ### Test File Naming Convention
 
-| Pattern | Type | Runs In |
-|---------|------|---------|
-| `*.test.ts` | Unit | `pnpm -r test` (anywhere) |
-| `*.integration.test.ts` | Integration | Docker container |
-| `e2e/*.test.ts` | End-to-end | Docker + KVM |
+| Pattern                 | Type        | Runs In                   |
+| ----------------------- | ----------- | ------------------------- |
+| `*.test.ts`             | Unit        | `pnpm -r test` (anywhere) |
+| `*.integration.test.ts` | Integration | Docker container          |
+| `e2e/*.test.ts`         | End-to-end  | Docker + KVM              |
 
 ### CI Configuration
 
@@ -956,7 +989,7 @@ jobs:
       - run: docker compose -f docker/docker-compose.test.yml run --build --rm test-integration
 
   e2e:
-    runs-on: [self-hosted, kvm]  # Requires self-hosted runner with KVM
+    runs-on: [self-hosted, kvm] # Requires self-hosted runner with KVM
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
@@ -987,11 +1020,11 @@ This project has specialized skills available for specific code domains. **Alway
 
 ### Available Skills
 
-| Skill Name | When to Use | Skill Command |
-|------------|-------------|---------------|
-| **vercel-react-best-practices** | Writing/reviewing React or Next.js components, data fetching, performance optimization | Use when touching any React/Next.js code |
-| **vercel-composition-patterns** | Refactoring components with many boolean props, building flexible component APIs, compound components | Use when designing component architecture |
-| **turborepo** | Configuring tasks, setting up monorepo, managing packages, debugging cache, CI configuration | Use when working with turbo.json or package structure |
+| Skill Name                      | When to Use                                                                                           | Skill Command                                         |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| **vercel-react-best-practices** | Writing/reviewing React or Next.js components, data fetching, performance optimization                | Use when touching any React/Next.js code              |
+| **vercel-composition-patterns** | Refactoring components with many boolean props, building flexible component APIs, compound components | Use when designing component architecture             |
+| **turborepo**                   | Configuring tasks, setting up monorepo, managing packages, debugging cache, CI configuration          | Use when working with turbo.json or package structure |
 
 ### How to Use Skills
 
@@ -1011,18 +1044,21 @@ Example scenarios:
 ### Key Skill Rules to Remember
 
 #### React/Next.js (vercel-react-best-practices)
+
 - Eliminate waterfalls: Use `Promise.all()` for independent operations, defer `await` until needed
 - Bundle optimization: Import directly from source (avoid barrel files), use dynamic imports for heavy components
 - Server-side: Use `React.cache()` for deduplication, authenticate server actions like API routes
 - Re-renders: Use functional setState, derive state during render, extract to memoized components
 
 #### Component Architecture (vercel-composition-patterns)
+
 - Avoid boolean prop proliferation: Use composition instead of `isEditing`, `isThread`, etc.
 - Use compound components with shared context for flexible composition
 - Lift state into provider components for sibling access
 - Define generic context interfaces (state, actions, meta) for dependency injection
 
 #### Turborepo (turborepo)
+
 - **CRITICAL**: Always create package tasks, not root tasks
 - Always use `turbo run` in code (never shorthand `turbo <task>`)
 - Declare workspace dependencies to enable automatic build ordering
@@ -1056,16 +1092,16 @@ Example scenarios:
 
 ### Key Documentation URLs to Fetch
 
-| Technology | URL |
-|------------|-----|
-| Node.js | https://nodejs.org/docs/latest/api/ |
-| Hono | https://hono.dev/docs |
-| Drizzle | https://orm.drizzle.team/docs/overview |
-| Better Auth | https://www.better-auth.com/docs |
-| shadcn/ui | https://ui.shadcn.com/docs |
-| Clack | https://bomb.sh/docs/clack/basics/getting-started |
-| ghostty-web | https://github.com/coder/ghostty-web |
-| PartySocket | https://github.com/cloudflare/partykit/tree/main/packages/partysocket |
-| Firecracker API | https://github.com/firecracker-microvm/firecracker/blob/main/src/firecracker/swagger/firecracker.yaml |
-| Firecracker Serial | https://github.com/firecracker-microvm/firecracker/blob/main/docs/prod-host-setup.md |
-| Firecracker Images | https://github.com/firecracker-microvm/firecracker/blob/main/docs/getting-started.md |
+| Technology         | URL                                                                                                   |
+| ------------------ | ----------------------------------------------------------------------------------------------------- |
+| Node.js            | https://nodejs.org/docs/latest/api/                                                                   |
+| Hono               | https://hono.dev/docs                                                                                 |
+| Drizzle            | https://orm.drizzle.team/docs/overview                                                                |
+| Better Auth        | https://www.better-auth.com/docs                                                                      |
+| shadcn/ui          | https://ui.shadcn.com/docs                                                                            |
+| Clack              | https://bomb.sh/docs/clack/basics/getting-started                                                     |
+| ghostty-web        | https://github.com/coder/ghostty-web                                                                  |
+| PartySocket        | https://github.com/cloudflare/partykit/tree/main/packages/partysocket                                 |
+| Firecracker API    | https://github.com/firecracker-microvm/firecracker/blob/main/src/firecracker/swagger/firecracker.yaml |
+| Firecracker Serial | https://github.com/firecracker-microvm/firecracker/blob/main/docs/prod-host-setup.md                  |
+| Firecracker Images | https://github.com/firecracker-microvm/firecracker/blob/main/docs/getting-started.md                  |

@@ -1,14 +1,14 @@
 /**
  * IP Pool Management Service
- * 
+ *
  * Pure functions for IP allocation and MAC generation.
  * No system calls - fully unit testable.
  */
 
 // IP range configuration
-const NETWORK_PREFIX = '10.0.100';
-const IP_START = 2;  // First usable IP (.0 is network, .1 is gateway)
-const IP_END = 254;  // Last usable IP (.255 is broadcast)
+const NETWORK_PREFIX = "10.0.100";
+const IP_START = 2; // First usable IP (.0 is network, .1 is gateway)
+const IP_END = 254; // Last usable IP (.255 is broadcast)
 
 /**
  * IP Pool class managing allocation of IP addresses
@@ -41,7 +41,7 @@ export class IPPool {
           return this.formatIp(i);
         }
       }
-      throw new Error('IP pool exhausted: no available IP addresses');
+      throw new Error("IP pool exhausted: no available IP addresses");
     }
 
     const ip = this.nextIp;
@@ -105,11 +105,11 @@ export class IPPool {
 
 /**
  * Generate a deterministic MAC address from a VM ID
- * 
+ *
  * MAC format: 02:00:00:XX:XX:XX
  * - 02 prefix indicates locally administered unicast
  * - Remaining 3 bytes derived from VM ID hash
- * 
+ *
  * @param vmId - The unique VM identifier
  * @returns A deterministic MAC address string
  */
@@ -118,23 +118,23 @@ export function generateMacAddress(vmId: string): string {
   let hash = 0;
   for (let i = 0; i < vmId.length; i++) {
     const char = vmId.charCodeAt(i);
-    hash = ((hash << 5) - hash + char) & 0xFFFFFFFF;
+    hash = ((hash << 5) - hash + char) & 0xffffffff;
   }
 
   // Use lower 24 bits for MAC (3 bytes)
-  const byte1 = (hash >> 16) & 0xFF;
-  const byte2 = (hash >> 8) & 0xFF;
-  const byte3 = hash & 0xFF;
+  const byte1 = (hash >> 16) & 0xff;
+  const byte2 = (hash >> 8) & 0xff;
+  const byte3 = hash & 0xff;
 
   // Format as MAC address with locally administered prefix
   const mac = [
-    '02',
-    '00',
-    '00',
-    byte1.toString(16).padStart(2, '0'),
-    byte2.toString(16).padStart(2, '0'),
-    byte3.toString(16).padStart(2, '0')
-  ].join(':');
+    "02",
+    "00",
+    "00",
+    byte1.toString(16).padStart(2, "0"),
+    byte2.toString(16).padStart(2, "0"),
+    byte3.toString(16).padStart(2, "0"),
+  ].join(":");
 
   return mac.toLowerCase();
 }

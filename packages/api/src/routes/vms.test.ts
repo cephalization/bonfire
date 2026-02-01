@@ -542,10 +542,9 @@ describe("VM Lifecycle Endpoints", () => {
       });
 
       // 1. Start the VM
-      const startReq = new Request(
-        "http://localhost/api/vms/vm-test-010/start",
-        { method: "POST" }
-      );
+      const startReq = new Request("http://localhost/api/vms/vm-test-010/start", {
+        method: "POST",
+      });
       const startRes = await app.fetch(startReq);
 
       expect(startRes.status).toBe(200);
@@ -553,10 +552,7 @@ describe("VM Lifecycle Endpoints", () => {
       expect(startBody.status).toBe("running");
 
       // 2. Stop the VM
-      const stopReq = new Request(
-        "http://localhost/api/vms/vm-test-010/stop",
-        { method: "POST" }
-      );
+      const stopReq = new Request("http://localhost/api/vms/vm-test-010/stop", { method: "POST" });
       const stopRes = await app.fetch(stopReq);
 
       expect(stopRes.status).toBe(200);
@@ -567,10 +563,9 @@ describe("VM Lifecycle Endpoints", () => {
       mocks.firecracker.clearCalls();
       mocks.network.clearCalls();
 
-      const restartReq = new Request(
-        "http://localhost/api/vms/vm-test-010/start",
-        { method: "POST" }
-      );
+      const restartReq = new Request("http://localhost/api/vms/vm-test-010/start", {
+        method: "POST",
+      });
       const restartRes = await app.fetch(restartReq);
 
       expect(restartRes.status).toBe(200);
@@ -584,5 +579,4 @@ describe("VM Lifecycle Endpoints", () => {
       cleanup();
     });
   });
-
 });

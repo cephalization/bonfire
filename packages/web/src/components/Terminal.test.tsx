@@ -1,6 +1,6 @@
 /**
  * Terminal Component Tests
- * 
+ *
  * Tests for the Terminal component mounting/unmounting behavior.
  */
 
@@ -57,7 +57,7 @@ vi.mock("partysocket", () => ({
     static OPEN = 1;
     static CLOSING = 2;
     static CLOSED = 3;
-    
+
     readyState = 1; // OPEN
     send: ReturnType<typeof vi.fn>;
     close: ReturnType<typeof vi.fn>;
@@ -85,7 +85,7 @@ describe("Terminal Component", () => {
 
   it("renders terminal container", async () => {
     const { container } = render(<Terminal vmId="test-vm-123" />);
-    
+
     await waitFor(() => {
       const terminalContainer = container.querySelector('[data-testid="terminal-container"]');
       expect(terminalContainer).toBeTruthy();
@@ -94,7 +94,7 @@ describe("Terminal Component", () => {
 
   it("initializes ghostty terminal on mount", async () => {
     render(<Terminal vmId="test-vm-123" />);
-    
+
     await waitFor(() => {
       // The terminal.open should have been called
       expect(terminalInstances.length).toBeGreaterThan(0);
@@ -104,7 +104,7 @@ describe("Terminal Component", () => {
 
   it("creates WebSocket connection", async () => {
     render(<Terminal vmId="test-vm-456" />);
-    
+
     await waitFor(() => {
       expect(wsInstances.length).toBeGreaterThan(0);
     });
@@ -112,48 +112,48 @@ describe("Terminal Component", () => {
 
   it("disposes terminal on unmount", async () => {
     const { unmount } = render(<Terminal vmId="test-vm-123" />);
-    
+
     await waitFor(() => {
       expect(terminalInstances.length).toBeGreaterThan(0);
     });
-    
+
     unmount();
-    
+
     // Should dispose the terminal
     expect(terminalInstances[0].dispose).toHaveBeenCalled();
   });
 
   it("closes WebSocket on unmount", async () => {
     const { unmount } = render(<Terminal vmId="test-vm-123" />);
-    
+
     await waitFor(() => {
       expect(wsInstances.length).toBeGreaterThan(0);
     });
-    
+
     unmount();
-    
+
     // Should close the WebSocket
     expect(wsInstances[0].close).toHaveBeenCalled();
   });
 
   it("registers WebSocket event listeners", async () => {
     render(<Terminal vmId="test-vm-123" />);
-    
+
     await waitFor(() => {
       expect(wsInstances.length).toBeGreaterThan(0);
     });
-    
+
     // Should register open, message, close, error listeners
     expect(wsInstances[0].addEventListener.mock.calls.length).toBe(4);
   });
 
   it("registers terminal event handlers", async () => {
     render(<Terminal vmId="test-vm-123" />);
-    
+
     await waitFor(() => {
       expect(terminalInstances.length).toBeGreaterThan(0);
     });
-    
+
     // Should register data and resize handlers
     expect(terminalInstances[0].onData).toHaveBeenCalled();
     expect(terminalInstances[0].onResize).toHaveBeenCalled();

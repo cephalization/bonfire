@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { vms, images } from './schema';
+import { vms, images } from "./schema";
 
-describe('Database Schema', () => {
-  describe('vms table', () => {
-    it('should have all required columns defined', () => {
+describe("Database Schema", () => {
+  describe("vms table", () => {
+    it("should have all required columns defined", () => {
       expect(vms.id).toBeDefined();
       expect(vms.name).toBeDefined();
       expect(vms.status).toBeDefined();
@@ -20,8 +20,8 @@ describe('Database Schema', () => {
     });
   });
 
-  describe('images table', () => {
-    it('should have all required columns defined', () => {
+  describe("images table", () => {
+    it("should have all required columns defined", () => {
       expect(images.id).toBeDefined();
       expect(images.reference).toBeDefined();
       expect(images.kernelPath).toBeDefined();
@@ -31,14 +31,14 @@ describe('Database Schema', () => {
     });
   });
 
-  describe('type exports', () => {
-    it('should export VM type', () => {
+  describe("type exports", () => {
+    it("should export VM type", () => {
       // Type-only validation - if this compiles, the types work
       expect(true).toBe(true);
     });
 
-    it('should export Image type', () => {
-      // Type-only validation - if this compiles, the types work  
+    it("should export Image type", () => {
+      // Type-only validation - if this compiles, the types work
       expect(true).toBe(true);
     });
   });

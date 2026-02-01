@@ -61,9 +61,12 @@ export class AgentClient {
   /**
    * Build a URL with the base URL and path
    */
-  private buildUrl(path: string, queryParams?: Record<string, string | number | boolean | undefined>): string {
+  private buildUrl(
+    path: string,
+    queryParams?: Record<string, string | number | boolean | undefined>
+  ): string {
     const url = new URL(path, this.baseUrl);
-    
+
     if (queryParams) {
       for (const [key, value] of Object.entries(queryParams)) {
         if (value !== undefined) {
@@ -71,17 +74,14 @@ export class AgentClient {
         }
       }
     }
-    
+
     return url.toString();
   }
 
   /**
    * Execute an HTTP request with timeout handling
    */
-  private async fetchWithTimeout(
-    url: string,
-    options: RequestInit = {}
-  ): Promise<Response> {
+  private async fetchWithTimeout(url: string, options: RequestInit = {}): Promise<Response> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
 
@@ -152,7 +152,7 @@ export class AgentClient {
     // Parse the newline-delimited JSON response
     const text = await response.text();
     const lines = text.trim().split("\n");
-    
+
     let stdout = "";
     let stderr = "";
     let exitCode = 0;
@@ -160,7 +160,7 @@ export class AgentClient {
 
     for (const line of lines) {
       if (!line.trim()) continue;
-      
+
       try {
         const data = JSON.parse(line);
         if (data.stdout) stdout += data.stdout;
@@ -187,7 +187,7 @@ export class AgentClient {
   async upload(localPath: string, remotePath: string): Promise<void> {
     // Read the file content
     const file = Bun.file(localPath);
-    
+
     if (!(await file.exists())) {
       throw new AgentError(`Local file not found: ${localPath}`);
     }
@@ -209,7 +209,9 @@ export class AgentClient {
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => "Unknown error");
-      throw new AgentError(`Upload failed: ${response.status} ${response.statusText} - ${errorText}`);
+      throw new AgentError(
+        `Upload failed: ${response.status} ${response.statusText} - ${errorText}`
+      );
     }
   }
 
@@ -236,7 +238,9 @@ export class AgentClient {
         throw new AgentError(`File not found: ${remotePath}`);
       }
       const errorText = await response.text().catch(() => "Unknown error");
-      throw new AgentError(`Download failed: ${response.status} ${response.statusText} - ${errorText}`);
+      throw new AgentError(
+        `Download failed: ${response.status} ${response.statusText} - ${errorText}`
+      );
     }
 
     const arrayBuffer = await response.arrayBuffer();
@@ -247,7 +251,10 @@ export class AgentClient {
 /**
  * Factory function to create an AgentClient for a VM
  */
-export function createAgentClient(ipAddress: string, options?: Omit<AgentClientOptions, "ipAddress">): AgentClient {
+export function createAgentClient(
+  ipAddress: string,
+  options?: Omit<AgentClientOptions, "ipAddress">
+): AgentClient {
   return new AgentClient({
     ipAddress,
     ...options,

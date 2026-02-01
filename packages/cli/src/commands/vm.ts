@@ -11,13 +11,7 @@
  * - ssh: Open interactive shell in a VM
  */
 
-import {
-  spinner,
-  confirm,
-  isCancel,
-  cancel,
-  outro,
-} from "@clack/prompts";
+import { spinner, confirm, isCancel, cancel, outro } from "@clack/prompts";
 import pc from "picocolors";
 import type { BonfireClient } from "@bonfire/sdk";
 
@@ -182,10 +176,7 @@ export async function handleVMCreate(
   }
 }
 
-export async function handleVMList(
-  client: BonfireClient,
-  baseUrl: string
-): Promise<void> {
+export async function handleVMList(client: BonfireClient, baseUrl: string): Promise<void> {
   try {
     const vms = await apiRequest<VM[]>(baseUrl, "GET", "/api/vms");
 
@@ -221,10 +212,10 @@ export async function handleVMList(
         vm.status === "running"
           ? pc.green
           : vm.status === "stopped"
-          ? pc.gray
-          : vm.status === "error"
-          ? pc.red
-          : pc.yellow;
+            ? pc.gray
+            : vm.status === "error"
+              ? pc.red
+              : pc.yellow;
 
       const row = [
         vm.id.padEnd(idWidth),
@@ -402,7 +393,9 @@ export async function handleVMSSH(
   }
 
   if (vm.status !== "running") {
-    throw new Error(`VM is not running (status: ${vm.status}). Start it first with: bonfire vm start ${identifier}`);
+    throw new Error(
+      `VM is not running (status: ${vm.status}). Start it first with: bonfire vm start ${identifier}`
+    );
   }
 
   if (!vm.ipAddress) {

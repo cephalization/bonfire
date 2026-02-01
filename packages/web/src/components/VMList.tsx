@@ -29,10 +29,7 @@ export function VMList({ vms, onStart, onStop, onDelete, isLoading }: VMListProp
   }
 
   return (
-    <div
-      className="grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3"
-      data-testid="vm-list"
-    >
+    <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3" data-testid="vm-list">
       {vms.map((vm) => (
         <VMCard
           key={vm.id}

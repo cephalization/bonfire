@@ -13,15 +13,15 @@ import { loadConfig } from "./config.js";
  */
 export async function createClient(): Promise<BonfireClient> {
   const config = await loadConfig();
-  
+
   const clientConfig: ClientConfig = {
     baseUrl: config.apiUrl,
   };
-  
+
   if (config.token) {
     clientConfig.token = config.token;
   }
-  
+
   return new BonfireClient(clientConfig);
 }
 

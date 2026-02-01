@@ -15,12 +15,7 @@ import {
   isApiReady,
 } from "./socket-client";
 import type { VMConfiguration } from "./socket-client";
-import {
-  createPipes,
-  cleanupPipes,
-  generatePipePaths,
-  type SerialConsolePaths,
-} from "./serial";
+import { createPipes, cleanupPipes, generatePipePaths, type SerialConsolePaths } from "./serial";
 
 export interface FirecrackerProcess {
   pid: number;
@@ -52,9 +47,7 @@ const DEFAULTS = {
 /**
  * Spawns a Firecracker process with API socket and serial console pipes
  */
-export async function spawnFirecracker(
-  options: SpawnOptions
-): Promise<FirecrackerProcess> {
+export async function spawnFirecracker(options: SpawnOptions): Promise<FirecrackerProcess> {
   const socketDir = options.socketDir ?? DEFAULTS.socketDir;
   const binaryPath = options.binaryPath ?? DEFAULTS.binaryPath;
   const socketPath = `${socketDir}/${options.vmId}.sock`;
@@ -141,15 +134,11 @@ export async function spawnFirecracker(
     await new Promise((resolve) => setTimeout(resolve, 100));
 
     if (startupError) {
-      throw new Error(
-        `Failed to spawn Firecracker process: ${(startupError as Error).message}`
-      );
+      throw new Error(`Failed to spawn Firecracker process: ${(startupError as Error).message}`);
     }
 
     if (child.killed || child.exitCode !== null) {
-      throw new Error(
-        `Firecracker process exited prematurely with code ${child.exitCode}`
-      );
+      throw new Error(`Firecracker process exited prematurely with code ${child.exitCode}`);
     }
 
     console.log(`[Firecracker:${pid}] Process started successfully`);
@@ -220,10 +209,8 @@ export async function stopVMProcess(
   pid: number,
   options: StopOptions = {}
 ): Promise<void> {
-  const gracefulTimeoutMs =
-    options.gracefulTimeoutMs ?? DEFAULTS.gracefulTimeoutMs;
-  const sigtermTimeoutMs =
-    options.sigtermTimeoutMs ?? DEFAULTS.sigtermTimeoutMs;
+  const gracefulTimeoutMs = options.gracefulTimeoutMs ?? DEFAULTS.gracefulTimeoutMs;
+  const sigtermTimeoutMs = options.sigtermTimeoutMs ?? DEFAULTS.sigtermTimeoutMs;
 
   // Try graceful shutdown via API first
   try {

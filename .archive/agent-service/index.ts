@@ -26,7 +26,4 @@ export {
   ShellConnectionError,
 } from "./shell";
 
-export type {
-  ShellStream,
-  ShellConnectionOptions,
-} from "./shell";
+export type { ShellStream, ShellConnectionOptions } from "./shell";

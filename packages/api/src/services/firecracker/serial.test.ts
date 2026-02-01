@@ -188,7 +188,7 @@ describe("data formatting utilities", () => {
       // The xterm sequence is: ESC [ 8 ; rows ; cols t
       // So for cols=120, rows=40 we expect: \x1b[8;40;120t
       const message = formatResizeMessage(120, 40);
-      
+
       // Verify the escape character
       expect(message.charCodeAt(0)).toBe(0x1b); // ESC
       expect(message.charAt(1)).toBe("[");
@@ -217,21 +217,21 @@ describe("data formatting utilities", () => {
     it("handles vmId with UUID format", () => {
       const uuid = "550e8400-e29b-41d4-a716-446655440000";
       const paths = generatePipePaths(uuid);
-      
+
       expect(paths.stdin).toContain(uuid);
       expect(paths.stdout).toContain(uuid);
     });
 
     it("handles trailing slash in pipeDir", () => {
       const paths = generatePipePaths("vm-123", "/tmp/pipes/");
-      
+
       // Should work even with trailing slash (though results in double slash)
       expect(paths.stdin).toBe("/tmp/pipes//vm-123.stdin");
     });
 
     it("handles path with spaces in pipeDir", () => {
       const paths = generatePipePaths("vm-123", "/tmp/my pipes");
-      
+
       expect(paths.stdin).toBe("/tmp/my pipes/vm-123.stdin");
       expect(paths.stdout).toBe("/tmp/my pipes/vm-123.stdout");
     });
@@ -240,10 +240,7 @@ describe("data formatting utilities", () => {
 
 describe("SerialConsoleError codes", () => {
   it("PIPE_CREATE_FAILED code for pipe creation failures", () => {
-    const error = new SerialConsoleError(
-      "Failed to create pipe",
-      "PIPE_CREATE_FAILED"
-    );
+    const error = new SerialConsoleError("Failed to create pipe", "PIPE_CREATE_FAILED");
     expect(error.code).toBe("PIPE_CREATE_FAILED");
   });
 
@@ -259,34 +256,22 @@ describe("SerialConsoleError codes", () => {
   });
 
   it("PIPE_REMOVE_FAILED code for pipe removal failures", () => {
-    const error = new SerialConsoleError(
-      "Failed to remove pipe",
-      "PIPE_REMOVE_FAILED"
-    );
+    const error = new SerialConsoleError("Failed to remove pipe", "PIPE_REMOVE_FAILED");
     expect(error.code).toBe("PIPE_REMOVE_FAILED");
   });
 
   it("CONSOLE_INACTIVE code for inactive console operations", () => {
-    const error = new SerialConsoleError(
-      "Serial console is not active",
-      "CONSOLE_INACTIVE"
-    );
+    const error = new SerialConsoleError("Serial console is not active", "CONSOLE_INACTIVE");
     expect(error.code).toBe("CONSOLE_INACTIVE");
   });
 
   it("CONSOLE_CLOSED code for closed console", () => {
-    const error = new SerialConsoleError(
-      "Serial console closed",
-      "CONSOLE_CLOSED"
-    );
+    const error = new SerialConsoleError("Serial console closed", "CONSOLE_CLOSED");
     expect(error.code).toBe("CONSOLE_CLOSED");
   });
 
   it("WRITE_FAILED code for write failures", () => {
-    const error = new SerialConsoleError(
-      "Failed to write to serial console",
-      "WRITE_FAILED"
-    );
+    const error = new SerialConsoleError("Failed to write to serial console", "WRITE_FAILED");
     expect(error.code).toBe("WRITE_FAILED");
   });
 
@@ -301,10 +286,10 @@ describe("SerialConsole getPaths integration", () => {
   it("getPaths returns consistent values with generatePipePaths", () => {
     const vmId = "test-vm";
     const pipeDir = "/custom/dir";
-    
+
     // Simulate what a SerialConsole would return
     const expectedPaths = generatePipePaths(vmId, pipeDir);
-    
+
     // A mock console would return these same paths
     const mockConsole: SerialConsole = {
       write: async () => {},
@@ -313,7 +298,7 @@ describe("SerialConsole getPaths integration", () => {
       isActive: () => true,
       getPaths: () => expectedPaths,
     };
-    
+
     const paths = mockConsole.getPaths();
     expect(paths.stdin).toBe(expectedPaths.stdin);
     expect(paths.stdout).toBe(expectedPaths.stdout);
@@ -324,7 +309,7 @@ describe("text encoding in write operations", () => {
   it("TextEncoder converts string to Uint8Array correctly", () => {
     const encoder = new TextEncoder();
     const bytes = encoder.encode("hello");
-    
+
     expect(bytes).toBeInstanceOf(Uint8Array);
     expect(bytes.length).toBe(5);
     expect(bytes[0]).toBe(104); // 'h'
@@ -337,7 +322,7 @@ describe("text encoding in write operations", () => {
   it("TextEncoder handles unicode characters", () => {
     const encoder = new TextEncoder();
     const bytes = encoder.encode("こんにちは");
-    
+
     expect(bytes).toBeInstanceOf(Uint8Array);
     // Japanese characters are multi-byte in UTF-8
     expect(bytes.length).toBeGreaterThan(5);
@@ -347,7 +332,7 @@ describe("text encoding in write operations", () => {
     const encoder = new TextEncoder();
     const resizeMsg = formatResizeMessage(80, 24);
     const bytes = encoder.encode(resizeMsg);
-    
+
     expect(bytes).toBeInstanceOf(Uint8Array);
     expect(bytes[0]).toBe(0x1b); // ESC character
   });

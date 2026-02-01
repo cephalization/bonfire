@@ -41,11 +41,7 @@ function headersFromNodeRequest(req: IncomingMessage): Headers {
   return headers;
 }
 
-function rejectUpgrade(
-  socket: any,
-  status: number,
-  body: { error: string }
-): void {
+function rejectUpgrade(socket: any, status: number, body: { error: string }): void {
   const payload = JSON.stringify(body);
   socket.write(
     `HTTP/1.1 ${status} \r\n` +
@@ -58,10 +54,7 @@ function rejectUpgrade(
   socket.destroy();
 }
 
-export function attachTerminalWebSocketServer(
-  server: Server,
-  config: TerminalWsConfig
-): void {
+export function attachTerminalWebSocketServer(server: Server, config: TerminalWsConfig): void {
   const wss = new WebSocketServer({ noServer: true });
   const activeConnections = _unsafeGetActiveConnectionsForWsLayer();
 

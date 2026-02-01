@@ -91,9 +91,7 @@ describe("generateBootSource", () => {
   });
 
   it("throws error when kernelPath is empty", () => {
-    expect(() => generateBootSource({ kernelPath: "" })).toThrow(
-      "kernelPath is required"
-    );
+    expect(() => generateBootSource({ kernelPath: "" })).toThrow("kernelPath is required");
   });
 });
 
@@ -216,8 +214,6 @@ describe("generateNetworkInterface", () => {
   });
 
   it("throws error when tapDevice is empty", () => {
-    expect(() => generateNetworkInterface({ tapDevice: "" })).toThrow(
-      "tapDevice is required"
-    );
+    expect(() => generateNetworkInterface({ tapDevice: "" })).toThrow("tapDevice is required");
   });
 });

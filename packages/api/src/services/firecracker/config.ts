@@ -102,9 +102,7 @@ export const DEFAULTS = {
  * @param input - VM CPU and memory configuration
  * @returns Firecracker machine-config payload for PUT /machine-config
  */
-export function generateMachineConfig(
-  input: MachineConfigInput
-): FirecrackerMachineConfig {
+export function generateMachineConfig(input: MachineConfigInput): FirecrackerMachineConfig {
   const vcpuCount = input.vcpus ?? DEFAULTS.vcpus;
   const memSizeMib = input.memoryMib ?? DEFAULTS.memoryMib;
 
@@ -128,9 +126,7 @@ export function generateMachineConfig(
  * @param input - Kernel and boot configuration
  * @returns Firecracker boot-source payload for PUT /boot-source
  */
-export function generateBootSource(
-  input: BootSourceInput
-): FirecrackerBootSource {
+export function generateBootSource(input: BootSourceInput): FirecrackerBootSource {
   if (!input.kernelPath) {
     throw new Error("kernelPath is required");
   }

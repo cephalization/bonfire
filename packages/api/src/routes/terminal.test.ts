@@ -120,7 +120,7 @@ describe("Serial Console formatResizeMessage", () => {
   it("generates correct xterm escape sequence", async () => {
     // Dynamic import to avoid immediate evaluation issues
     const { formatResizeMessage } = await import("../services/firecracker/serial");
-    
+
     // Format: ESC [ 8 ; rows ; cols t
     const result = formatResizeMessage(80, 24);
     expect(result).toBe("\x1b[8;24;80t");
@@ -128,21 +128,21 @@ describe("Serial Console formatResizeMessage", () => {
 
   it("generates correct sequence for different dimensions", async () => {
     const { formatResizeMessage } = await import("../services/firecracker/serial");
-    
+
     const result = formatResizeMessage(120, 40);
     expect(result).toBe("\x1b[8;40;120t");
   });
 
   it("handles single digit dimensions", async () => {
     const { formatResizeMessage } = await import("../services/firecracker/serial");
-    
+
     const result = formatResizeMessage(8, 5);
     expect(result).toBe("\x1b[8;5;8t");
   });
 
   it("handles large dimensions", async () => {
     const { formatResizeMessage } = await import("../services/firecracker/serial");
-    
+
     const result = formatResizeMessage(320, 100);
     expect(result).toBe("\x1b[8;100;320t");
   });
@@ -151,7 +151,7 @@ describe("Serial Console formatResizeMessage", () => {
 describe("Serial Console Paths", () => {
   it("generates correct pipe paths", async () => {
     const { generatePipePaths } = await import("../services/firecracker/serial");
-    
+
     const paths = generatePipePaths("vm-123", "/var/lib/bonfire/vms");
     expect(paths.stdin).toBe("/var/lib/bonfire/vms/vm-123.stdin");
     expect(paths.stdout).toBe("/var/lib/bonfire/vms/vm-123.stdout");
@@ -159,7 +159,7 @@ describe("Serial Console Paths", () => {
 
   it("uses default pipeDir when not specified", async () => {
     const { generatePipePaths } = await import("../services/firecracker/serial");
-    
+
     const paths = generatePipePaths("test-vm");
     expect(paths.stdin).toContain("test-vm.stdin");
     expect(paths.stdout).toContain("test-vm.stdout");
@@ -169,22 +169,22 @@ describe("Serial Console Paths", () => {
 describe("Terminal Connection Management", () => {
   it("hasActiveConnection returns false for non-existent connection", async () => {
     const { hasActiveConnection } = await import("./terminal");
-    
+
     expect(hasActiveConnection("vm-does-not-exist")).toBe(false);
   });
 
   it("getActiveConnectionCount returns 0 initially", async () => {
     const { getActiveConnectionCount, closeAllConnections } = await import("./terminal");
-    
+
     // Ensure clean state
     await closeAllConnections();
-    
+
     expect(getActiveConnectionCount()).toBe(0);
   });
 
   it("closeAllConnections resolves without error when no connections", async () => {
     const { closeAllConnections } = await import("./terminal");
-    
+
     // Should not throw
     await closeAllConnections();
   });

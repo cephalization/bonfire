@@ -10,13 +10,13 @@ import { config } from "../lib/config";
 
 export function runMigrations(dbPath: string = config.dbPath): void {
   console.log("🔧 Running database migrations...");
-  
+
   const db = new Database(dbPath);
-  
+
   try {
     // Enable foreign keys
     db.exec("PRAGMA foreign_keys = ON;");
-    
+
     // Better Auth user table
     db.exec(`
       CREATE TABLE IF NOT EXISTS "user" (
@@ -115,7 +115,7 @@ export function runMigrations(dbPath: string = config.dbPath): void {
     db.exec(`CREATE INDEX IF NOT EXISTS idx_account_user_id ON "account"("user_id");`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_vms_status ON "vms"("status");`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_vms_image_id ON "vms"("image_id");`);
-    
+
     console.log("✅ Database migrations complete");
   } finally {
     db.close();

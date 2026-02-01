@@ -77,15 +77,18 @@ class MockRegistryService {
       pulledAt: now,
     };
 
-    await this.db.insert(images).values(newImage).onConflictDoUpdate({
-      target: images.reference,
-      set: {
-        kernelPath: newImage.kernelPath,
-        rootfsPath: newImage.rootfsPath,
-        sizeBytes: newImage.sizeBytes,
-        pulledAt: now,
-      },
-    });
+    await this.db
+      .insert(images)
+      .values(newImage)
+      .onConflictDoUpdate({
+        target: images.reference,
+        set: {
+          kernelPath: newImage.kernelPath,
+          rootfsPath: newImage.rootfsPath,
+          sizeBytes: newImage.sizeBytes,
+          pulledAt: now,
+        },
+      });
 
     const [image] = await this.db.select().from(images).where(eq(images.id, id));
     return image;
@@ -213,9 +216,7 @@ describe("Images API Integration Tests", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       // SQLite stores timestamps as seconds, so milliseconds are lost
-      expect(new Date(body[0].pulledAt).getTime()).toBe(
-        Math.floor(now.getTime() / 1000) * 1000
-      );
+      expect(new Date(body[0].pulledAt).getTime()).toBe(Math.floor(now.getTime() / 1000) * 1000);
     });
   });
 
@@ -300,10 +301,7 @@ describe("Images API Integration Tests", () => {
       expect(body.success).toBe(true);
 
       // Verify image was deleted from database
-      const remaining = await ctx.db
-        .select()
-        .from(images)
-        .where(eq(images.id, "img-to-delete"));
+      const remaining = await ctx.db.select().from(images).where(eq(images.id, "img-to-delete"));
       expect(remaining).toHaveLength(0);
     });
 
@@ -350,10 +348,7 @@ describe("Images API Integration Tests", () => {
       expect(body.error).toContain("in use by 1 VM(s)");
 
       // Verify image was NOT deleted
-      const remaining = await ctx.db
-        .select()
-        .from(images)
-        .where(eq(images.id, "img-in-use"));
+      const remaining = await ctx.db.select().from(images).where(eq(images.id, "img-in-use"));
       expect(remaining).toHaveLength(1);
     });
 

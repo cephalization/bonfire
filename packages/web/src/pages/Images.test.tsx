@@ -45,9 +45,7 @@ function textMatcher(text: string) {
     if (!node) return false;
     const hasText = (n: Element) => n.textContent === text;
     const nodeHasText = hasText(node);
-    const childrenDontHaveText = Array.from(node.children).every(
-      (child) => !hasText(child)
-    );
+    const childrenDontHaveText = Array.from(node.children).every((child) => !hasText(child));
     return nodeHasText && childrenDontHaveText;
   };
 }
@@ -65,9 +63,9 @@ describe("Images", () => {
   describe("Rendering", () => {
     it("renders page title and description", async () => {
       mockListImages.mockImplementation(() => Promise.resolve([]));
-      
+
       const { getByText } = renderWithRouter(<Images />);
-      
+
       await waitFor(() => {
         expect(getByText("Images")).toBeTruthy();
         expect(getByText("Manage your cached container images")).toBeTruthy();
@@ -76,21 +74,23 @@ describe("Images", () => {
 
     it("shows loading state initially", () => {
       mockListImages.mockImplementation(() => new Promise(() => {})); // Never resolves
-      
+
       const { getByTestId } = renderWithRouter(<Images />);
-      
+
       expect(getByTestId("images-loading")).toBeTruthy();
     });
 
     it("renders empty state when no images", async () => {
       mockListImages.mockImplementation(() => Promise.resolve([]));
-      
+
       const { getByTestId, getByText } = renderWithRouter(<Images />);
-      
+
       await waitFor(() => {
         expect(getByTestId("images-empty")).toBeTruthy();
         expect(getByText("No images yet")).toBeTruthy();
-        expect(getByText("Pull your first container image to get started with Bonfire.")).toBeTruthy();
+        expect(
+          getByText("Pull your first container image to get started with Bonfire.")
+        ).toBeTruthy();
       });
     });
 
@@ -100,9 +100,9 @@ describe("Images", () => {
         createMockImage({ id: "img-2", reference: "image2:latest" }),
       ];
       mockListImages.mockImplementation(() => Promise.resolve(images));
-      
+
       const { getByTestId, getByText } = renderWithRouter(<Images />);
-      
+
       await waitFor(() => {
         expect(getByTestId("images-list")).toBeTruthy();
         expect(getByText("image1:latest")).toBeTruthy();
@@ -118,9 +118,9 @@ describe("Images", () => {
         pulledAt: "2024-06-15T10:30:00Z",
       });
       mockListImages.mockImplementation(() => Promise.resolve([image]));
-      
+
       const { getByText, getByTestId } = renderWithRouter(<Images />);
-      
+
       await waitFor(() => {
         expect(getByTestId("image-card-img-1")).toBeTruthy();
         expect(getByText("test-image:latest")).toBeTruthy();
@@ -130,12 +130,12 @@ describe("Images", () => {
 
   describe("Error handling", () => {
     it("shows error when fetch fails", async () => {
-      mockListImages.mockImplementation(() => 
+      mockListImages.mockImplementation(() =>
         Promise.reject(new api.BonfireAPIError("Network error", 500))
       );
-      
+
       const { getByTestId, getByText } = renderWithRouter(<Images />);
-      
+
       await waitFor(() => {
         expect(getByTestId("images-error")).toBeTruthy();
         expect(getByText("Network error")).toBeTruthy();
@@ -143,18 +143,18 @@ describe("Images", () => {
     });
 
     it("can dismiss error", async () => {
-      mockListImages.mockImplementation(() => 
+      mockListImages.mockImplementation(() =>
         Promise.reject(new api.BonfireAPIError("Network error", 500))
       );
-      
+
       const { getByTestId, getByText, queryByTestId } = renderWithRouter(<Images />);
-      
+
       await waitFor(() => {
         expect(getByTestId("images-error")).toBeTruthy();
       });
-      
+
       fireEvent.click(getByText("Dismiss"));
-      
+
       await waitFor(() => {
         expect(queryByTestId("images-error")).toBeNull();
       });
@@ -164,9 +164,9 @@ describe("Images", () => {
   describe("Pull Image Dialog", () => {
     it("shows pull image button in header", async () => {
       mockListImages.mockImplementation(() => Promise.resolve([]));
-      
+
       const { getByTestId } = renderWithRouter(<Images />);
-      
+
       await waitFor(() => {
         expect(getByTestId("pull-image-btn")).toBeTruthy();
       });
@@ -174,9 +174,9 @@ describe("Images", () => {
 
     it("shows pull image button in empty state", async () => {
       mockListImages.mockImplementation(() => Promise.resolve([]));
-      
+
       const { getByTestId } = renderWithRouter(<Images />);
-      
+
       await waitFor(() => {
         expect(getByTestId("pull-image-btn-empty")).toBeTruthy();
       });
@@ -187,9 +187,9 @@ describe("Images", () => {
     it("shows delete button for each image", async () => {
       const image = createMockImage({ id: "img-1" });
       mockListImages.mockImplementation(() => Promise.resolve([image]));
-      
+
       const { getByTestId } = renderWithRouter(<Images />);
-      
+
       await waitFor(() => {
         expect(getByTestId("image-delete-btn-img-1")).toBeTruthy();
       });
@@ -199,15 +199,15 @@ describe("Images", () => {
       const image = createMockImage({ id: "img-1" });
       mockListImages.mockImplementation(() => Promise.resolve([image]));
       mockDeleteImage.mockImplementation(() => Promise.resolve({ success: true }));
-      
+
       const { getByTestId } = renderWithRouter(<Images />);
-      
+
       await waitFor(() => {
         expect(getByTestId("image-delete-btn-img-1")).toBeTruthy();
       });
-      
+
       fireEvent.click(getByTestId("image-delete-btn-img-1"));
-      
+
       await waitFor(() => {
         expect(mockDeleteImage).toHaveBeenCalledWith("img-1");
       });
@@ -226,13 +226,13 @@ describe("Images", () => {
       for (const { bytes, expected } of testCases) {
         const image = createMockImage({ id: `img-${bytes}`, sizeBytes: bytes });
         mockListImages.mockImplementation(() => Promise.resolve([image]));
-        
+
         const { container, unmount } = renderWithRouter(<Images />);
-        
+
         await waitFor(() => {
           expect(container.textContent).toMatch(expected);
         });
-        
+
         unmount();
         cleanup();
       }
@@ -241,9 +241,9 @@ describe("Images", () => {
     it("handles null size", async () => {
       const image = createMockImage({ id: "img-null", sizeBytes: null });
       mockListImages.mockImplementation(() => Promise.resolve([image]));
-      
+
       const { container } = renderWithRouter(<Images />);
-      
+
       await waitFor(() => {
         expect(container.textContent).toMatch(/Unknown/);
       });
@@ -252,9 +252,9 @@ describe("Images", () => {
     it("handles zero bytes", async () => {
       const image = createMockImage({ id: "img-zero", sizeBytes: 0 });
       mockListImages.mockImplementation(() => Promise.resolve([image]));
-      
+
       const { container } = renderWithRouter(<Images />);
-      
+
       await waitFor(() => {
         expect(container.textContent).toMatch(/0 B/);
       });

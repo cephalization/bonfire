@@ -342,7 +342,8 @@ const startVMRoute = createRoute({
   path: "/vms/{id}/start",
   tags: ["VMs"],
   summary: "Start a VM",
-  description: "Starts a VM by allocating network resources and spawning Firecracker process. VM must be in 'creating' or 'stopped' status.",
+  description:
+    "Starts a VM by allocating network resources and spawning Firecracker process. VM must be in 'creating' or 'stopped' status.",
   request: {
     params: z.object({
       id: z.string().openapi({
@@ -392,7 +393,8 @@ const stopVMRoute = createRoute({
   path: "/vms/{id}/stop",
   tags: ["VMs"],
   summary: "Stop a VM",
-  description: "Stops a running VM by stopping Firecracker process and releasing network resources. VM must be in 'running' status.",
+  description:
+    "Stops a running VM by stopping Firecracker process and releasing network resources. VM must be in 'running' status.",
   request: {
     params: z.object({
       id: z.string().openapi({
@@ -539,8 +541,7 @@ export function createVMsRouter(config: VMsRouterConfig): OpenAPIHono {
       return c.json(serializeVM(newVM), 201);
     } catch (error) {
       console.error("Failed to create VM:", error);
-      const message =
-        error instanceof Error ? error.message : "Failed to create VM";
+      const message = error instanceof Error ? error.message : "Failed to create VM";
       return c.json({ error: message }, 500);
     }
   });
@@ -577,10 +578,7 @@ export function createVMsRouter(config: VMsRouterConfig): OpenAPIHono {
 
       // Check if VM is running - must stop first
       if (vm.status === "running") {
-        return c.json(
-          { error: "VM is running. Stop it before deleting." },
-          400
-        );
+        return c.json({ error: "VM is running. Stop it before deleting." }, 400);
       }
 
       // Clean up network resources if they exist
@@ -602,8 +600,7 @@ export function createVMsRouter(config: VMsRouterConfig): OpenAPIHono {
       return c.json({ success: true }, 200);
     } catch (error) {
       console.error("Failed to delete VM:", error);
-      const message =
-        error instanceof Error ? error.message : "Failed to delete VM";
+      const message = error instanceof Error ? error.message : "Failed to delete VM";
       return c.json({ error: message }, 500);
     }
   });
@@ -623,13 +620,18 @@ export function createVMsRouter(config: VMsRouterConfig): OpenAPIHono {
       // Verify VM can be started
       if (vm.status !== "stopped" && vm.status !== "creating") {
         return c.json(
-          { error: `VM cannot be started from status '${vm.status}'. Must be 'stopped' or 'creating'.` },
+          {
+            error: `VM cannot be started from status '${vm.status}'. Must be 'stopped' or 'creating'.`,
+          },
           400
         );
       }
 
       // Get image details for kernel and rootfs paths
-      const [image] = await db.select().from(schema.images).where(eq(schema.images.id, vm.imageId ?? ""));
+      const [image] = await db
+        .select()
+        .from(schema.images)
+        .where(eq(schema.images.id, vm.imageId ?? ""));
       if (!image) {
         return c.json({ error: "VM image not found" }, 400);
       }
@@ -708,8 +710,7 @@ export function createVMsRouter(config: VMsRouterConfig): OpenAPIHono {
       return c.json(serializeVM(updatedVM), 200);
     } catch (error) {
       console.error("Failed to start VM:", error);
-      const message =
-        error instanceof Error ? error.message : "Failed to start VM";
+      const message = error instanceof Error ? error.message : "Failed to start VM";
       return c.json({ error: message }, 500);
     }
   });
@@ -728,10 +729,7 @@ export function createVMsRouter(config: VMsRouterConfig): OpenAPIHono {
 
       // Verify VM is running
       if (vm.status !== "running") {
-        return c.json(
-          { error: `VM is not running. Current status: '${vm.status}'.` },
-          400
-        );
+        return c.json({ error: `VM is not running. Current status: '${vm.status}'.` }, 400);
       }
 
       // VM must have runtime info to stop
@@ -777,8 +775,7 @@ export function createVMsRouter(config: VMsRouterConfig): OpenAPIHono {
       return c.json(serializeVM(updatedVM), 200);
     } catch (error) {
       console.error("Failed to stop VM:", error);
-      const message =
-        error instanceof Error ? error.message : "Failed to stop VM";
+      const message = error instanceof Error ? error.message : "Failed to stop VM";
       return c.json({ error: message }, 500);
     }
   });

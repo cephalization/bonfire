@@ -29,13 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  createVM,
-  listImages,
-  type VM,
-  type Image,
-  BonfireAPIError,
-} from "@/lib/api";
+import { createVM, listImages, type VM, type Image, BonfireAPIError } from "@/lib/api";
 
 interface CreateVMDialogProps {
   onSuccess?: (vm: VM) => void;
@@ -116,9 +110,7 @@ function CreateVMForm({
       onSuccess?.(vm);
     } catch (err) {
       const message =
-        err instanceof BonfireAPIError
-          ? err.message
-          : "Failed to create VM. Please try again.";
+        err instanceof BonfireAPIError ? err.message : "Failed to create VM. Please try again.";
       setError(message);
     } finally {
       setIsLoading(false);
@@ -185,15 +177,12 @@ function CreateVMForm({
             onValueChange={setImageId}
             disabled={isLoading || isFetchingImages || images.length === 0}
           >
-            <SelectTrigger
-              className="min-h-[44px] w-full"
-              data-testid="vm-image-select"
-            >
+            <SelectTrigger className="min-h-[44px] w-full" data-testid="vm-image-select">
               <SelectValue
                 placeholder={
-                  isFetchingImages 
-                    ? "Loading images..." 
-                    : images.length === 0 
+                  isFetchingImages
+                    ? "Loading images..."
+                    : images.length === 0
                       ? "No images available"
                       : "Select an image"
                 }

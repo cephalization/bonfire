@@ -107,9 +107,7 @@ export const terminalRoute = createRoute({
  * Parse resize messages from a WebSocket client.
  * Expected format: {"resize":{"cols":80,"rows":24}}
  */
-export function parseResizeMessage(
-  data: string
-): { cols: number; rows: number } | null {
+export function parseResizeMessage(data: string): { cols: number; rows: number } | null {
   try {
     const parsed = JSON.parse(data);
     if (
@@ -164,10 +162,7 @@ export function createTerminalRouter(config: TerminalRouterConfig): OpenAPIHono 
     }
 
     if (vm.status !== "running") {
-      return c.json(
-        { error: `VM is not running. Current status: '${vm.status}'` },
-        400
-      );
+      return c.json({ error: `VM is not running. Current status: '${vm.status}'` }, 400);
     }
 
     if (activeConnections.has(id)) {

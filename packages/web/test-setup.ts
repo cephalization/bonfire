@@ -42,19 +42,19 @@ global.HTMLInputElement = window.HTMLInputElement;
 // Mock ResizeObserver for testing
 class MockResizeObserver {
   callback: ResizeObserverCallback;
-  
+
   constructor(callback: ResizeObserverCallback) {
     this.callback = callback;
   }
-  
+
   observe(_target: Element) {
     // No-op in tests
   }
-  
+
   unobserve(_target: Element) {
     // No-op in tests
   }
-  
+
   disconnect() {
     // No-op in tests
   }

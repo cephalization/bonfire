@@ -1,6 +1,6 @@
 /**
  * Bonfire API Client
- * 
+ *
  * Fetch wrapper and endpoint methods for the web frontend.
  * Matches the API specification in PLAN.md.
  */
@@ -8,7 +8,7 @@
 // Base configuration
 // In development, use empty string for relative URLs to leverage Vite dev server proxy
 // In production, VITE_API_URL should be set to the full API URL
-const DEFAULT_BASE_URL = import.meta.env.VITE_API_URL || '';
+const DEFAULT_BASE_URL = import.meta.env.VITE_API_URL || "";
 
 // WebSocket base URL for terminal connections
 // In development, prefer same-origin so Vite can proxy `/api` WebSockets.
@@ -17,12 +17,12 @@ export function getWebSocketBaseUrl(): string {
   if (import.meta.env.VITE_WS_URL) {
     return import.meta.env.VITE_WS_URL;
   }
-  
+
   // If VITE_API_URL is set, convert to ws (production)
   if (import.meta.env.VITE_API_URL) {
-    return import.meta.env.VITE_API_URL.replace(/^http/, 'ws');
+    return import.meta.env.VITE_API_URL.replace(/^http/, "ws");
   }
-  
+
   // Default: same origin (works with Vite WS proxy)
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   return `${protocol}//${window.location.host}`;
@@ -33,7 +33,7 @@ export function getWebSocketBaseUrl(): string {
 export interface VM {
   id: string;
   name: string;
-  status: 'creating' | 'running' | 'stopped' | 'error';
+  status: "creating" | "running" | "stopped" | "error";
   vcpus: number;
   memoryMib: number;
   imageId: string | null;
@@ -99,7 +99,7 @@ export class BonfireAPIError extends Error {
 
   constructor(message: string, status: number, code?: string, response?: Response) {
     super(message);
-    this.name = 'BonfireAPIError';
+    this.name = "BonfireAPIError";
     this.status = status;
     this.code = code;
     this.response = response;
@@ -121,17 +121,17 @@ async function apiFetch<T>(
 ): Promise<T> {
   const baseUrl = config.baseUrl || DEFAULT_BASE_URL;
   const url = `${baseUrl}${endpoint}`;
-  
+
   // Build headers with auth
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
     ...((options.headers as Record<string, string>) || {}),
   };
 
   // Inject auth token if available
   const token = config.getAuthToken?.();
   if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+    headers["Authorization"] = `Bearer ${token}`;
   }
 
   const fetchOptions: RequestInit = {
@@ -140,27 +140,22 @@ async function apiFetch<T>(
   };
 
   let response: Response;
-  
+
   try {
     response = await fetch(url, fetchOptions);
   } catch (error) {
     // Network errors (offline, DNS failure, etc.)
     throw new BonfireAPIError(
-      error instanceof Error ? error.message : 'Network error',
+      error instanceof Error ? error.message : "Network error",
       0,
-      'NETWORK_ERROR'
+      "NETWORK_ERROR"
     );
   }
 
   // Handle auth errors
   if (response.status === 401) {
     config.onAuthError?.();
-    throw new BonfireAPIError(
-      'Authentication required',
-      401,
-      'AUTH_REQUIRED',
-      response
-    );
+    throw new BonfireAPIError("Authentication required", 401, "AUTH_REQUIRED", response);
   }
 
   // Handle non-OK responses
@@ -189,46 +184,45 @@ async function apiFetch<T>(
     const data = await response.json();
     return data as T;
   } catch (error) {
-    throw new BonfireAPIError(
-      'Invalid JSON response',
-      response.status,
-      'INVALID_JSON',
-      response
-    );
+    throw new BonfireAPIError("Invalid JSON response", response.status, "INVALID_JSON", response);
   }
 }
 
 // VM Endpoints
 
 export async function listVMs(config?: APIClientConfig): Promise<VM[]> {
-  return apiFetch<VM[]>('/api/vms', { method: 'GET' }, config);
+  return apiFetch<VM[]>("/api/vms", { method: "GET" }, config);
 }
 
 export async function getVM(id: string, config?: APIClientConfig): Promise<VM> {
-  return apiFetch<VM>(`/api/vms/${id}`, { method: 'GET' }, config);
+  return apiFetch<VM>(`/api/vms/${id}`, { method: "GET" }, config);
 }
 
 export async function createVM(request: CreateVMRequest, config?: APIClientConfig): Promise<VM> {
-  return apiFetch<VM>('/api/vms', {
-    method: 'POST',
-    body: JSON.stringify(request),
-  }, config);
+  return apiFetch<VM>(
+    "/api/vms",
+    {
+      method: "POST",
+      body: JSON.stringify(request),
+    },
+    config
+  );
 }
 
 export async function deleteVM(id: string, config?: APIClientConfig): Promise<SuccessResponse> {
-  return apiFetch<SuccessResponse>(`/api/vms/${id}`, { method: 'DELETE' }, config);
+  return apiFetch<SuccessResponse>(`/api/vms/${id}`, { method: "DELETE" }, config);
 }
 
 export async function startVM(id: string, config?: APIClientConfig): Promise<VM> {
-  return apiFetch<VM>(`/api/vms/${id}/start`, { method: 'POST' }, config);
+  return apiFetch<VM>(`/api/vms/${id}/start`, { method: "POST" }, config);
 }
 
 export async function stopVM(id: string, config?: APIClientConfig): Promise<VM> {
-  return apiFetch<VM>(`/api/vms/${id}/stop`, { method: 'POST' }, config);
+  return apiFetch<VM>(`/api/vms/${id}/stop`, { method: "POST" }, config);
 }
 
 export async function checkVMHealth(id: string, config?: APIClientConfig): Promise<HealthResponse> {
-  return apiFetch<HealthResponse>(`/api/vms/${id}/health`, { method: 'GET' }, config);
+  return apiFetch<HealthResponse>(`/api/vms/${id}/health`, { method: "GET" }, config);
 }
 
 export async function execVM(
@@ -236,33 +230,48 @@ export async function execVM(
   request: ExecRequest,
   config?: APIClientConfig
 ): Promise<ExecResult> {
-  return apiFetch<ExecResult>(`/api/vms/${id}/exec`, {
-    method: 'POST',
-    body: JSON.stringify(request),
-  }, config);
+  return apiFetch<ExecResult>(
+    `/api/vms/${id}/exec`,
+    {
+      method: "POST",
+      body: JSON.stringify(request),
+    },
+    config
+  );
 }
 
 // Image Endpoints
 
 export async function listImages(config?: APIClientConfig): Promise<Image[]> {
-  return apiFetch<Image[]>('/api/images', { method: 'GET' }, config);
+  return apiFetch<Image[]>("/api/images", { method: "GET" }, config);
 }
 
-export async function pullImage(request: PullImageRequest, config?: APIClientConfig): Promise<Image> {
-  return apiFetch<Image>('/api/images/pull', {
-    method: 'POST',
-    body: JSON.stringify(request),
-  }, config);
+export async function pullImage(
+  request: PullImageRequest,
+  config?: APIClientConfig
+): Promise<Image> {
+  return apiFetch<Image>(
+    "/api/images/pull",
+    {
+      method: "POST",
+      body: JSON.stringify(request),
+    },
+    config
+  );
 }
 
 export async function quickStartImage(config?: APIClientConfig): Promise<Image> {
-  return apiFetch<Image>('/api/images/quickstart', {
-    method: 'POST',
-  }, config);
+  return apiFetch<Image>(
+    "/api/images/quickstart",
+    {
+      method: "POST",
+    },
+    config
+  );
 }
 
 export async function deleteImage(id: string, config?: APIClientConfig): Promise<SuccessResponse> {
-  return apiFetch<SuccessResponse>(`/api/images/${id}`, { method: 'DELETE' }, config);
+  return apiFetch<SuccessResponse>(`/api/images/${id}`, { method: "DELETE" }, config);
 }
 
 // Create a configured API client instance

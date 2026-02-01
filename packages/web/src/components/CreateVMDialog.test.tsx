@@ -11,22 +11,23 @@ vi.mock("@/lib/api", async () => {
   return {
     ...actual,
     listImages: vi.fn(async () => []),
-    createVM: vi.fn(async () =>
-      ({
-        id: "vm-1",
-        name: "test-vm",
-        status: "creating",
-        vcpus: 2,
-        memoryMib: 1024,
-        imageId: "img-1",
-        pid: null,
-        socketPath: null,
-        tapDevice: null,
-        macAddress: null,
-        ipAddress: null,
-        createdAt: "2024-01-01T00:00:00Z",
-        updatedAt: "2024-01-01T00:00:00Z",
-      } as VM)
+    createVM: vi.fn(
+      async () =>
+        ({
+          id: "vm-1",
+          name: "test-vm",
+          status: "creating",
+          vcpus: 2,
+          memoryMib: 1024,
+          imageId: "img-1",
+          pid: null,
+          socketPath: null,
+          tapDevice: null,
+          macAddress: null,
+          ipAddress: null,
+          createdAt: "2024-01-01T00:00:00Z",
+          updatedAt: "2024-01-01T00:00:00Z",
+        }) as VM
     ),
   };
 });
@@ -61,11 +62,11 @@ describe("CreateVMDialog", () => {
 
   it("opens dialog when trigger is clicked", async () => {
     mockListImages.mockImplementation(() => Promise.resolve(mockImages));
-    
+
     const { getByTestId, getByText } = renderWithRouter(<CreateVMDialog />);
-    
+
     fireEvent.click(getByTestId("create-vm-btn"));
-    
+
     await waitFor(() => {
       expect(getByText("Create Virtual Machine")).toBeTruthy();
     });
@@ -73,9 +74,9 @@ describe("CreateVMDialog", () => {
 
   it("fetches images when opened", async () => {
     mockListImages.mockImplementation(() => Promise.resolve(mockImages));
-    
+
     const { getByTestId } = renderWithRouter(<CreateVMDialog />);
-    
+
     fireEvent.click(getByTestId("create-vm-btn"));
 
     await waitFor(() => {
@@ -85,24 +86,24 @@ describe("CreateVMDialog", () => {
 
   it("shows default values for vcpus and memory", async () => {
     mockListImages.mockImplementation(() => Promise.resolve(mockImages));
-    
+
     const { getByTestId } = renderWithRouter(<CreateVMDialog />);
-    
+
     fireEvent.click(getByTestId("create-vm-btn"));
     await waitFor(() => expect(mockListImages).toHaveBeenCalled());
 
     const vcpusInput = getByTestId("vm-vcpus-input") as HTMLInputElement;
     const memoryInput = getByTestId("vm-memory-input") as HTMLInputElement;
-    
+
     expect(vcpusInput.value).toBe("1");
     expect(memoryInput.value).toBe("512");
   });
 
   it("closes dialog on cancel", async () => {
     mockListImages.mockImplementation(() => Promise.resolve(mockImages));
-    
+
     const { getByTestId, getByText, queryByText } = renderWithRouter(<CreateVMDialog />);
-    
+
     fireEvent.click(getByTestId("create-vm-btn"));
     await waitFor(() => expect(mockListImages).toHaveBeenCalled());
 

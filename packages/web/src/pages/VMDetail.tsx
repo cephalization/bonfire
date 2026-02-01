@@ -1,6 +1,6 @@
 /**
  * VM Detail Page
- * 
+ *
  * Displays VM information with full terminal access.
  * Features:
  * - Header with VM name, status badge, IP address
@@ -36,14 +36,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Terminal } from "@/components/Terminal";
-import {
-  getVM,
-  startVM,
-  stopVM,
-  deleteVM,
-  type VM,
-  BonfireAPIError,
-} from "@/lib/api";
+import { getVM, startVM, stopVM, deleteVM, type VM, BonfireAPIError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const statusConfig = {
@@ -80,7 +73,7 @@ export function VMDetail() {
 
   const fetchVM = useCallback(async () => {
     if (!id) return;
-    
+
     try {
       setIsLoading(true);
       setError(null);
@@ -108,8 +101,7 @@ export function VMDetail() {
       await startVM(id);
       await fetchVM();
     } catch (err) {
-      const message =
-        err instanceof BonfireAPIError ? err.message : "Failed to start VM";
+      const message = err instanceof BonfireAPIError ? err.message : "Failed to start VM";
       setError(message);
     } finally {
       setIsActionLoading(false);
@@ -123,8 +115,7 @@ export function VMDetail() {
       await stopVM(id);
       await fetchVM();
     } catch (err) {
-      const message =
-        err instanceof BonfireAPIError ? err.message : "Failed to stop VM";
+      const message = err instanceof BonfireAPIError ? err.message : "Failed to stop VM";
       setError(message);
     } finally {
       setIsActionLoading(false);
@@ -138,8 +129,7 @@ export function VMDetail() {
       await deleteVM(id);
       navigate("/");
     } catch (err) {
-      const message =
-        err instanceof BonfireAPIError ? err.message : "Failed to delete VM";
+      const message = err instanceof BonfireAPIError ? err.message : "Failed to delete VM";
       setError(message);
       setIsActionLoading(false);
     }
@@ -196,12 +186,7 @@ export function VMDetail() {
       <div className="flex flex-col gap-4">
         {/* Back button and title */}
         <div className="flex items-start gap-4">
-          <Button
-            variant="outline"
-            size="icon"
-            className="shrink-0"
-            onClick={() => navigate("/")}
-          >
+          <Button variant="outline" size="icon" className="shrink-0" onClick={() => navigate("/")}>
             <ArrowLeft className="size-4" />
           </Button>
           <div className="min-w-0 flex-1">
@@ -209,16 +194,11 @@ export function VMDetail() {
               <h1 className="truncate text-xl font-bold sm:text-2xl" title={vm.name}>
                 {vm.name}
               </h1>
-              <Badge
-                variant={status.variant}
-                className={cn("shrink-0", status.className)}
-              >
+              <Badge variant={status.variant} className={cn("shrink-0", status.className)}>
                 {status.label}
               </Badge>
             </div>
-            <p className="mt-1 text-sm text-muted-foreground">
-              ID: {vm.id}
-            </p>
+            <p className="mt-1 text-sm text-muted-foreground">ID: {vm.id}</p>
           </div>
         </div>
 
@@ -230,12 +210,7 @@ export function VMDetail() {
               <p className="font-medium">Error</p>
               <p className="text-sm">{error}</p>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setError(null)}
-              className="shrink-0"
-            >
+            <Button variant="ghost" size="sm" onClick={() => setError(null)} className="shrink-0">
               Dismiss
             </Button>
           </div>
@@ -326,8 +301,8 @@ export function VMDetail() {
               <DialogHeader>
                 <DialogTitle>Delete VM</DialogTitle>
                 <DialogDescription>
-                  Are you sure you want to delete <strong>{vm.name}</strong>? This
-                  action cannot be undone.
+                  Are you sure you want to delete <strong>{vm.name}</strong>? This action cannot be
+                  undone.
                 </DialogDescription>
               </DialogHeader>
               <DialogFooter className="flex-col gap-2 sm:flex-row">
@@ -344,9 +319,7 @@ export function VMDetail() {
                   disabled={isActionLoading}
                   className="w-full sm:w-auto"
                 >
-                  {isActionLoading && (
-                    <Loader2 className="mr-2 size-4 animate-spin" />
-                  )}
+                  {isActionLoading && <Loader2 className="mr-2 size-4 animate-spin" />}
                   Delete VM
                 </Button>
               </DialogFooter>
@@ -363,9 +336,7 @@ export function VMDetail() {
           <div className="flex h-full flex-col items-center justify-center rounded-md border border-dashed border-border bg-muted/50">
             <Monitor className="size-12 text-muted-foreground" />
             <p className="mt-4 text-lg font-medium">VM is {vm.status}</p>
-            <p className="text-sm text-muted-foreground">
-              Start the VM to access the terminal.
-            </p>
+            <p className="text-sm text-muted-foreground">Start the VM to access the terminal.</p>
             {vm.status === "stopped" && (
               <Button onClick={handleStart} className="mt-4" disabled={isActionLoading}>
                 {isActionLoading ? (

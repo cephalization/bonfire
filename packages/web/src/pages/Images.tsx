@@ -1,19 +1,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { Trash2, Package, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
-import {
-  listImages,
-  deleteImage,
-  type Image,
-  BonfireAPIError,
-} from "@/lib/api";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { listImages, deleteImage, type Image, BonfireAPIError } from "@/lib/api";
 import { PullImageDialog } from "@/components/PullImageDialog";
 
 function formatBytes(bytes: number | null): string {
@@ -44,10 +33,7 @@ interface ImageCardProps {
 
 function ImageCard({ image, onDelete, isDeleting }: ImageCardProps) {
   return (
-    <Card
-      className="overflow-hidden"
-      data-testid={`image-card-${image.id}`}
-    >
+    <Card className="overflow-hidden" data-testid={`image-card-${image.id}`}>
       <CardHeader className="pb-3">
         <div className="flex flex-col gap-2">
           <CardTitle className="text-base break-all" title={image.reference}>
@@ -94,9 +80,7 @@ export function Images() {
       setImages(data);
     } catch (err) {
       const message =
-        err instanceof BonfireAPIError
-          ? err.message
-          : "Failed to fetch images. Please try again.";
+        err instanceof BonfireAPIError ? err.message : "Failed to fetch images. Please try again.";
       setError(message);
     } finally {
       setIsLoading(false);
@@ -113,8 +97,7 @@ export function Images() {
       await deleteImage(id);
       await fetchImages();
     } catch (err) {
-      const message =
-        err instanceof BonfireAPIError ? err.message : "Failed to delete image";
+      const message = err instanceof BonfireAPIError ? err.message : "Failed to delete image";
       setError(message);
     } finally {
       setDeletingImages((prev) => ({ ...prev, [id]: false }));
@@ -131,9 +114,7 @@ export function Images() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Images</h1>
-          <p className="text-muted-foreground">
-            Manage your cached container images
-          </p>
+          <p className="text-muted-foreground">Manage your cached container images</p>
         </div>
         <PullImageDialog onSuccess={handlePullSuccess}>
           <Button className="min-h-[44px] w-full sm:w-auto" data-testid="pull-image-btn">
@@ -153,12 +134,7 @@ export function Images() {
             <p className="font-medium">Error</p>
             <p className="text-sm">{error}</p>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setError(null)}
-            className="shrink-0"
-          >
+          <Button variant="ghost" size="sm" onClick={() => setError(null)} className="shrink-0">
             Dismiss
           </Button>
         </div>
@@ -192,10 +168,7 @@ export function Images() {
           </PullImageDialog>
         </div>
       ) : (
-        <div
-          className="grid gap-4 sm:grid-cols-1 lg:grid-cols-2"
-          data-testid="images-list"
-        >
+        <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-2" data-testid="images-list">
           {images.map((image) => (
             <ImageCard
               key={image.id}

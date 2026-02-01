@@ -9,15 +9,7 @@
  * - Prints success message
  */
 
-import {
-  text,
-  password,
-  spinner,
-  intro,
-  outro,
-  isCancel,
-  cancel,
-} from "@clack/prompts";
+import { text, password, spinner, intro, outro, isCancel, cancel } from "@clack/prompts";
 import pc from "picocolors";
 import { loadConfig, saveConfig, type Config } from "../lib/config.js";
 
@@ -108,10 +100,7 @@ async function promptForCredentials(): Promise<LoginCredentials> {
 /**
  * Call Better Auth sign-in endpoint
  */
-async function signIn(
-  apiUrl: string,
-  credentials: LoginCredentials
-): Promise<AuthResponse> {
+async function signIn(apiUrl: string, credentials: LoginCredentials): Promise<AuthResponse> {
   const url = new URL("/api/auth/sign-in/email", apiUrl);
 
   const response = await fetch(url.toString(), {
