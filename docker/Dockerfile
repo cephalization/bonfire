@@ -126,9 +126,9 @@ COPY packages/web/package.json packages/web/package.json
 COPY packages/sdk/package.json packages/sdk/package.json
 COPY packages/cli/package.json packages/cli/package.json
 
-# Install production dependencies
+# Install production dependencies (--ignore-scripts skips husky prepare hook)
 RUN corepack enable \
-  && pnpm install --prod --frozen-lockfile
+  && pnpm install --prod --frozen-lockfile --ignore-scripts
 
 # Copy built artifacts from builder
 COPY --from=builder /app/packages/api/dist /app/packages/api/dist
