@@ -1,6 +1,6 @@
 # Bonfire - Implementation Plan
 
-> **For AI Agents**: Your pre-training data is likely outdated. Always fetch current documentation before implementing any component. Use `webfetch` or search for the latest docs on: Bun, Hono, Drizzle, Better Auth, shadcn/ui, ghostty-web, Clack, Firecracker API, etc.
+> **For AI Agents**: Your pre-training data is likely outdated. Always fetch current documentation before implementing any component. Use `webfetch` or search for the latest docs on: Node.js, pnpm, Hono, Drizzle, Better Auth, shadcn/ui, ghostty-web, Clack, Firecracker API, etc.
 
 ## Project Overview
 
@@ -17,7 +17,7 @@
 
 | Component | Technology | Docs URL |
 |-----------|------------|----------|
-| Runtime | Bun | https://bun.sh/docs |
+| Runtime | Node.js (24+) | https://nodejs.org/docs/latest/api/ |
 | Backend | Hono | https://hono.dev/docs |
 | Frontend | React + Vite | https://vite.dev/guide |
 | Terminal | ghostty-web | https://github.com/coder/ghostty-web |
@@ -26,7 +26,7 @@
 | Auth | Better Auth | https://www.better-auth.com/docs |
 | UI Components | shadcn/ui + Tailwind | https://ui.shadcn.com/docs |
 | CLI | Clack | https://bomb.sh/docs/clack/basics/getting-started |
-| VM Images | Slicer's public images | https://docs.slicervm.com/reference/images |
+| VM Images | Firecracker quickstart images | https://github.com/firecracker-microvm/firecracker/blob/main/docs/getting-started.md |
 
 ---
 
@@ -49,7 +49,7 @@ bonfire/
 │   │   │   │   ├── firecracker.test.ts     # Unit tests
 │   │   │   │   ├── network.ts      # TAP/bridge helpers
 │   │   │   │   ├── network.test.ts         # Unit tests
-│   │   │   │   ├── agent.ts        # Proxy to guest agent
+│   │   │   │   ├── firecracker/    # VM management + serial console
 │   │   │   │   └── registry.ts     # OCI image pull
 │   │   │   ├── db/
 │   │   │   │   ├── schema.ts   # Drizzle schema
@@ -124,7 +124,7 @@ bonfire/
 │
 ├── package.json                # Workspace root
 ├── turbo.json                  # Turborepo config
-└── bun.lockb
+└── pnpm-lock.yaml
 ```
 
 ---
@@ -161,7 +161,7 @@ export const vms = sqliteTable('vms', {
 
 export const images = sqliteTable('images', {
   id: text('id').primaryKey(),
-  reference: text('reference').notNull().unique(),  // e.g., ghcr.io/openfaasltd/slicer-systemd:5.10.240-x86_64-latest
+  reference: text('reference').notNull().unique(),  // e.g., firecracker-quickstart:ubuntu-24.04
   kernelPath: text('kernel_path').notNull(),
   rootfsPath: text('rootfs_path').notNull(),
   sizeBytes: integer('size_bytes'),
@@ -185,11 +185,10 @@ export const images = sqliteTable('images', {
 | `DELETE` | `/api/vms/:id` | Delete VM | - | `{ success: true }` |
 | `POST` | `/api/vms/:id/start` | Start VM | - | `VM` |
 | `POST` | `/api/vms/:id/stop` | Stop VM | - | `VM` |
-| `GET` | `/api/vms/:id/health` | Check agent health | - | `{ healthy: boolean }` |
-| `POST` | `/api/vms/:id/exec` | Execute command | `{ command: string, args?: string[] }` | `{ stdout, stderr, exitCode }` |
-| `POST` | `/api/vms/:id/cp` | Copy file to VM | `multipart/form-data` | `{ success: true }` |
-| `GET` | `/api/vms/:id/cp?path=` | Copy file from VM | - | `binary` |
-| `WS` | `/api/vms/:id/terminal` | Terminal WebSocket | - | WebSocket |
+| `WS` | `/api/vms/:id/terminal` | Terminal WebSocket (serial console) | - | WebSocket |
+
+> **Note**: Terminal access uses Firecracker's serial console via named pipes, not an in-VM agent.
+> This eliminates the need for agent installation and network-based communication with the VM.
 
 ### Images (`/api/images`)
 
@@ -242,22 +241,33 @@ async function allocateIP(): Promise<string>
 async function releaseIP(ip: string): Promise<void>
 ```
 
-### 3. Agent Service (`packages/api/src/services/agent.ts`)
+### 3. Serial Console Service (`packages/api/src/services/firecracker/serial.ts`)
 
-> **Agent Note**: The guest agent is Slicer's agent. Their API docs: https://docs.slicervm.com/reference/api
+> **Note**: Terminal access uses Firecracker's serial console via named pipes (FIFOs),
+> eliminating the need for in-VM agents.
 
 Responsibilities:
-- Proxy requests to guest agent running in VM
-- Agent listens on port (check Slicer docs for exact port)
-- Health checks, exec, cp operations
+- Create named pipes for stdin/stdout to Firecracker process
+- Proxy WebSocket data to/from serial console
+- Handle terminal resize via xterm escape sequences
+- Manage connection lifecycle
 
 Key functions:
 ```typescript
-async function checkHealth(vmIp: string): Promise<boolean>
-async function exec(vmIp: string, command: string, args?: string[]): Promise<ExecResult>
-async function copyToVM(vmIp: string, localPath: string, remotePath: string): Promise<void>
-async function copyFromVM(vmIp: string, remotePath: string): Promise<Buffer>
-async function getShellStream(vmIp: string): Promise<Duplex>  // For terminal
+function generatePipePaths(vmId: string, pipeDir?: string): { stdinPath: string, stdoutPath: string }
+function formatResizeMessage(cols: number, rows: number): Uint8Array  // xterm escape sequence
+async function createSerialConsole(options: SerialConsoleOptions): Promise<SerialConsole>
+```
+
+The serial console interface:
+```typescript
+interface SerialConsole {
+  write(data: Uint8Array): void;      // Send to VM stdin
+  onData(callback: (data: Uint8Array) => void): void;  // Receive from VM stdout
+  close(): void;
+  isActive(): boolean;
+  getPaths(): { stdin: string, stdout: string };
+}
 ```
 
 ### 4. Registry Service (`packages/api/src/services/registry.ts`)
@@ -280,7 +290,7 @@ async function deleteImage(imageId: string): Promise<void>
 ## Web UI Pages & Components
 
 > **Agent Note**: 
-> - Use shadcn/ui CLI to add components: `bunx shadcn@latest add <component>`
+> - Use shadcn/ui CLI to add components: `pnpm dlx shadcn@latest add <component>`
 > - Fetch shadcn docs: https://ui.shadcn.com/docs
 > - Fetch ghostty-web docs: https://github.com/coder/ghostty-web
 > - **All pages must be mobile-responsive** (test at 375px width)
@@ -467,7 +477,7 @@ volumes:
 ## Implementation Phases
 
 ### Phase 1: Foundation
-- [ ] Initialize Bun monorepo with workspaces
+- [ ] Initialize Node.js monorepo with pnpm workspaces
 - [ ] Configure Turborepo for build orchestration
 - [ ] Create package skeletons (`api`, `web`, `sdk`, `cli`)
 - [ ] Set up Drizzle with SQLite, create schema, run migrations
@@ -483,13 +493,15 @@ volumes:
 - [ ] Write setup script for host preparation
 - [ ] Test VM creation and lifecycle manually
 
-### Phase 3: Agent Communication
-- [ ] Implement Agent service (proxy to guest agent)
-- [ ] Add `/vms/:id/health` endpoint
-- [ ] Add `/vms/:id/exec` endpoint
-- [ ] Add `/vms/:id/cp` endpoints (upload/download)
-- [ ] Implement WebSocket terminal proxy (`/vms/:id/terminal`)
-- [ ] Test exec and terminal with running VM
+### Phase 3: Serial Console Communication
+- [x] Implement Serial Console service (named pipes for Firecracker)
+- [x] Implement WebSocket terminal proxy (`/vms/:id/terminal`)
+- [x] Handle terminal resize via xterm escape sequences
+- [x] Test terminal with running VM
+
+> **Note**: Agent-based endpoints (exec, health, cp) have been deprecated in favor of
+> direct serial console access. The VM's serial port provides full shell access without
+> needing an in-VM agent.
 
 ### Phase 4: Web UI
 - [ ] Initialize React + Vite app
@@ -533,7 +545,7 @@ volumes:
 | VMs Directory | `/var/lib/bonfire/vms/` |
 | Database Path | `/var/lib/bonfire/bonfire.db` |
 | API Port | `3000` |
-| Default Image | `ghcr.io/openfaasltd/slicer-systemd:5.10.240-x86_64-latest` |
+| Default Image | `firecracker-quickstart:ubuntu-24.04` |
 
 ---
 
@@ -558,7 +570,7 @@ volumes:
 │  ┌───────────────────┐  ┌────────────────────┐  ┌────────────────┐  │
 │  │    Unit Tests     │  │ Integration Tests  │  │   E2E Tests    │  │
 │  │                   │  │                    │  │                │  │
-│  │  bun test         │  │  docker compose    │  │ docker + KVM   │  │
+│  │  pnpm -r test     │  │  docker compose    │  │ docker + KVM   │  │
 │  │                   │  │  run test-int      │  │                │  │
 │  │  - No I/O         │  │                    │  │  - Real FCs    │  │
 │  │  - No network     │  │  - Isolated DB     │  │  - Real TAPs   │  │
@@ -570,7 +582,7 @@ volumes:
 │  └───────────────────┘  └────────────────────┘  └────────────────┘  │
 │                                                                      │
 │  Command:              Command:                 Command:             │
-│  bun test              bun run test:int         bun run test:e2e    │
+│  pnpm -r test           pnpm run test:int        pnpm run test:e2e    │
 │                                                                      │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -579,7 +591,7 @@ volumes:
 
 **Location**: `packages/*/src/**/*.test.ts` (co-located with source)
 
-**Run with**: `bun test`
+**Run with**: `pnpm -r test`
 
 **Rules**:
 - **NO** filesystem writes
@@ -653,7 +665,7 @@ it('drizzle inserts data', () => {
 
 **Location**: `packages/*/src/**/*.integration.test.ts`
 
-**Run with**: `bun run test:int` (runs inside Docker container)
+**Run with**: `pnpm run test:int` (runs inside Docker container)
 
 **Rules**:
 - Run inside `docker/test.Dockerfile` container
@@ -666,7 +678,7 @@ it('drizzle inserts data', () => {
 **What to test**:
 ```typescript
 // packages/api/src/routes/vms.integration.test.ts
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { createTestApp } from '../test-utils';
 
 describe('POST /api/vms', () => {
@@ -708,8 +720,8 @@ describe('POST /api/vms', () => {
 
 **Test utilities** (`packages/api/src/test-utils.ts`):
 ```typescript
-import { drizzle } from 'drizzle-orm/bun:sqlite';
-import { Database } from 'bun:sqlite';
+import { drizzle } from 'drizzle-orm/better-sqlite3';
+import Database from 'better-sqlite3';
 import { randomUUID } from 'crypto';
 import { createApp } from './index';
 
@@ -763,7 +775,7 @@ function createMockNetworkService() {
 
 **Location**: `e2e/*.test.ts`
 
-**Run with**: `bun run test:e2e` (manual) or in CI with KVM-enabled runner
+**Run with**: `pnpm run test:e2e` (manual) or in CI with KVM-enabled runner
 
 **Rules**:
 - **Only run on Linux hosts with KVM**
@@ -779,7 +791,7 @@ function createMockNetworkService() {
 **What to test**:
 ```typescript
 // e2e/vm-lifecycle.test.ts
-import { describe, it, expect, afterAll } from 'bun:test';
+import { describe, it, expect, afterAll } from 'vitest';
 import { BonfireClient } from '@bonfire/sdk';
 
 describe('VM lifecycle (E2E)', () => {
@@ -828,7 +840,7 @@ describe('VM lifecycle (E2E)', () => {
 
 **`docker/test.Dockerfile`** (for integration tests):
 ```dockerfile
-FROM oven/bun:latest
+FROM node:24-bookworm
 
 WORKDIR /app
 
@@ -836,17 +848,15 @@ WORKDIR /app
 # Just runs the app with mocked services
 
 COPY . .
-RUN bun install
+RUN corepack enable
+RUN pnpm install
 
-CMD ["bun", "test", "--grep", "integration"]
+CMD ["pnpm", "-C", "packages/api", "exec", "vitest", "run", "--config", "vitest.integration.config.mjs"]
 ```
 
 **`docker/e2e.Dockerfile`** (for E2E tests):
 ```dockerfile
-FROM ubuntu:24.04
-
-# Install Bun
-RUN curl -fsSL https://bun.sh/install | bash
+FROM node:24-bookworm
 
 # Install Firecracker
 RUN curl -fsSL https://github.com/firecracker-microvm/firecracker/releases/download/v1.14.1/firecracker-v1.14.1-x86_64.tgz | tar -xz
@@ -854,6 +864,9 @@ RUN mv release-*/firecracker-* /usr/local/bin/firecracker
 
 # Network tools
 RUN apt-get update && apt-get install -y iproute2 iptables
+
+# Enable pnpm
+RUN corepack enable
 
 WORKDIR /app
 
@@ -900,10 +913,10 @@ services:
 ```json
 {
   "scripts": {
-    "test": "bun test --ignore '**/*.integration.test.ts'",
-    "test:int": "docker compose -f docker/docker-compose.test.yml run --rm test-integration",
-    "test:e2e": "docker compose -f docker/docker-compose.test.yml run --rm test-e2e",
-    "test:all": "bun run test && bun run test:int"
+    "test": "pnpm -r test",
+    "test:int": "docker compose -f docker/docker-compose.test.yml run --build --rm test-integration",
+    "test:e2e": "docker compose -f docker/docker-compose.test.yml run --build --rm test-e2e",
+    "test:all": "pnpm -r test && pnpm run test:int"
   }
 }
 ```
@@ -912,7 +925,7 @@ services:
 
 | Pattern | Type | Runs In |
 |---------|------|---------|
-| `*.test.ts` | Unit | `bun test` (anywhere) |
+| `*.test.ts` | Unit | `pnpm -r test` (anywhere) |
 | `*.integration.test.ts` | Integration | Docker container |
 | `e2e/*.test.ts` | End-to-end | Docker + KVM |
 
@@ -929,22 +942,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v1
-      - run: bun install
-      - run: bun test
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r test
 
   integration:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: docker compose -f docker/docker-compose.test.yml run --rm test-integration
+      - run: docker compose -f docker/docker-compose.test.yml run --build --rm test-integration
 
   e2e:
     runs-on: [self-hosted, kvm]  # Requires self-hosted runner with KVM
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
-      - run: docker compose -f docker/docker-compose.test.yml run --rm test-e2e
+      - run: docker compose -f docker/docker-compose.test.yml run --build --rm test-e2e
 ```
 
 ---
@@ -956,8 +972,8 @@ When implementing any component:
 1. **Always fetch current documentation** before writing code
 2. **Check package versions** - use latest stable releases
 3. **Mobile-first** for Web UI - test at 375px viewport
-4. **Use shadcn CLI** to add components: `bunx shadcn@latest add <component>`
-5. **Bun-native** - use Bun APIs where available
+4. **Use shadcn CLI** to add components: `pnpm dlx shadcn@latest add <component>`
+5. **Node-native** - use Node APIs where available
 6. **Type safety** - leverage TypeScript strictly
 7. **Error handling** - provide meaningful error messages
 8. **Logging** - add structured logs for debugging
@@ -1020,7 +1036,7 @@ Example scenarios:
 1. **Unit tests (`*.test.ts`)**:
    - NO filesystem writes, NO network calls, NO database connections
    - Test pure functions and business logic only
-   - Must pass with just `bun test`
+   - Must pass with just `pnpm -r test`
 
 2. **Integration tests (`*.integration.test.ts`)**:
    - Use `createTestApp()` helper which provides isolated temp database
@@ -1042,7 +1058,7 @@ Example scenarios:
 
 | Technology | URL |
 |------------|-----|
-| Bun | https://bun.sh/docs |
+| Node.js | https://nodejs.org/docs/latest/api/ |
 | Hono | https://hono.dev/docs |
 | Drizzle | https://orm.drizzle.team/docs/overview |
 | Better Auth | https://www.better-auth.com/docs |
@@ -1051,6 +1067,5 @@ Example scenarios:
 | ghostty-web | https://github.com/coder/ghostty-web |
 | PartySocket | https://github.com/cloudflare/partykit/tree/main/packages/partysocket |
 | Firecracker API | https://github.com/firecracker-microvm/firecracker/blob/main/src/firecracker/swagger/firecracker.yaml |
-| Slicer (agent API) | https://docs.slicervm.com/reference/api |
-| Slicer (images) | https://docs.slicervm.com/reference/images |
-| Slicer (networking) | https://docs.slicervm.com/reference/networking |
+| Firecracker Serial | https://github.com/firecracker-microvm/firecracker/blob/main/docs/prod-host-setup.md |
+| Firecracker Images | https://github.com/firecracker-microvm/firecracker/blob/main/docs/getting-started.md |
