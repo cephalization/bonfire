@@ -39,3 +39,19 @@ Use this knowledge to avoid repeating mistakes and build on what works.
 - **Serial console reconnection**: When reconnecting to a serial console, allow sufficient time (3+ seconds) for the previous connection's file handles to fully close before attempting to reopen the pipes.
 
 - **Firecracker stdio mapping**: Remember that Firecracker's stdin connects to the stdout pipe (for input TO the VM) and stdout connects to the stdin pipe (for output FROM the VM). This naming inversion is intentional from the VM's perspective.
+
+## n6yzfi15 - Fix Browser UI E2E tests - missing agent-browser CLI
+
+- **agent-browser CLI installation**: The agent-browser tool is installed globally via `npm install -g agent-browser`. It depends on Playwright, which needs browsers installed via `npx playwright install chromium`.
+
+- **Dockerfile placement matters**: The agent-browser and Playwright installation should happen after the main pnpm install but before the build, as shown in docker/Dockerfile lines 74-78:
+  ```dockerfile
+  RUN npm install -g agent-browser
+  RUN npx playwright install chromium
+  ```
+
+- **Playwright browser dependencies**: When running in Docker, Playwright needs system dependencies for Chromium. These are installed via apt in the Dockerfile (libnss3, libatk-bridge2.0-0, libgtk-3-0, libgbm-dev, etc.).
+
+- **E2E test execution**: The Browser UI tests use agent-browser commands like `open`, `snapshot`, `click`, `fill` to automate browser interactions. The tests spawn the agent-browser CLI as a child process with a session name for isolation.
+
+- **Test vs CLI installation**: While the CLI tool is installed globally in the Dockerfile, local development may also need it installed globally for testing outside Docker: `npm install -g agent-browser && npx playwright install chromium`
