@@ -163,3 +163,27 @@ Use this knowledge to avoid repeating mistakes and build on what works.
 - **Config structure for OpenCode**: The MVP config should disable sharing (`share: "disabled"`), allow all operations (`permission: "allow"`), disable auto-updates (`autoupdate: false`), and bind to all interfaces on port 4096.
 
 - **Testing env var injection**: Mock SSH services can track executed commands and verify that environment variable patterns are present in the command string. Look for patterns like `OPENCODE_CONFIG_CONTENT` and `systemctl --user import-environment`.
+
+## 3uvde3rf - Agent UI Plan (Complete Implementation)
+
+- **End-to-end agent session flow**: The complete agent session implementation spans 6 phases:
+  1. Data model (agent_sessions table with Drizzle schema)
+  2. Agent-ready VM image (Dockerfile with OpenCode, SSH, Node.js)
+  3. SSH bootstrap service (clone repo, start OpenCode via systemctl)
+  4. OpenCode proxy (reverse proxy with base href injection)
+  5. Web UI (React pages with iframe embedding)
+  6. Polish (config injection, error handling, retry logic)
+
+- **Architecture verification**: All 438 tests pass across 4 packages (API: 291, Web: 106, SDK: 4, CLI: 37). The implementation follows the planned architecture with proper separation between Bonfire (VM orchestration) and OpenCode (agent runtime).
+
+- **Key integration points**:
+  - API routes at `/api/agent/sessions/*` for CRUD operations
+  - Proxy routes at `/api/agent/sessions/:id/opencode/*` for OpenCode access
+  - Web UI at `/agent/sessions` and `/agent/sessions/:id` for user interaction
+  - Bootstrap service coordinates SSH connections and OpenCode lifecycle
+
+- **Security considerations implemented**:
+  - Basic auth injection for OpenCode with session ID as password
+  - User-scoped session access (users can only access their own sessions)
+  - HTML base href injection to prevent asset path issues
+  - Hop-by-hop header stripping in proxy responses
