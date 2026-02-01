@@ -124,9 +124,9 @@ export function Terminal({ vmId }: TerminalProps) {
             console.log("[Terminal] Connection ready");
             readyReceivedRef.current = true;
             dataReceivedAfterReadyRef.current = false;
-            // Clear the terminal to start fresh
+            // Clear the terminal to start fresh - clear screen, scrollback, and reset
             if (terminalRef.current) {
-              terminalRef.current.write("\x1b[2J\x1b[H"); // Clear screen and home cursor
+              terminalRef.current.write("\x1bc\x1b[2J\x1b[3J\x1b[H"); // Reset terminal, clear screen, clear scrollback, home cursor
             }
             return;
           }
@@ -142,8 +142,9 @@ export function Terminal({ vmId }: TerminalProps) {
         }
       }
       
-      // Write terminal output
-      if (terminalRef.current) {
+      // Write terminal output - only after ready to avoid stale data
+      if (terminalRef.current && readyReceivedRef.current) {
+        dataReceivedAfterReadyRef.current = true;
         terminalRef.current.write(data);
       }
     });
