@@ -6,6 +6,11 @@ You are a coding agent implementing tasks one at a time.
 
 Implement ONE task from dex, test it, commit it, log your learnings, then EXIT.
 
+## NOTE (Post-Migration)
+
+This file was written for the Bun-based implementation. Bonfire has migrated to Node 24+ and pnpm.
+If any commands below mention Bun, treat them as historical.
+
 ## The Loop
 
 1. **Find work** - Run `dex list --ready` to see tasks with all dependencies complete
@@ -110,22 +115,23 @@ Only commit AFTER tests pass.
 
 | Action | Command |
 |--------|---------|
-| Install deps | `bun install` |
-| Run unit tests | `bun test` |
-| Run integration tests | `bun run test:int` (via Docker) |
-| Run E2E tests | `bun run test:e2e` (requires KVM) |
-| Build all packages | `bunx turbo run build` |
-| Dev (API) | `bun run dev` (in packages/api) |
-| Dev (Web) | `bun run dev` (in packages/web) |
-| Lint | `bunx turbo run lint` |
-| Type check | `bunx turbo run typecheck` |
-| Generate SDK | `bun run generate` (in packages/sdk) |
-| DB migrations | `bun run db:push` (in packages/api) |
+| Install deps | `corepack enable && pnpm install` |
+| Run unit tests | `pnpm -r test` |
+| Run integration tests | `pnpm run test:int` (via Docker) |
+| Run E2E tests | `pnpm run test:e2e` (requires KVM) |
+| Build all packages | `pnpm run build` |
+| Dev (API + Web) | `pnpm run dev` (mprocs) |
+| Dev (API only) | `pnpm --filter @bonfire/api dev` |
+| Dev (Web only) | `pnpm --filter @bonfire/web dev` |
+| Lint | `pnpm run lint` |
+| Type check | `pnpm run typecheck` |
+| Generate SDK | `pnpm --filter @bonfire/sdk generate` |
+| DB migrations | `pnpm --filter @bonfire/api migrate` |
 | Stage all | `git add -A` |
 | Commit | `git commit -m "feat: ..."` |
 
 **Monorepo Packages:**
-- `packages/api` - Hono API server (Bun)
+- `packages/api` - Hono API server
 - `packages/web` - React + Vite frontend
 - `packages/sdk` - TypeScript SDK (auto-generated)
 - `packages/cli` - CLI with Clack
