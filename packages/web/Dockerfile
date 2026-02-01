@@ -16,4 +16,4 @@ COPY package.json ./
 EXPOSE 5173
 
 # Install dependencies and start (done at runtime for dev with volume mounts)
-CMD ["sh", "-c", "corepack enable && corepack prepare pnpm@10.0.0 --activate && pnpm install && pnpm run dev -- --host --clearScreen false"]
+CMD ["sh", "-c", "corepack enable && corepack prepare pnpm@10.0.0 --activate && pnpm install --force --no-frozen-lockfile && pnpm run dev -- --host --clearScreen false"]
