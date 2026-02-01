@@ -305,7 +305,10 @@ Configuration: `.oxlintrc.json`
 
 - Categories enabled: `correctness` (error), `suspicious` (warn), `perf` (warn)
 - Plugins: `typescript`, `react`, `import`, `promise`, `vitest`
-- Key rules: `no-unused-vars` (with underscore prefix exception), `no-console`, `no-explicit-any`
+- Error rules (CI blocking): `react/jsx-key`, `import/no-cycle`, `import/no-self-import`
+- Warning rules: `no-unused-vars`, `no-console`, `no-explicit-any`
+
+Note: Unused variables use underscore prefix convention (`_unusedVar`) to suppress warnings.
 
 ### Formatting with Oxfmt
 

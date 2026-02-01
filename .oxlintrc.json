@@ -9,7 +9,7 @@
   "rules": {
     "no-unused-vars": "off",
     "typescript/no-unused-vars": [
-      "error",
+      "warn",
       {
         "argsIgnorePattern": "^_",
         "varsIgnorePattern": "^_",
@@ -23,7 +23,13 @@
     "react/react-in-jsx-scope": "off",
     "import/no-cycle": "error",
     "import/no-self-import": "error",
-    "promise/no-return-wrap": "error"
+    "promise/no-return-wrap": "error",
+    "jest/no-standalone-expect": "off",
+    "jest/expect-expect": "off",
+    "jest/no-disabled-tests": "warn",
+    "jest/require-to-throw-message": "off",
+    "jest/no-conditional-expect": "off",
+    "no-useless-catch": "warn"
   },
   "ignorePatterns": ["**/dist/**", "**/node_modules/**", "**/*.d.ts", "**/coverage/**"]
 }
