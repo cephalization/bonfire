@@ -1,0 +1,7 @@
+procs:
+  api:
+    cwd: packages/api
+    shell: pnpm run dev
+  web:
+    cwd: packages/web
+    shell: pnpm run dev

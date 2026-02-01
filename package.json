@@ -1,0 +1,39 @@
+{
+  "name": "bonfire",
+  "private": true,
+  "packageManager": "pnpm@10.0.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "workspaces": ["packages/*"],
+  "overrides": {},
+  "scripts": {
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "dev": "mprocs",
+    "test:int": "docker compose -f docker/docker-compose.test.yml run --build --rm test-integration",
+    "test:e2e": "docker compose -f docker/docker-compose.test.yml run --build --rm test-e2e",
+    "test:all": "turbo run test && pnpm run test:int"
+  },
+  "devDependencies": {
+    "@types/node": "^24.6.0",
+    "mprocs": "^0.8.3",
+    "tsup": "^8.5.0",
+    "turbo": "^2.8.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.0"
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.0.0",
+    "picocolors": "^1.1.1"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "better-sqlite3"
+    ]
+  }
+}
