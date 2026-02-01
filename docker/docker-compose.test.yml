@@ -1,0 +1,96 @@
+services:
+  test-integration:
+    build:
+      context: ..
+      dockerfile: docker/test.Dockerfile
+    volumes:
+      - ../:/app
+      - /tmp/bonfire-test:/tmp/bonfire-test
+    environment:
+      - NODE_ENV=test
+      - BONFIRE_TEST_MODE=integration
+    networks:
+      - bonfire-test
+
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: builder
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+      - SYS_ADMIN
+    volumes:
+      - ../:/app
+      - /tmp/bonfire-e2e:/var/lib/bonfire
+      - /dev/kvm:/dev/kvm
+      - api-node-modules:/app/node_modules
+      - api-pkg-node-modules:/app/packages/api/node_modules
+      - sdk-node-modules:/app/packages/sdk/node_modules
+    environment:
+      - NODE_ENV=test
+      - DATABASE_URL=/var/lib/bonfire/bonfire.db
+      - BETTER_AUTH_SECRET=test-secret-not-for-production
+      - INITIAL_ADMIN_EMAIL=admin@example.com
+      - INITIAL_ADMIN_PASSWORD=admin123
+      - INITIAL_ADMIN_NAME=Admin
+      - BONFIRE_BRIDGE=bonfire-test0
+      - BONFIRE_SUBNET=10.0.200.0/24
+      - BONFIRE_GATEWAY=10.0.200.1
+    command: ["sh", "-c", "cd /app && corepack enable && pnpm install && cd /app/packages/api && pnpm run migrate && pnpm run dev"]
+    networks:
+      bonfire-test:
+        ipv4_address: 10.0.200.10
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  test-e2e:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: builder
+    privileged: true
+    devices:
+      - /dev/kvm:/dev/kvm
+    cap_add:
+      - NET_ADMIN
+      - SYS_ADMIN
+    volumes:
+      - ../:/app
+      - /tmp/bonfire-e2e:/var/lib/bonfire
+      - /dev/kvm:/dev/kvm
+      - api-node-modules:/app/node_modules
+      - api-pkg-node-modules:/app/packages/api/node_modules
+      - sdk-node-modules:/app/packages/sdk/node_modules
+    environment:
+      - NODE_ENV=test
+      - DATABASE_URL=/var/lib/bonfire/bonfire.db
+      - BETTER_AUTH_SECRET=test-secret-not-for-production
+      - INITIAL_ADMIN_EMAIL=admin@example.com
+      - INITIAL_ADMIN_PASSWORD=admin123
+      - INITIAL_ADMIN_NAME=Admin
+      - BONFIRE_BRIDGE=bonfire-test0
+      - BONFIRE_SUBNET=10.0.200.0/24
+      - BONFIRE_GATEWAY=10.0.200.1
+      - BONFIRE_API_URL=http://localhost:3000
+    command: ["sh", "-c", "chmod +x /app/scripts/run-e2e-combined.sh && /app/scripts/run-e2e-combined.sh"]
+    networks:
+      - bonfire-test
+
+volumes:
+  api-node-modules:
+  api-pkg-node-modules:
+  sdk-node-modules:
+
+networks:
+  bonfire-test:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.0.200.0/24
+          gateway: 10.0.200.1

@@ -1,0 +1,35 @@
+services:
+  bonfire:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "3000:3000"      # API
+      - "5173:5173"      # Web UI (dev)
+    volumes:
+      - bonfire-data:/var/lib/bonfire
+      - /dev/kvm:/dev/kvm
+    privileged: true      # Required for network/VM management
+    cap_add:
+      - NET_ADMIN
+      - SYS_ADMIN
+    environment:
+      - DATABASE_URL=/var/lib/bonfire/bonfire.db
+      - BETTER_AUTH_SECRET=change-me-in-production
+      - NODE_ENV=production
+      # Initial admin user configuration (required for first-time setup)
+      # Change these before deploying to production!
+      - INITIAL_ADMIN_EMAIL=admin@example.com
+      - INITIAL_ADMIN_PASSWORD=changeme123
+      - INITIAL_ADMIN_NAME=Admin
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+
+volumes:
+  bonfire-data:
+    driver: local
