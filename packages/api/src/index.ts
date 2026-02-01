@@ -15,6 +15,8 @@ import { createImagesRouter } from "./routes/images";
 import { createVMsRouter } from "./routes/vms";
 import { createTerminalRouter } from "./routes/terminal";
 import { createAgentSessionsRouter } from "./routes/agent-sessions";
+import type { BootstrapService } from "./services/bootstrap";
+import { RealBootstrapService } from "./services/bootstrap";
 import { RegistryService } from "./services/registry";
 import { NetworkService } from "./services/network";
 import type {
@@ -85,6 +87,7 @@ export interface AppConfig {
   db?: BetterSQLite3Database<typeof schema>;
   registryService?: RegistryService;
   networkService?: NetworkService;
+  bootstrapService?: BootstrapService;
   spawnFirecrackerFn?: typeof spawnFirecracker;
   configureVMProcessFn?: typeof configureVMProcess;
   startVMProcessFn?: typeof startVMProcess;
@@ -160,8 +163,10 @@ export function createApp(appConfig: AppConfig = {}) {
     const terminalRouter = createTerminalRouter({
       db: appConfig.db,
     });
+    const bootstrapService = appConfig.bootstrapService ?? new RealBootstrapService(appConfig.db);
     const agentSessionsRouter = createAgentSessionsRouter({
       db: appConfig.db,
+      bootstrapService,
     });
 
     app.route("/api", imagesRouter);
@@ -202,7 +207,8 @@ export function createApp(appConfig: AppConfig = {}) {
         stopVMProcessFn: appConfig.stopVMProcessFn,
       });
       const terminalRouter = createTerminalRouter({ db });
-      const agentSessionsRouter = createAgentSessionsRouter({ db });
+      const bootstrapService = new RealBootstrapService(db);
+      const agentSessionsRouter = createAgentSessionsRouter({ db, bootstrapService });
 
       app.route("/api", imagesRouter);
       app.route("/api", vmsRouter);
