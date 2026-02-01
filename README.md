@@ -49,7 +49,7 @@ docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml up
 
 4. Log in with the default admin credentials:
    - Email: `admin@example.com`
-   - Password: `changeme123`
+   - Password: `admin123`
 
 This starts both API and web servers with:
 - Hot reload for both API and web code
@@ -94,7 +94,7 @@ pnpm run dev  # runs both API and web servers in parallel via mprocs
 
 6. Log in with the admin credentials (configured in `.env`):
    - Email: `admin@example.com` (or your INITIAL_ADMIN_EMAIL)
-   - Password: `changeme123` (or your INITIAL_ADMIN_PASSWORD)
+   - Password: `admin123` (or your INITIAL_ADMIN_PASSWORD)
 
 The mprocs TUI will show both processes. Use arrow keys to switch between them,
 and press `q` to quit all processes.
@@ -137,7 +137,7 @@ INITIAL_ADMIN_NAME=Admin
 
 Bonfire uses Better Auth for authentication with email/password. On first startup, if `INITIAL_ADMIN_EMAIL` and `INITIAL_ADMIN_PASSWORD` are configured, an admin user will be automatically created.
 
-> **Security Note**: The default credentials (`admin@example.com` / `changeme123`) are for local development only. Always change these values in your `.env` file before exposing the service to any network.
+> **Security Note**: The default credentials (`admin@example.com` / `admin123`) are for local development only. Always change these values in your `.env` file before exposing the service to any network.
 
 - Users can have either `admin` or `member` role
 - Admin users have full permissions (all API endpoints)
