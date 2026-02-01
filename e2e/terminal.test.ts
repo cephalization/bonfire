@@ -462,7 +462,7 @@ describe("Terminal WebSocket - Serial Console (E2E)", () => {
       await waitForReady(ws1);
       expect(ws1.readyState).toBe(WebSocket.OPEN);
 
-      // Second connection should be rejected
+      // Second connection should receive error message then close
       const ws2 = client.createTerminalWebSocket(vm.id);
 
       const errorReceived = new Promise<string>((resolve) => {
@@ -525,8 +525,8 @@ describe("Terminal WebSocket - Serial Console (E2E)", () => {
       // Close first connection
       ws1.close();
 
-      // Wait for connection to be cleaned up
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      // Wait for connection to be cleaned up (serial console needs time to close pipes)
+      await new Promise((resolve) => setTimeout(resolve, 3000));
 
       // Reconnect
       const ws2 = await createWebSocketConnection(vm.id);
@@ -658,7 +658,7 @@ describe("Terminal WebSocket - Serial Console (E2E)", () => {
 
       const errorReceived = new Promise<string>((resolve, reject) => {
         const timer = setTimeout(() => {
-          reject(new Error("Timeout waiting for error"));
+          reject(new Error("Timeout waiting for error message"));
         }, 10000);
 
         ws.onmessage = (event: MessageEvent) => {
@@ -681,8 +681,8 @@ describe("Terminal WebSocket - Serial Console (E2E)", () => {
 
       const error = await errorReceived;
       expect(error).toBeTruthy();
-
-      ws.close();
+      // WebSocket should be closed or closing after receiving error
+      expect([WebSocket.CLOSING, WebSocket.CLOSED]).toContain(ws.readyState);
     },
     TEST_TIMEOUT
   );

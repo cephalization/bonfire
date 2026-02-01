@@ -158,16 +158,20 @@ export function attachTerminalWebSocketServer(server: Server, config: TerminalWs
 
       const session = await config.auth.api.getSession({ headers });
       if (!session) {
-        rejectUpgrade(socket, 401, {
-          error: "Unauthorized - valid session required",
+        // Accept the upgrade so we can send a proper error message
+        wss.handleUpgrade(req, socket, head, (ws) => {
+          ws.send(JSON.stringify({ error: "Unauthorized - valid session required" }));
+          ws.close();
         });
         return;
       }
 
       // Enforce exclusivity.
       if (activeConnections.has(vmId)) {
-        rejectUpgrade(socket, 409, {
-          error: "Terminal already connected. Only one connection allowed per VM.",
+        // Accept the upgrade so we can send a proper error message
+        wss.handleUpgrade(req, socket, head, (ws) => {
+          ws.send(JSON.stringify({ error: "Terminal already connected. Only one connection allowed per VM." }));
+          ws.close();
         });
         return;
       }
@@ -175,12 +179,18 @@ export function attachTerminalWebSocketServer(server: Server, config: TerminalWs
       // Validate VM state.
       const [vm] = await config.db.select().from(vms).where(eq(vms.id, vmId));
       if (!vm) {
-        rejectUpgrade(socket, 404, { error: "VM not found" });
+        // Accept the upgrade so we can send a proper error message
+        wss.handleUpgrade(req, socket, head, (ws) => {
+          ws.send(JSON.stringify({ error: "VM not found" }));
+          ws.close();
+        });
         return;
       }
       if (vm.status !== "running") {
-        rejectUpgrade(socket, 400, {
-          error: `VM is not running. Current status: '${vm.status}'`,
+        // Accept the upgrade so we can send a proper error message
+        wss.handleUpgrade(req, socket, head, (ws) => {
+          ws.send(JSON.stringify({ error: `VM is not running. Current status: '${vm.status}'` }));
+          ws.close();
         });
         return;
       }
@@ -189,9 +199,10 @@ export function attachTerminalWebSocketServer(server: Server, config: TerminalWs
         handleConnection(ws, vmId);
       });
     })().catch((err) => {
-      // If anything throws during preflight, reject.
-      rejectUpgrade(socket, 500, {
-        error: err instanceof Error ? err.message : "Internal server error",
+      // If anything throws during preflight, accept upgrade and send error.
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        ws.send(JSON.stringify({ error: err instanceof Error ? err.message : "Internal server error" }));
+        ws.close();
       });
     });
   });

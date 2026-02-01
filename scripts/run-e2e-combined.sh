@@ -118,7 +118,7 @@ start_web() {
     cd /app/packages/web
 
     # Start the web preview server in the background
-    pnpm run preview -- --port 5173 --host &
+    pnpm run preview --port 5173 --host &
     WEB_PID=$!
     
     # Wait for web server to be ready
