@@ -172,7 +172,27 @@ chmod 755 "${BONFIRE_DIR}/images"
 chmod 755 "${BONFIRE_DIR}/vms"
 info "Created ${BONFIRE_DIR}/{images,vms}"
 
-# 7. Create default .env file
+# 7. Build agent VM images if not present
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+IMAGES_DIR="${PROJECT_ROOT}/images"
+
+info "Checking agent VM images..."
+if [ -f "${IMAGES_DIR}/agent-rootfs.ext4" ] && [ -f "${IMAGES_DIR}/agent-kernel" ]; then
+    info "Agent VM images already exist at ${IMAGES_DIR}"
+else
+    info "Building agent VM images (this may take a few minutes)..."
+    if [ -f "${SCRIPT_DIR}/build-agent-image-docker.sh" ]; then
+        # Use Docker-based build (no additional sudo needed)
+        bash "${SCRIPT_DIR}/build-agent-image-docker.sh" "${IMAGES_DIR}"
+        info "Agent VM images built successfully"
+    else
+        warn "build-agent-image-docker.sh not found, skipping image build"
+        warn "Run ./scripts/build-agent-image-docker.sh manually to build images"
+    fi
+fi
+
+# 8. Create default .env file
 API_DIR="$(cd "$(dirname "$0")/../packages/api" && pwd)"
 ENV_FILE="${API_DIR}/.env"
 
