@@ -3,9 +3,6 @@ services:
     build:
       context: ..
       dockerfile: docker/test.Dockerfile
-    volumes:
-      - ../:/app
-      - /tmp/bonfire-test:/tmp/bonfire-test
     environment:
       - NODE_ENV=test
       - BONFIRE_TEST_MODE=integration
