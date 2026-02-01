@@ -55,3 +55,23 @@ Use this knowledge to avoid repeating mistakes and build on what works.
 - **E2E test execution**: The Browser UI tests use agent-browser commands like `open`, `snapshot`, `click`, `fill` to automate browser interactions. The tests spawn the agent-browser CLI as a child process with a session name for isolation.
 
 - **Test vs CLI installation**: While the CLI tool is installed globally in the Dockerfile, local development may also need it installed globally for testing outside Docker: `npm install -g agent-browser && npx playwright install chromium`
+
+## w8oknctg - Phase 2: Agent-ready VM image
+
+- **Docker heredoc gotcha**: When creating multi-line files in Dockerfiles with heredocs (`cat > file << 'EOF'`), the syntax can fail silently if there are whitespace or parsing issues. Using `printf` with explicit line arguments is more reliable: `printf '%s\n' 'line1' 'line2' > file`.
+
+- **ext4 image creation without sudo**: You can create ext4 images without root by using privileged Docker containers with loop device support. The trick is to mount the ext4 image inside a privileged container, extract the tar, then unmount.
+
+- **OpenCode installation path**: OpenCode installs to `/home/agent/.opencode/bin/opencode`, NOT `/home/agent/.local/bin/opencode`. The installation script updates `.bashrc` to add this to PATH.
+
+- **debugfs for ext4 inspection**: You can inspect ext4 filesystem contents without mounting by using `debugfs` with commands like `debugfs -R 'stat /path' /image.ext4`. This works without sudo and is CI-friendly.
+
+- **Size parsing from debugfs**: The debugfs stat output has "Size:" appearing twice (once for file size, once for fragment). Use `head -1` to get just the file size: `debugfs ... | grep "Size:" | head -1`.
+
+- **Symlink detection**: In ext4, symlinks have "Type: symlink" not "Type: symbolic". Regex patterns should look for `Type: (regular|symlink)` to match both files and symlinks.
+
+- **systemd service template**: The opencode@.service template uses `%i` to represent the instance name (session ID), which is passed as the password to OpenCode. WorkingDirectory uses `%i` to create per-session workspace directories.
+
+- **corepack/pnpm setup**: Enable corepack with `corepack enable && corepack prepare pnpm@latest --activate`. This provides pnpm without a separate npm install.
+
+- **Docker build context**: When building images, the entire project is sent as build context. Use `.dockerignore` to exclude large files like `images/` and `node_modules/` to speed up builds.
