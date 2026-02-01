@@ -38,7 +38,7 @@ services:
       - BONFIRE_BRIDGE=bonfire-test0
       - BONFIRE_SUBNET=10.0.200.0/24
       - BONFIRE_GATEWAY=10.0.200.1
-    command: ["sh", "-c", "cd /app && corepack enable && pnpm install && cd /app/packages/api && pnpm run migrate && pnpm run dev"]
+    command: ["sh", "-c", "cd /app/packages/api && pnpm run migrate && pnpm run dev"]
     networks:
       bonfire-test:
         ipv4_address: 10.0.200.10
