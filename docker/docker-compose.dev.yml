@@ -1,0 +1,98 @@
+# Development Docker Compose
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  # Override the production bonfire service to not run
+  bonfire:
+    profiles:
+      - dontrun
+
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: builder
+    ports:
+      - "3000:3000"      # API server
+    privileged: true      # Required for network/VM management
+    cap_add:
+      - NET_ADMIN
+      - SYS_ADMIN
+    volumes:
+      # Mount source code for hot reload
+      - ../packages/api:/app/packages/api:cached
+      - ../packages/sdk:/app/packages/sdk:cached
+      - ../packages/cli:/app/packages/cli:cached
+      # Preserve node_modules inside container
+      - /app/node_modules
+      - /app/packages/api/node_modules
+      - /app/packages/sdk/node_modules
+      - /app/packages/cli/node_modules
+      # Named volume for data persistence
+      - bonfire-data:/var/lib/bonfire
+      # KVM device for VM management
+      - /dev/kvm:/dev/kvm
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=/var/lib/bonfire/bonfire.db
+      - BETTER_AUTH_SECRET=dev-secret-do-not-use-in-production
+      # Initial admin user configuration (required for first-time setup)
+      - INITIAL_ADMIN_EMAIL=admin@example.com
+      - INITIAL_ADMIN_PASSWORD=admin123
+      - INITIAL_ADMIN_NAME=Admin
+    # Override command to run in development mode
+    command: ["sh", "-c", "cd /app/packages/api && chmod +x start.sh && ./start.sh"]
+    # Use root for development to avoid permission issues with volume mounts
+    user: root
+    # Development-specific settings
+    stdin_open: true
+    tty: true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - bonfire-network
+
+  web:
+    build:
+      context: ../packages/web
+      dockerfile: Dockerfile
+    image: bonfire-web:dev
+    ports:
+      - "5173:5173"      # Vite dev server (Web UI)
+      - "5174:5174"      # Vite HMR websocket
+    volumes:
+      # Mount source code for hot reload
+      - ../packages/web:/app:cached
+      # Preserve node_modules inside container
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - PROXY_API_TARGET=http://api:3000
+    # Use root for development to avoid permission issues with volume mounts
+    user: root
+    # Development-specific settings
+    stdin_open: true
+    tty: true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5173"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - bonfire-network
+
+volumes:
+  bonfire-data:
+    driver: local
+
+networks:
+  bonfire-network:
+    driver: bridge
