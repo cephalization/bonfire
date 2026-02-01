@@ -82,3 +82,6 @@ Thumbs.db
 *.db-journal
 *.db-shm
 *.db-wal
+
+# VM images (built via scripts/build-agent-image-docker.sh)
+images/
