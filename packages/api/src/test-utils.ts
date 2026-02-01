@@ -5,6 +5,7 @@
  */
 
 import { drizzle } from "drizzle-orm/better-sqlite3";
+import { eq } from "drizzle-orm";
 import Database from "better-sqlite3";
 import { randomUUID } from "crypto";
 import { unlinkSync } from "fs";
@@ -100,6 +101,22 @@ CREATE TABLE IF NOT EXISTS \`vms\` (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS \`vms_name_unique\` ON \`vms\` (\`name\`);
+
+CREATE TABLE IF NOT EXISTS \`agent_sessions\` (
+  \`id\` text PRIMARY KEY NOT NULL,
+  \`user_id\` text NOT NULL,
+  \`title\` text,
+  \`repo_url\` text NOT NULL,
+  \`branch\` text,
+  \`vm_id\` text,
+  \`workspace_path\` text,
+  \`status\` text DEFAULT 'creating' NOT NULL,
+  \`error_message\` text,
+  \`created_at\` integer NOT NULL,
+  \`updated_at\` integer NOT NULL,
+  FOREIGN KEY (\`user_id\`) REFERENCES \`user\`(\`id\`) ON UPDATE no action ON DELETE no action,
+  FOREIGN KEY (\`vm_id\`) REFERENCES \`vms\`(\`id\`) ON UPDATE no action ON DELETE no action
+);
 `;
 
 /**
@@ -458,6 +475,7 @@ export interface TestApp {
   sqlite: Database.Database;
   request: OpenAPIHono["request"];
   cleanup: () => void;
+  mockUserId: string;
   mocks: {
     firecracker: MockFirecrackerService;
     network: MockNetworkService;
@@ -500,6 +518,14 @@ export async function createTestApp(config: TestAppConfig = {}): Promise<TestApp
   const network = config.network ?? createMockNetworkService();
   const serialConsole = config.serialConsole ?? createMockSerialConsoleService();
 
+  // Create a mock user for testing
+  const mockUserId = `test-user-${randomUUID()}`;
+  const now = new Date();
+  sqlite.exec(`
+    INSERT INTO user (id, name, email, email_verified, role, created_at, updated_at)
+    VALUES ('${mockUserId}', 'Test User', '${mockUserId}@test.com', 1, 'member', ${now.getTime()}, ${now.getTime()})
+  `);
+
   // Create app using the real createApp function with injected dependencies
   const app = createApp({
     db,
@@ -509,6 +535,7 @@ export async function createTestApp(config: TestAppConfig = {}): Promise<TestApp
     startVMProcessFn: firecracker.startVMProcess as any,
     stopVMProcessFn: firecracker.stopVMProcess as any,
     skipAuth: config.skipAuth ?? true,
+    mockUserId,
   });
 
   // Cleanup function
@@ -527,6 +554,7 @@ export async function createTestApp(config: TestAppConfig = {}): Promise<TestApp
     sqlite,
     request: app.request.bind(app),
     cleanup,
+    mockUserId,
     mocks: {
       firecracker,
       network,

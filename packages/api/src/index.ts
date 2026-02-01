@@ -14,6 +14,7 @@ import * as schema from "./db/schema";
 import { createImagesRouter } from "./routes/images";
 import { createVMsRouter } from "./routes/vms";
 import { createTerminalRouter } from "./routes/terminal";
+import { createAgentSessionsRouter } from "./routes/agent-sessions";
 import { RegistryService } from "./services/registry";
 import { NetworkService } from "./services/network";
 import type {
@@ -89,6 +90,7 @@ export interface AppConfig {
   startVMProcessFn?: typeof startVMProcess;
   stopVMProcessFn?: typeof stopVMProcess;
   skipAuth?: boolean;
+  mockUserId?: string;
 }
 
 export function createApp(appConfig: AppConfig = {}) {
@@ -126,6 +128,21 @@ export function createApp(appConfig: AppConfig = {}) {
     if (!appConfig.skipAuth) {
       app.use("/api/images/*", authMiddleware);
       app.use("/api/vms/*", authMiddleware);
+      app.use("/api/agent/*", authMiddleware);
+    }
+
+    // Add mock user middleware when mockUserId is provided (for testing)
+    if (appConfig.mockUserId && appConfig.db) {
+      const db = appConfig.db;
+      app.use("/api/agent/*", async (c, next) => {
+        const mockUser = await db.query.user.findFirst({
+          where: (user, { eq }) => eq(user.id, appConfig.mockUserId!),
+        });
+        if (mockUser) {
+          (c as any).set("user", mockUser);
+        }
+        await next();
+      });
     }
 
     const imagesRouter = createImagesRouter({
@@ -143,10 +160,14 @@ export function createApp(appConfig: AppConfig = {}) {
     const terminalRouter = createTerminalRouter({
       db: appConfig.db,
     });
+    const agentSessionsRouter = createAgentSessionsRouter({
+      db: appConfig.db,
+    });
 
     app.route("/api", imagesRouter);
     app.route("/api", vmsRouter);
     app.route("/api", terminalRouter);
+    app.route("/api", agentSessionsRouter);
   } else if (process.env.DATABASE_URL || typeof window === "undefined") {
     // Try to create default database connection in production/server context
     try {
@@ -168,6 +189,7 @@ export function createApp(appConfig: AppConfig = {}) {
       if (!appConfig.skipAuth) {
         app.use("/api/images/*", authMiddleware);
         app.use("/api/vms/*", authMiddleware);
+        app.use("/api/agent/*", authMiddleware);
       }
 
       const imagesRouter = createImagesRouter({ db, registryService });
@@ -180,10 +202,12 @@ export function createApp(appConfig: AppConfig = {}) {
         stopVMProcessFn: appConfig.stopVMProcessFn,
       });
       const terminalRouter = createTerminalRouter({ db });
+      const agentSessionsRouter = createAgentSessionsRouter({ db });
 
       app.route("/api", imagesRouter);
       app.route("/api", vmsRouter);
       app.route("/api", terminalRouter);
+      app.route("/api", agentSessionsRouter);
     } catch {
       // Database not available, skip mounting routes
       // This allows the app to work in test environments without a database
