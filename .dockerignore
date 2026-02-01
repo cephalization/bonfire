@@ -1,0 +1,16 @@
+**/node_modules
+**/dist
+**/.turbo
+**/.DS_Store
+.git
+.github
+.opencode
+.dex
+.math
+.vscode
+
+# Local data/state
+**/.pnpm-store
+**/.pnpm
+**/.cache
+**/tmp
