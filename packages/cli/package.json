@@ -1,15 +1,15 @@
 {
   "name": "@bonfire/cli",
   "version": "0.0.1",
-  "type": "module",
   "bin": {
     "bonfire": "./dist/index.js"
   },
+  "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsup --config tsup.config.ts",
     "test": "vitest run",
-    "lint": "echo 'lint not configured'",
+    "lint": "oxlint src",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

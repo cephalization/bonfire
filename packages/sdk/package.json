@@ -6,15 +6,15 @@
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     }
   },
   "scripts": {
     "build": "tsup src/index.ts --format esm --target node24 --out-dir dist --dts --sourcemap --clean",
     "generate": "tsx ../../scripts/generate-sdk.ts",
     "test": "vitest run",
-    "lint": "echo 'lint not configured'",
+    "lint": "oxlint src",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

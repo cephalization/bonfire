@@ -1,0 +1,28 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn",
+    "perf": "warn"
+  },
+  "plugins": ["typescript", "react", "import", "promise", "vitest"],
+  "rules": {
+    "no-unused-vars": "off",
+    "typescript/no-unused-vars": [
+      "error",
+      {
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_",
+        "caughtErrorsIgnorePattern": "^_"
+      }
+    ],
+    "no-console": "warn",
+    "typescript/no-explicit-any": "warn",
+    "react/jsx-key": "error",
+    "react/no-children-prop": "error",
+    "import/no-cycle": "error",
+    "import/no-self-import": "error",
+    "promise/no-return-wrap": "error"
+  },
+  "ignorePatterns": ["**/dist/**", "**/node_modules/**", "**/*.d.ts", "**/coverage/**"]
+}

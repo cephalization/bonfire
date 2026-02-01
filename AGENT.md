@@ -7,6 +7,7 @@ This document provides essential information for AI agents working on the Bonfir
 Bonfire is a self-hosted platform for ephemeral Firecracker microVMs with a web UI, API, SDK, and CLI.
 
 ### Tech Stack
+
 - **Runtime**: Node.js 24+
 - **Backend**: Hono (TypeScript)
 - **Frontend**: React + Vite + shadcn/ui + ghostty-web terminal
@@ -16,6 +17,7 @@ Bonfire is a self-hosted platform for ephemeral Firecracker microVMs with a web 
 - **Build**: Turborepo monorepo
 
 ### Monorepo Structure
+
 ```
 bonfire/
 ├── packages/
@@ -33,11 +35,13 @@ bonfire/
 ### Docker Development (Recommended)
 
 Start both API and Web servers with hot reload:
+
 ```bash
 docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml up -d
 ```
 
 Services:
+
 - **API**: http://localhost:3000
 - **Web UI**: http://localhost:5173
 - **Default login**: admin@example.com / admin123
@@ -122,16 +126,21 @@ pnpm run test:all
 ### Test Utilities (packages/api/src/test-utils.ts)
 
 ```typescript
-import { createTestApp, createMockFirecrackerService, createMockNetworkService, createMockSerialConsole } from "../test-utils";
+import {
+  createTestApp,
+  createMockFirecrackerService,
+  createMockNetworkService,
+  createMockSerialConsole,
+} from "../test-utils";
 
 // Create a test app with mocked services
 const { app, db, request, cleanup, mocks } = await createTestApp();
 
 // Make requests
-const res = await request('/api/vms', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ name: 'test-vm' }),
+const res = await request("/api/vms", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ name: "test-vm" }),
 });
 
 // Check mock calls
@@ -144,6 +153,7 @@ cleanup();
 ### Frontend Test Setup (packages/web/test-setup.ts)
 
 The frontend uses happy-dom for DOM simulation and includes mocks for:
+
 - `ResizeObserver`
 - `requestAnimationFrame`
 - `MutationObserver`
@@ -204,6 +214,7 @@ agent-browser close
 ### Reading Screenshots
 
 Use the Read tool to view screenshots:
+
 ```
 Read /tmp/screenshot.png
 ```
@@ -211,6 +222,7 @@ Read /tmp/screenshot.png
 ## Key Files Reference
 
 ### API
+
 - `packages/api/src/index.ts` - App factory with dependency injection
 - `packages/api/src/routes/` - API route handlers
 - `packages/api/src/services/firecracker/` - VM management
@@ -218,6 +230,7 @@ Read /tmp/screenshot.png
 - `packages/api/src/db/schema.ts` - Database schema
 
 ### Web
+
 - `packages/web/src/components/Terminal.tsx` - Terminal component (xterm.js)
 - `packages/web/src/pages/` - Page components
 - `packages/web/src/lib/api.ts` - API client
@@ -231,6 +244,7 @@ Browser (xterm.js) <-> WebSocket <-> API (terminal.ts) <-> FIFO pipes <-> Firecr
 ```
 
 Key files:
+
 - `packages/api/src/ws/terminal.ts` - WebSocket upgrade + serial bridge
 - `packages/api/src/routes/terminal.ts` - HTTP preflight + OpenAPI metadata
 - `packages/api/src/services/firecracker/serial.ts` - Serial console FIFO management
@@ -251,6 +265,7 @@ Key files:
 **Problem**: Code changes in `packages/api/` not reflected.
 
 **Solution**: Restart the API container:
+
 ```bash
 docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml restart api
 ```
@@ -259,7 +274,9 @@ docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml res
 
 Tests use temporary SQLite databases in `/tmp/`. The `cleanup()` function from `createTestApp()` handles removal.
 
-## Build and Lint
+## Build, Lint, and Format
+
+### Build Commands
 
 ```bash
 # Build all packages
@@ -270,14 +287,53 @@ pnpm run build -- --filter=@bonfire/api
 
 # Type checking
 pnpm run typecheck
-
-# Linting
-pnpm run lint
 ```
+
+### Linting with Oxlint
+
+This project uses [Oxlint](https://oxc.rs/docs/guide/usage/linter.html) - a high-performance linter that's 50-100x faster than ESLint.
+
+```bash
+# Run linter
+pnpm run lint
+
+# Run linter with auto-fix
+pnpm run lint:fix
+```
+
+Configuration: `.oxlintrc.json`
+
+- Categories enabled: `correctness` (error), `suspicious` (warn), `perf` (warn)
+- Plugins: `typescript`, `react`, `import`, `promise`, `vitest`
+- Key rules: `no-unused-vars` (with underscore prefix exception), `no-console`, `no-explicit-any`
+
+### Formatting with Oxfmt
+
+This project uses [Oxfmt](https://oxc.rs/docs/guide/usage/formatter) - a high-performance formatter that's ~30x faster than Prettier.
+
+```bash
+# Format all files
+pnpm run format
+
+# Check formatting (CI)
+pnpm run format:check
+```
+
+Configuration: `.oxfmtrc.json`
+
+- Print width: 100
+- Semicolons: yes
+- Single quotes: no
+- Trailing commas: es5
+
+### Pre-commit Hooks
+
+Husky + lint-staged automatically runs linting and formatting on staged files before each commit. This ensures consistent code quality without manual intervention.
 
 ## Commit Message Format
 
 Use conventional commits:
+
 - `feat:` - New feature
 - `fix:` - Bug fix
 - `docs:` - Documentation
@@ -286,6 +342,7 @@ Use conventional commits:
 - `chore:` - Maintenance
 
 Example:
+
 ```
 fix: terminal reconnection - gate data forwarding to prevent FIFO buffer flood
 
@@ -314,6 +371,7 @@ Changes:
 ## Environment Variables
 
 API (packages/api/.env):
+
 ```env
 DB_PATH=/var/lib/bonfire/bonfire.db
 BETTER_AUTH_SECRET=change-me-in-production
