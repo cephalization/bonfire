@@ -195,9 +195,7 @@ describe("VMCard", () => {
   describe("Loading state", () => {
     it("applies opacity and disables interaction when loading", () => {
       const vm = createMockVM({});
-      const { getByTestId } = renderWithRouter(
-        <VMCard vm={vm} isLoading={true} />
-      );
+      const { getByTestId } = renderWithRouter(<VMCard vm={vm} isLoading={true} />);
 
       const card = getByTestId("vm-card-vm-123");
       expect(card.className).toContain("opacity-60");

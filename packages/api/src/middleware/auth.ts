@@ -29,16 +29,16 @@ export function createAuthMiddleware(auth: ReturnType<typeof createAuth>): Middl
     // since browsers can't set custom headers on WebSocket connections
     const url = new URL(c.req.url);
     const cookieFromQuery = url.searchParams.get("cookie");
-    
+
     // Build headers for session check
     let headers = c.req.raw.headers;
-    
+
     if (cookieFromQuery) {
       // Create new headers with cookie from query parameter
       headers = new Headers(headers);
       headers.set("cookie", cookieFromQuery);
     }
-    
+
     const session = await auth.api.getSession({
       headers,
     });

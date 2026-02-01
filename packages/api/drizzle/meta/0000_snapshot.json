@@ -53,9 +53,7 @@
       "indexes": {
         "images_reference_unique": {
           "name": "images_reference_unique",
-          "columns": [
-            "reference"
-          ],
+          "columns": ["reference"],
           "isUnique": true
         }
       },
@@ -165,9 +163,7 @@
       "indexes": {
         "vms_name_unique": {
           "name": "vms_name_unique",
-          "columns": [
-            "name"
-          ],
+          "columns": ["name"],
           "isUnique": true
         }
       },
@@ -176,12 +172,8 @@
           "name": "vms_image_id_images_id_fk",
           "tableFrom": "vms",
           "tableTo": "images",
-          "columnsFrom": [
-            "image_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["image_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }

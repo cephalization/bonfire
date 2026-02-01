@@ -1,6 +1,6 @@
 /**
  * Better Auth Configuration for CLI
- * 
+ *
  * This file exports the auth instance directly for the Better Auth CLI to read.
  * The main app uses createAuth() from auth.ts for lazy initialization.
  */
@@ -27,11 +27,7 @@ export const auth = betterAuth({
   },
   secret: config.betterAuthSecret,
   baseURL: config.baseUrl,
-  trustedOrigins: [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    config.baseUrl,
-  ],
+  trustedOrigins: ["http://localhost:5173", "http://127.0.0.1:5173", config.baseUrl],
   user: {
     additionalFields: {
       role: {

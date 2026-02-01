@@ -8,7 +8,13 @@
 import { intro, outro, select, isCancel, cancel } from "@clack/prompts";
 import { intro as pintro, outro as poutro, text, confirm, spinner } from "@clack/prompts";
 import pc from "picocolors";
-import { loadConfig, saveConfig, setConfigValue, getConfigValue, type Config } from "./lib/config.js";
+import {
+  loadConfig,
+  saveConfig,
+  setConfigValue,
+  getConfigValue,
+  type Config,
+} from "./lib/config.js";
 import { createClient } from "./lib/client.js";
 import { handleVMCommand } from "./commands/vm.js";
 import { handleImageCommand } from "./commands/image.js";
@@ -54,29 +60,29 @@ function normalizeConfigKey(key: string): keyof Config | null {
 
 async function handleConfigCommand(args: string[]): Promise<void> {
   const subcommand = args[0];
-  
+
   if (subcommand === "set") {
     const rawKey = args[1];
     const value = args[2];
-    
+
     if (!rawKey || !value) {
       console.error(pc.red("Usage: bonfire config set <key> <value>"));
       console.error(pc.gray("Keys: api-url, token"));
       process.exit(1);
     }
-    
+
     const key = normalizeConfigKey(rawKey);
     if (!key) {
       console.error(pc.red(`Unknown config key: ${rawKey}`));
       console.error(pc.gray("Valid keys: api-url, token"));
       process.exit(1);
     }
-    
+
     await setConfigValue(key, value);
     console.log(pc.green(`✓ Set ${rawKey} to ${value}`));
   } else if (subcommand === "get") {
     const rawKey = args[1];
-    
+
     if (rawKey) {
       const key = normalizeConfigKey(rawKey);
       if (!key) {
@@ -124,26 +130,26 @@ async function handleLoginCmd(): Promise<void> {
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
-  
+
   // Parse global flags
   const hasHelp = args.includes("--help") || args.includes("-h");
   const hasVersion = args.includes("--version");
-  
+
   // Remove flags from args
-  const filteredArgs = args.filter(arg => !arg.startsWith("--"));
+  const filteredArgs = args.filter((arg) => !arg.startsWith("--"));
   const command = filteredArgs[0];
   const commandArgs = filteredArgs.slice(1);
-  
+
   if (hasVersion) {
     showVersion();
     return;
   }
-  
+
   if (hasHelp || !command) {
     showHelp();
     return;
   }
-  
+
   try {
     switch (command) {
       case "config":

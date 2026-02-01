@@ -174,7 +174,7 @@ describe("Auth Integration Tests", () => {
       });
 
       const cookies = signInResponse.headers.get("set-cookie");
-      
+
       const response = await testApp.request("/api/auth/sign-out", {
         method: "POST",
         headers: cookies ? { Cookie: cookies } : {},
@@ -219,7 +219,7 @@ describe("Auth Integration Tests", () => {
       });
 
       const cookies = signInResponse.headers.get("set-cookie");
-      
+
       // Better Auth uses /api/auth/get-session, not /api/auth/session
       const response = await testApp.request("/api/auth/get-session", {
         headers: cookies ? { Cookie: cookies } : {},

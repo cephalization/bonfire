@@ -1,12 +1,12 @@
 /**
  * Network Service
- * 
+ *
  * Combined service for IP pool management and TAP device operations.
  * Dependency injection pattern allows for easy testing.
  */
 
-import { IPPool, generateMacAddress } from './ip-pool';
-import { createTap, deleteTap, TapDevice } from './tap';
+import { IPPool, generateMacAddress } from "./ip-pool";
+import { createTap, deleteTap, TapDevice } from "./tap";
 
 export interface NetworkServiceConfig {
   ipPool?: IPPool;
@@ -36,9 +36,9 @@ export class NetworkService {
 
   /**
    * Allocate network resources for a VM
-   * 
+   *
    * Creates TAP device and allocates IP address.
-   * 
+   *
    * @param vmId - The unique VM identifier
    * @returns Network resources for the VM
    * @throws Error if resource allocation fails
@@ -65,9 +65,9 @@ export class NetworkService {
 
   /**
    * Release network resources for a VM
-   * 
+   *
    * Deletes TAP device and releases IP address.
-   * 
+   *
    * @param resources - The network resources to release
    * @throws Error if resource release fails
    */
@@ -97,6 +97,6 @@ export class NetworkService {
 }
 
 // Re-export types and functions for convenience
-export { IPPool, generateMacAddress } from './ip-pool';
-export { createTap, deleteTap } from './tap';
-export type { TapDevice } from './tap';
+export { IPPool, generateMacAddress } from "./ip-pool";
+export { createTap, deleteTap } from "./tap";
+export type { TapDevice } from "./tap";

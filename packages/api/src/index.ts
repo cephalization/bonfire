@@ -112,11 +112,9 @@ export function createApp(appConfig: AppConfig = {}) {
   // Only setup routes if database is provided or can be created
   if (appConfig.db) {
     // Use provided database
-    const registryService =
-      appConfig.registryService ?? new RegistryService({ db: appConfig.db });
-    const networkService =
-      appConfig.networkService ?? new NetworkService();
-    
+    const registryService = appConfig.registryService ?? new RegistryService({ db: appConfig.db });
+    const networkService = appConfig.networkService ?? new NetworkService();
+
     // Create auth instance with the provided database
     const auth = createAuth(appConfig.db);
     const authMiddleware = createAuthMiddleware(auth);
@@ -172,24 +170,24 @@ export function createApp(appConfig: AppConfig = {}) {
         app.use("/api/vms/*", authMiddleware);
       }
 
-       const imagesRouter = createImagesRouter({ db, registryService });
-       const vmsRouter = createVMsRouter({
-         db,
-         networkService,
-         spawnFirecrackerFn: appConfig.spawnFirecrackerFn,
-         configureVMProcessFn: appConfig.configureVMProcessFn,
-         startVMProcessFn: appConfig.startVMProcessFn,
-         stopVMProcessFn: appConfig.stopVMProcessFn,
-       });
-       const terminalRouter = createTerminalRouter({ db });
+      const imagesRouter = createImagesRouter({ db, registryService });
+      const vmsRouter = createVMsRouter({
+        db,
+        networkService,
+        spawnFirecrackerFn: appConfig.spawnFirecrackerFn,
+        configureVMProcessFn: appConfig.configureVMProcessFn,
+        startVMProcessFn: appConfig.startVMProcessFn,
+        stopVMProcessFn: appConfig.stopVMProcessFn,
+      });
+      const terminalRouter = createTerminalRouter({ db });
 
-       app.route("/api", imagesRouter);
-       app.route("/api", vmsRouter);
-       app.route("/api", terminalRouter);
-     } catch {
-       // Database not available, skip mounting routes
-       // This allows the app to work in test environments without a database
-     }
+      app.route("/api", imagesRouter);
+      app.route("/api", vmsRouter);
+      app.route("/api", terminalRouter);
+    } catch {
+      // Database not available, skip mounting routes
+      // This allows the app to work in test environments without a database
+    }
   }
 
   return app;

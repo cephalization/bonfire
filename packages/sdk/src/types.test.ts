@@ -56,7 +56,7 @@ describe("BonfireClient", () => {
 type AssertTypesMatch = {
   // Ensure HealthResponse has required fields
   status: HealthResponse["status"];
-  
+
   // Ensure ErrorResponse has required fields
   error: ErrorResponse["error"];
 };
@@ -64,5 +64,5 @@ type AssertTypesMatch = {
 // This line ensures TypeScript evaluates the type assertion
 const _typeAssertion: AssertTypesMatch = {
   status: "ok",
-  error: "test"
+  error: "test",
 };

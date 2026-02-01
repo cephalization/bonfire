@@ -29,13 +29,13 @@ If any commands below mention Bun, treat them as historical.
 
 ## Dex Commands
 
-| Command | Purpose |
-|---------|---------|
-| `dex list --ready` | Show tasks ready to work on (deps complete) |
-| `dex start <id>` | Mark task as in-progress |
-| `dex show <id>` | Get full task details |
-| `dex complete <id> --result "..."` | Mark task complete with summary |
-| `dex status` | Show overall progress |
+| Command                            | Purpose                                     |
+| ---------------------------------- | ------------------------------------------- |
+| `dex list --ready`                 | Show tasks ready to work on (deps complete) |
+| `dex start <id>`                   | Mark task as in-progress                    |
+| `dex show <id>`                    | Get full task details                       |
+| `dex complete <id> --result "..."` | Mark task complete with summary             |
+| `dex status`                       | Show overall progress                       |
 
 ---
 
@@ -113,35 +113,38 @@ Only commit AFTER tests pass.
 
 ## Quick Reference
 
-| Action | Command |
-|--------|---------|
-| Install deps | `corepack enable && pnpm install` |
-| Run unit tests | `pnpm -r test` |
-| Run integration tests | `pnpm run test:int` (via Docker) |
-| Run E2E tests | `pnpm run test:e2e` (requires KVM) |
-| Build all packages | `pnpm run build` |
-| Dev (API + Web) | `pnpm run dev` (mprocs) |
-| Dev (API only) | `pnpm --filter @bonfire/api dev` |
-| Dev (Web only) | `pnpm --filter @bonfire/web dev` |
-| Lint | `pnpm run lint` |
-| Type check | `pnpm run typecheck` |
-| Generate SDK | `pnpm --filter @bonfire/sdk generate` |
-| DB migrations | `pnpm --filter @bonfire/api migrate` |
-| Stage all | `git add -A` |
-| Commit | `git commit -m "feat: ..."` |
+| Action                | Command                               |
+| --------------------- | ------------------------------------- |
+| Install deps          | `corepack enable && pnpm install`     |
+| Run unit tests        | `pnpm -r test`                        |
+| Run integration tests | `pnpm run test:int` (via Docker)      |
+| Run E2E tests         | `pnpm run test:e2e` (requires KVM)    |
+| Build all packages    | `pnpm run build`                      |
+| Dev (API + Web)       | `pnpm run dev` (mprocs)               |
+| Dev (API only)        | `pnpm --filter @bonfire/api dev`      |
+| Dev (Web only)        | `pnpm --filter @bonfire/web dev`      |
+| Lint                  | `pnpm run lint`                       |
+| Type check            | `pnpm run typecheck`                  |
+| Generate SDK          | `pnpm --filter @bonfire/sdk generate` |
+| DB migrations         | `pnpm --filter @bonfire/api migrate`  |
+| Stage all             | `git add -A`                          |
+| Commit                | `git commit -m "feat: ..."`           |
 
 **Monorepo Packages:**
+
 - `packages/api` - Hono API server
 - `packages/web` - React + Vite frontend
 - `packages/sdk` - TypeScript SDK (auto-generated)
 - `packages/cli` - CLI with Clack
 
 **Key Files:**
+
 - `PLAN.md` - Root implementation plan (reference for all tasks)
 - `.math/todo/LEARNINGS.md` - Accumulated project learnings
 - `turbo.json` - Turborepo task configuration
 
 **Directory Structure:**
+
 - `.math/todo/` - Active sprint files (PROMPT.md, LEARNINGS.md)
 - `.math/backups/<summary>/` - Archived sprints from `math iterate`
 - `packages/*/src/**/*.test.ts` - Unit tests (run anywhere)

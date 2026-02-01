@@ -7,12 +7,7 @@
  * - rm: Remove a cached image
  */
 
-import {
-  spinner,
-  confirm,
-  isCancel,
-  cancel,
-} from "@clack/prompts";
+import { spinner, confirm, isCancel, cancel } from "@clack/prompts";
 import pc from "picocolors";
 import type { BonfireClient } from "@bonfire/sdk";
 
@@ -111,15 +106,14 @@ export async function handleImagePull(
   }
 }
 
-export async function handleImageList(
-  client: BonfireClient,
-  baseUrl: string
-): Promise<void> {
+export async function handleImageList(client: BonfireClient, baseUrl: string): Promise<void> {
   try {
     const images = await apiRequest<Image[]>(baseUrl, "GET", "/api/images");
 
     if (images.length === 0) {
-      console.log(pc.gray("No images found. Use 'bonfire image pull <reference>' to pull an image."));
+      console.log(
+        pc.gray("No images found. Use 'bonfire image pull <reference>' to pull an image.")
+      );
       return;
     }
 
@@ -172,7 +166,9 @@ export async function handleImageRemove(
   try {
     images = await apiRequest<Image[]>(baseUrl, "GET", "/api/images");
   } catch (error) {
-    throw new Error(`Failed to fetch images: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(
+      `Failed to fetch images: ${error instanceof Error ? error.message : String(error)}`
+    );
   }
 
   const image = images.find((img) => img.id === imageId);

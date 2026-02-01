@@ -98,7 +98,7 @@ export function parseReference(reference: string): ParsedReference {
   // Extract tag if present
   const tagIndex = reference.lastIndexOf(":");
   const slashIndex = reference.lastIndexOf("/");
-  
+
   if (tagIndex > slashIndex && tagIndex > 0) {
     tag = reference.slice(tagIndex + 1);
     fullRef = reference.slice(0, tagIndex);
@@ -106,7 +106,7 @@ export function parseReference(reference: string): ParsedReference {
 
   // Split into registry and repository
   const parts = fullRef.split("/");
-  
+
   if (parts.length < 2) {
     // Just repository name, use default registry
     return {
@@ -118,10 +118,8 @@ export function parseReference(reference: string): ParsedReference {
 
   // Check if first part is a registry (contains . or : or is "localhost")
   const firstPart = parts[0];
-  const isRegistry = 
-    firstPart.includes(".") || 
-    firstPart.includes(":") || 
-    firstPart === "localhost";
+  const isRegistry =
+    firstPart.includes(".") || firstPart.includes(":") || firstPart === "localhost";
 
   if (isRegistry) {
     return {
@@ -206,18 +204,18 @@ export async function fetchManifest(
 
   // Check if we got an index (multi-arch) or manifest
   const contentType = response.headers.get("content-type") || "";
-  
+
   if (contentType.includes("index")) {
     // Got an index, we need to parse it and select the appropriate manifest
     const index = await response.json();
-    
+
     if (!index.manifests || index.manifests.length === 0) {
       throw new Error("Image index contains no manifests");
     }
-    
+
     // Select the first manifest (could be enhanced to match platform)
     const manifestDescriptor = index.manifests[0];
-    
+
     // Fetch the actual manifest
     const manifestUrl = `${baseUrl}/v2/${repository}/manifests/${manifestDescriptor.digest}`;
     const manifestResponse = await fetch(manifestUrl, {
@@ -225,7 +223,7 @@ export async function fetchManifest(
         Accept: OCI_MEDIA_TYPES.MANIFEST,
       },
     });
-    
+
     if (!manifestResponse.ok) {
       const error: RegistryError = new Error(
         `Failed to fetch manifest from index: ${manifestResponse.status} ${manifestResponse.statusText}`
@@ -233,7 +231,7 @@ export async function fetchManifest(
       error.statusCode = manifestResponse.status;
       throw error;
     }
-    
+
     return manifestResponse.json();
   }
 
@@ -314,10 +312,7 @@ export function getImagePath(imageId: string): string {
  * @param sourcePath - Path to the .tar.gz file
  * @param destDir - Destination directory
  */
-export async function extractTarGz(
-  sourcePath: string,
-  destDir: string
-): Promise<void> {
+export async function extractTarGz(sourcePath: string, destDir: string): Promise<void> {
   await mkdir(destDir, { recursive: true });
 
   // Use tar command for extraction (more reliable than pure JS)
@@ -355,14 +350,14 @@ export class RegistryService {
    */
   async pullImage(reference: string, options?: PullOptions): Promise<Image> {
     const { onProgress } = options || {};
-    
+
     // Parse the reference
     const parsed = parseReference(reference);
-    
+
     // Generate unique ID for this image
     const imageId = generateImageId(reference);
     const imageDir = join(this.imagesDir, imageId);
-    
+
     // Ensure images directory exists
     await mkdir(this.imagesDir, { recursive: true });
     await mkdir(imageDir, { recursive: true });
@@ -376,11 +371,7 @@ export class RegistryService {
         percentage: 10,
       });
 
-      const manifest = await fetchManifest(
-        parsed.registry,
-        parsed.repository,
-        parsed.tag
-      );
+      const manifest = await fetchManifest(parsed.registry, parsed.repository, parsed.tag);
 
       onProgress?.({
         layer: "manifest",
@@ -470,21 +461,21 @@ export class RegistryService {
         pulledAt: new Date(),
       };
 
-      await this.db.insert(images).values(newImage).onConflictDoUpdate({
-        target: images.reference,
-        set: {
-          kernelPath,
-          rootfsPath,
-          sizeBytes: totalSize,
-          pulledAt: new Date(),
-        },
-      });
+      await this.db
+        .insert(images)
+        .values(newImage)
+        .onConflictDoUpdate({
+          target: images.reference,
+          set: {
+            kernelPath,
+            rootfsPath,
+            sizeBytes: totalSize,
+            pulledAt: new Date(),
+          },
+        });
 
       // Fetch and return the image record
-      const [image] = await this.db
-        .select()
-        .from(images)
-        .where(eq(images.id, imageId));
+      const [image] = await this.db.select().from(images).where(eq(images.id, imageId));
 
       if (!image) {
         throw new Error("Failed to retrieve image after insert");
@@ -522,11 +513,11 @@ export class RegistryService {
    */
   private async cleanupImageDir(imageId: string): Promise<void> {
     const imageDir = join(this.imagesDir, imageId);
-    
+
     try {
       // Try to remove files individually for better error handling
       const files = ["kernel", "rootfs"];
-      
+
       for (const file of files) {
         try {
           await unlink(join(imageDir, file));
@@ -553,8 +544,6 @@ export class RegistryService {
  * @param config - Configuration including database instance
  * @returns RegistryService instance
  */
-export function createRegistryService(
-  config: RegistryServiceConfig
-): RegistryService {
+export function createRegistryService(config: RegistryServiceConfig): RegistryService {
   return new RegistryService(config);
 }

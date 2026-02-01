@@ -1,9 +1,9 @@
 /**
  * Terminal Component
- * 
+ *
  * Wrapper for ghostty-web terminal emulator with WebSocket connection
  * via PartySocket WebSocket.
- * 
+ *
  * Features:
  * - Auto-reconnection on network changes (critical for mobile)
  * - Message buffering during brief disconnects
@@ -74,7 +74,7 @@ export function Terminal({ vmId }: TerminalProps) {
       return;
     }
     lastSizeRef.current = { cols, rows };
-    
+
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(
         JSON.stringify({
@@ -87,7 +87,7 @@ export function Terminal({ vmId }: TerminalProps) {
   // Initialize WebSocket connection
   useEffect(() => {
     isUnmountingRef.current = false;
-    
+
     const ws = new PartyWebSocket(wsUrl, [], {
       maxRetries: 10,
       minReconnectionDelay: 1000,
@@ -102,7 +102,7 @@ export function Terminal({ vmId }: TerminalProps) {
       setConnectionState("open");
       setConnectionError(null); // Clear any previous errors
       console.log("[Terminal] WebSocket connected");
-      
+
       // Send any pending input
       if (pendingInputRef.current) {
         ws.send(pendingInputRef.current);
@@ -112,13 +112,13 @@ export function Terminal({ vmId }: TerminalProps) {
 
     ws.addEventListener("message", (e: MessageEvent) => {
       if (isUnmountingRef.current) return;
-      
+
       // Check if message is a JSON control message from the server
       const data = e.data;
       if (typeof data === "string" && data.startsWith("{")) {
         try {
           const msg = JSON.parse(data);
-          
+
           // Handle ready message - mark that we're ready for data
           if (msg.ready) {
             console.log("[Terminal] Connection ready");
@@ -130,7 +130,7 @@ export function Terminal({ vmId }: TerminalProps) {
             }
             return;
           }
-          
+
           // Handle error messages - show in UI instead of terminal
           if (msg.error) {
             console.error("[Terminal] Server error:", msg.error);
@@ -141,7 +141,7 @@ export function Terminal({ vmId }: TerminalProps) {
           // Not valid JSON, treat as terminal output
         }
       }
-      
+
       // Write terminal output - only after ready to avoid stale data
       if (terminalRef.current && readyReceivedRef.current) {
         dataReceivedAfterReadyRef.current = true;
@@ -177,15 +177,15 @@ export function Terminal({ vmId }: TerminalProps) {
     const initTerminal = async () => {
       try {
         await init();
-        
+
         if (!isMounted || !containerRef.current) return;
 
         // Calculate font size based on viewport
         const fontSize = window.innerWidth < 640 ? 12 : 14;
-        
+
         // Character dimensions (approximate for monospace font)
         // These need to match the actual rendered font metrics
-        const charWidth = fontSize * 0.6;  // Approximate character width ratio
+        const charWidth = fontSize * 0.6; // Approximate character width ratio
         const charHeight = fontSize * 1.2; // Approximate line height ratio
 
         const terminal = new GhosttyTerminal({
@@ -225,16 +225,16 @@ export function Terminal({ vmId }: TerminalProps) {
         // Fit terminal to container with proper calculations
         const fitTerminal = () => {
           if (!containerRef.current || !terminal) return;
-          
+
           const rect = containerRef.current.getBoundingClientRect();
           // Account for any padding/border in the container
           const availableWidth = rect.width;
           const availableHeight = rect.height;
-          
+
           // Calculate cols and rows based on character dimensions
           const cols = Math.max(1, Math.floor(availableWidth / charWidth));
           const rows = Math.max(1, Math.floor(availableHeight / charHeight));
-          
+
           terminal.resize(cols, rows);
         };
 
@@ -282,7 +282,7 @@ export function Terminal({ vmId }: TerminalProps) {
     if (connectionError) {
       return connectionError;
     }
-    
+
     switch (connectionState) {
       case "connecting":
         return "Connecting...";
@@ -302,11 +302,11 @@ export function Terminal({ vmId }: TerminalProps) {
     <div className="relative flex h-full w-full flex-col overflow-hidden rounded-md border border-border bg-[#1a1b26]">
       {/* Connection status/error overlay */}
       {statusMessage && (
-        <div className={`absolute left-0 right-0 top-0 z-10 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium ${
-          isError 
-            ? "bg-red-500/90 text-white" 
-            : "bg-yellow-500/90 text-yellow-950"
-        }`}>
+        <div
+          className={`absolute left-0 right-0 top-0 z-10 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium ${
+            isError ? "bg-red-500/90 text-white" : "bg-yellow-500/90 text-yellow-950"
+          }`}
+        >
           <WifiOff className="size-4" />
           {statusMessage}
         </div>

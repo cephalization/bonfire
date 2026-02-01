@@ -106,18 +106,11 @@ export async function putMachineConfig(
   socketPath: string,
   config: { vcpu_count: number; mem_size_mib: number }
 ): Promise<void> {
-  const { status, data } = await socketFetch(
-    socketPath,
-    "PUT",
-    "/machine-config",
-    config
-  );
+  const { status, data } = await socketFetch(socketPath, "PUT", "/machine-config", config);
 
   if (status !== 204) {
     const error = data as FirecrackerError;
-    throw new Error(
-      `Failed to configure machine: ${error?.fault_message || `HTTP ${status}`}`
-    );
+    throw new Error(`Failed to configure machine: ${error?.fault_message || `HTTP ${status}`}`);
   }
 }
 
@@ -132,18 +125,11 @@ export async function putBootSource(
     initrd_path?: string;
   }
 ): Promise<void> {
-  const { status, data } = await socketFetch(
-    socketPath,
-    "PUT",
-    "/boot-source",
-    config
-  );
+  const { status, data } = await socketFetch(socketPath, "PUT", "/boot-source", config);
 
   if (status !== 204) {
     const error = data as FirecrackerError;
-    throw new Error(
-      `Failed to configure boot source: ${error?.fault_message || `HTTP ${status}`}`
-    );
+    throw new Error(`Failed to configure boot source: ${error?.fault_message || `HTTP ${status}`}`);
   }
 }
 
@@ -212,9 +198,7 @@ export async function startInstance(socketPath: string): Promise<void> {
 
   if (status !== 204) {
     const error = data as FirecrackerError;
-    throw new Error(
-      `Failed to start instance: ${error?.fault_message || `HTTP ${status}`}`
-    );
+    throw new Error(`Failed to start instance: ${error?.fault_message || `HTTP ${status}`}`);
   }
 }
 
@@ -228,25 +212,19 @@ export async function sendCtrlAltDel(socketPath: string): Promise<void> {
 
   if (status !== 204) {
     const error = data as FirecrackerError;
-    throw new Error(
-      `Failed to send Ctrl+Alt+Del: ${error?.fault_message || `HTTP ${status}`}`
-    );
+    throw new Error(`Failed to send Ctrl+Alt+Del: ${error?.fault_message || `HTTP ${status}`}`);
   }
 }
 
 /**
  * Get instance information
  */
-export async function getInstanceInfo(
-  socketPath: string
-): Promise<FirecrackerInstanceInfo> {
+export async function getInstanceInfo(socketPath: string): Promise<FirecrackerInstanceInfo> {
   const { status, data } = await socketFetch(socketPath, "GET", "/");
 
   if (status !== 200) {
     const error = data as FirecrackerError;
-    throw new Error(
-      `Failed to get instance info: ${error?.fault_message || `HTTP ${status}`}`
-    );
+    throw new Error(`Failed to get instance info: ${error?.fault_message || `HTTP ${status}`}`);
   }
 
   return data as FirecrackerInstanceInfo;
@@ -255,10 +233,7 @@ export async function getInstanceInfo(
 /**
  * Configure all VM settings at once
  */
-export async function configureVM(
-  socketPath: string,
-  config: VMConfiguration
-): Promise<void> {
+export async function configureVM(socketPath: string, config: VMConfiguration): Promise<void> {
   // Configure machine (vCPUs, memory)
   await putMachineConfig(socketPath, config.machineConfig);
 

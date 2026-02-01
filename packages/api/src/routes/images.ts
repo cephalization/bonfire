@@ -292,8 +292,7 @@ export function createImagesRouter(config: ImagesRouterConfig): OpenAPIHono {
       );
     } catch (error) {
       console.error("Failed to pull image:", error);
-      const message =
-        error instanceof Error ? error.message : "Failed to pull image";
+      const message = error instanceof Error ? error.message : "Failed to pull image";
       return c.json({ error: message }, 500);
     }
   });
@@ -311,10 +310,7 @@ export function createImagesRouter(config: ImagesRouterConfig): OpenAPIHono {
       }
 
       // Check if any VMs are using this image
-      const vmsUsingImage = await db
-        .select()
-        .from(vms)
-        .where(eq(vms.imageId, id));
+      const vmsUsingImage = await db.select().from(vms).where(eq(vms.imageId, id));
 
       if (vmsUsingImage.length > 0) {
         return c.json(
@@ -331,8 +327,7 @@ export function createImagesRouter(config: ImagesRouterConfig): OpenAPIHono {
       return c.json({ success: true }, 200);
     } catch (error) {
       console.error("Failed to delete image:", error);
-      const message =
-        error instanceof Error ? error.message : "Failed to delete image";
+      const message = error instanceof Error ? error.message : "Failed to delete image";
       return c.json({ error: message }, 500);
     }
   });

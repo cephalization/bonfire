@@ -39,20 +39,20 @@ export function Login() {
 
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
-    
+
     const emailError = validateEmail(email);
     if (emailError) newErrors.email = emailError;
-    
+
     const passwordError = validatePassword(password);
     if (passwordError) newErrors.password = passwordError;
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!validateForm()) {
       return;
     }

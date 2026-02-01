@@ -5,7 +5,13 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
-import { AgentClient, createAgentClient, AgentError, AgentTimeoutError, AgentConnectionError } from "./client";
+import {
+  AgentClient,
+  createAgentClient,
+  AgentError,
+  AgentTimeoutError,
+  AgentConnectionError,
+} from "./client";
 
 // Store original fetch
 const originalFetch = global.fetch;
@@ -138,7 +144,7 @@ describe("AgentClient", () => {
       } as Response);
 
       const client = new AgentClient({ ipAddress: "10.0.100.2" });
-      
+
       try {
         await client.exec("ls");
         expect(false).toBe(true); // Should not reach here
@@ -180,7 +186,7 @@ describe("AgentClient", () => {
       } as Response);
 
       const client = new AgentClient({ ipAddress: "10.0.100.2" });
-      
+
       try {
         await client.exec("nonexistent");
         expect(false).toBe(true); // Should not reach here
@@ -218,7 +224,7 @@ describe("AgentClient", () => {
 
     it("throws when local file does not exist", async () => {
       const client = new AgentClient({ ipAddress: "10.0.100.2" });
-      
+
       try {
         await client.upload("/nonexistent/file.txt", "/tmp/remote.txt");
         expect(false).toBe(true); // Should not reach here
@@ -241,7 +247,7 @@ describe("AgentClient", () => {
       } as Response);
 
       const client = new AgentClient({ ipAddress: "10.0.100.2" });
-      
+
       try {
         await client.upload(tmpFile, "/root/protected.txt");
         expect(false).toBe(true); // Should not reach here
@@ -249,7 +255,9 @@ describe("AgentClient", () => {
         expect(error).toBeInstanceOf(AgentError);
         expect((error as AgentError).message).toContain("Upload failed");
       } finally {
-        await Bun.file(tmpFile).delete().catch(() => {});
+        await Bun.file(tmpFile)
+          .delete()
+          .catch(() => {});
       }
     });
   });
@@ -257,7 +265,7 @@ describe("AgentClient", () => {
   describe("download", () => {
     it("downloads file successfully", async () => {
       const fileContent = new Uint8Array([1, 2, 3, 4, 5]);
-      
+
       mockFetch.mockResolvedValue({
         status: 200,
         ok: true,
@@ -269,7 +277,7 @@ describe("AgentClient", () => {
 
       expect(result).toBeInstanceOf(Buffer);
       expect(result.length).toBe(5);
-      
+
       const call = mockFetch.mock.calls[0];
       const url = call[0] as string;
       expect(url).toContain("/cp");
@@ -285,7 +293,7 @@ describe("AgentClient", () => {
       } as Response);
 
       const client = new AgentClient({ ipAddress: "10.0.100.2" });
-      
+
       try {
         await client.download("/nonexistent.txt");
         expect(false).toBe(true); // Should not reach here
@@ -304,7 +312,7 @@ describe("AgentClient", () => {
       } as Response);
 
       const client = new AgentClient({ ipAddress: "10.0.100.2" });
-      
+
       try {
         await client.download("/some/file.txt");
         expect(false).toBe(true); // Should not reach here
@@ -320,7 +328,7 @@ describe("AgentClient", () => {
       mockFetch.mockRejectedValue(new Error("Connection refused"));
 
       const client = new AgentClient({ ipAddress: "10.0.100.2" });
-      
+
       try {
         await client.exec("ls");
         expect(false).toBe(true); // Should not reach here

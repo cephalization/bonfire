@@ -65,15 +65,14 @@ class MockNetworkService {
     this.allocateCalls.push(vmId);
     return {
       tapDevice: `tap-${vmId}`,
-      macAddress: `02:00:00:00:00:${Math.floor(Math.random() * 99 + 1).toString().padStart(2, "0")}`,
+      macAddress: `02:00:00:00:00:${Math.floor(Math.random() * 99 + 1)
+        .toString()
+        .padStart(2, "0")}`,
       ipAddress: `192.168.100.${Math.floor(Math.random() * 254 + 1)}`,
     };
   }
 
-  async release(resources: {
-    tapDevice?: string;
-    ipAddress?: string;
-  }): Promise<void> {
+  async release(resources: { tapDevice?: string; ipAddress?: string }): Promise<void> {
     this.releaseCalls.push(resources);
   }
 
@@ -503,10 +502,7 @@ describe("VMs API Integration Tests", () => {
       expect(body.success).toBe(true);
 
       // Verify VM was deleted
-      const remaining = await ctx.db
-        .select()
-        .from(vms)
-        .where(eq(vms.id, "vm-to-delete"));
+      const remaining = await ctx.db.select().from(vms).where(eq(vms.id, "vm-to-delete"));
       expect(remaining).toHaveLength(0);
     });
 
@@ -573,10 +569,7 @@ describe("VMs API Integration Tests", () => {
       expect(body.error).toContain("running");
 
       // Verify VM was NOT deleted
-      const remaining = await ctx.db
-        .select()
-        .from(vms)
-        .where(eq(vms.id, "vm-running"));
+      const remaining = await ctx.db.select().from(vms).where(eq(vms.id, "vm-running"));
       expect(remaining).toHaveLength(1);
     });
 
@@ -719,7 +712,9 @@ describe("VMs API Integration Tests", () => {
 
       // Verify stop was called with vmId for pipe cleanup
       expect(ctx.mockFirecracker.stopCalls).toHaveLength(1);
-      expect(ctx.mockFirecracker.stopCalls[0].socketPath).toBe("/tmp/bonfire-test/vm-stop-pipe.sock");
+      expect(ctx.mockFirecracker.stopCalls[0].socketPath).toBe(
+        "/tmp/bonfire-test/vm-stop-pipe.sock"
+      );
       expect(ctx.mockFirecracker.stopCalls[0].pid).toBe(12345);
       expect(ctx.mockFirecracker.stopCalls[0].options).toBeUndefined();
     });

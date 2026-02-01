@@ -6,16 +6,13 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { handleLoginCommand } from "./login.js";
 
 // Mock fetch for testing
-const mockFetch = async (
-  url: string,
-  options?: RequestInit
-): Promise<Response> => {
+const mockFetch = async (url: string, options?: RequestInit): Promise<Response> => {
   const urlObj = new URL(url);
   const path = urlObj.pathname;
 
   if (path === "/api/auth/sign-in/email" && options?.method === "POST") {
     const body = JSON.parse(options.body as string);
-    
+
     // Simulate successful login
     if (body.email === "test@example.com" && body.password === "password123") {
       return new Response(
@@ -29,7 +26,7 @@ const mockFetch = async (
         { status: 200, headers: { "Content-Type": "application/json" } }
       );
     }
-    
+
     // Simulate failed login
     return new Response(
       JSON.stringify({
@@ -39,10 +36,10 @@ const mockFetch = async (
     );
   }
 
-  return new Response(
-    JSON.stringify({ error: "Not found" }),
-    { status: 404, headers: { "Content-Type": "application/json" } }
-  );
+  return new Response(JSON.stringify({ error: "Not found" }), {
+    status: 404,
+    headers: { "Content-Type": "application/json" },
+  });
 };
 
 describe("handleLoginCommand", () => {

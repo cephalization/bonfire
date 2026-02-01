@@ -55,9 +55,7 @@ export class ShellConnectionError extends ShellError {
  * The Slicer agent provides a shell endpoint at /vm/{hostname}/shell that
  * streams terminal data bidirectionally.
  */
-export async function connectToShell(
-  options: ShellConnectionOptions
-): Promise<ShellStream> {
+export async function connectToShell(options: ShellConnectionOptions): Promise<ShellStream> {
   const port = options.port ?? 8080;
   const timeoutMs = options.timeoutMs ?? 30000;
 
@@ -69,9 +67,7 @@ export async function connectToShell(
 
   return new Promise((resolve, reject) => {
     const timeoutId = setTimeout(() => {
-      reject(new ShellConnectionError(
-        `Connection timed out after ${timeoutMs}ms`
-      ));
+      reject(new ShellConnectionError(`Connection timed out after ${timeoutMs}ms`));
     }, timeoutMs);
 
     let ws: WebSocket | null = null;
@@ -170,10 +166,12 @@ export async function connectToShell(
       };
     } catch (error) {
       clearTimeout(timeoutId);
-      reject(new ShellConnectionError(
-        "Failed to create WebSocket connection",
-        error instanceof Error ? error : undefined
-      ));
+      reject(
+        new ShellConnectionError(
+          "Failed to create WebSocket connection",
+          error instanceof Error ? error : undefined
+        )
+      );
     }
   });
 }
@@ -195,7 +193,9 @@ export function createShellConnection(
  * Parse a terminal resize message from client.
  * Supports both JSON format {"cols": 80, "rows": 24} and legacy format.
  */
-export function parseResizeMessage(data: string | Uint8Array): { cols: number; rows: number } | null {
+export function parseResizeMessage(
+  data: string | Uint8Array
+): { cols: number; rows: number } | null {
   try {
     const text = typeof data === "string" ? data : new TextDecoder().decode(data);
     const parsed = JSON.parse(text);

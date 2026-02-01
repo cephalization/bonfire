@@ -113,7 +113,7 @@ describe("VM Lifecycle (E2E)", () => {
       const response = await fetch(`${API_URL}/api/images/quickstart`, {
         method: "POST",
         headers: {
-          "Cookie": cookie,
+          Cookie: cookie,
         },
       });
       if (!response.ok) {

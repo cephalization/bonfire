@@ -46,9 +46,7 @@ describe("GET /api/openapi.json", () => {
 
     // Verify responses
     expect(spec.paths["/health"].get.responses["200"]).toBeDefined();
-    expect(spec.paths["/health"].get.responses["200"].description).toBe(
-      "API is healthy"
-    );
+    expect(spec.paths["/health"].get.responses["200"].description).toBe("API is healthy");
   });
 
   it("should define HealthResponse schema", async () => {
@@ -64,8 +62,6 @@ describe("GET /api/openapi.json", () => {
 
     // Verify HealthResponse schema exists
     expect(spec.components.schemas.HealthResponse).toBeDefined();
-    expect(
-      spec.components.schemas.HealthResponse.properties.status
-    ).toBeDefined();
+    expect(spec.components.schemas.HealthResponse.properties.status).toBeDefined();
   });
 });

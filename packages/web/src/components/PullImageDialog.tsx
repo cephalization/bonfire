@@ -29,7 +29,7 @@ export function PullImageDialog({ onSuccess, children }: PullImageDialogProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!reference.trim()) {
       setError("Image reference is required");
       return;
@@ -43,7 +43,7 @@ export function PullImageDialog({ onSuccess, children }: PullImageDialogProps) {
       const image = await pullImage({ reference: reference.trim() });
       setStatus("Image pulled successfully!");
       onSuccess?.(image);
-      
+
       // Close dialog after a brief delay to show success
       setTimeout(() => {
         setOpen(false);
@@ -52,9 +52,7 @@ export function PullImageDialog({ onSuccess, children }: PullImageDialogProps) {
       }, 1000);
     } catch (err) {
       const message =
-        err instanceof BonfireAPIError
-          ? err.message
-          : "Failed to pull image. Please try again.";
+        err instanceof BonfireAPIError ? err.message : "Failed to pull image. Please try again.";
       setError(message);
       setStatus("");
     } finally {
@@ -71,7 +69,7 @@ export function PullImageDialog({ onSuccess, children }: PullImageDialogProps) {
       const image = await quickStartImage();
       setStatus("Quick start image downloaded successfully!");
       onSuccess?.(image);
-      
+
       // Close dialog after a brief delay to show success
       setTimeout(() => {
         setOpen(false);
@@ -129,7 +127,8 @@ export function PullImageDialog({ onSuccess, children }: PullImageDialogProps) {
                 Quick Start
               </h4>
               <p className="mb-3 text-xs text-muted-foreground">
-                New to Bonfire? Download our pre-configured Ubuntu 24.04 image to get started immediately.
+                New to Bonfire? Download our pre-configured Ubuntu 24.04 image to get started
+                immediately.
               </p>
               <Button
                 type="button"

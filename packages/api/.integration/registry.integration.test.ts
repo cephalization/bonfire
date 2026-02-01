@@ -30,8 +30,7 @@ const itNetwork = networkEnabled ? it : it.skip;
 
 // A small public image on ghcr.io for testing
 // This is a real Slicer image - we won't pull full layers, just test the manifest
-const TEST_IMAGE_REF =
-  "ghcr.io/openfaasltd/slicer-systemd:5.10.240-x86_64-latest";
+const TEST_IMAGE_REF = "ghcr.io/openfaasltd/slicer-systemd:5.10.240-x86_64-latest";
 
 describe("RegistryService Integration", () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -82,11 +81,7 @@ describe("RegistryService Integration", () => {
     itNetwork("should fetch manifest from ghcr.io", async () => {
       const parsed = parseReference(TEST_IMAGE_REF);
 
-      const manifest = await fetchManifest(
-        parsed.registry,
-        parsed.repository,
-        parsed.tag
-      );
+      const manifest = await fetchManifest(parsed.registry, parsed.repository, parsed.tag);
 
       // Verify manifest structure
       expect(manifest.schemaVersion).toBe(2);
@@ -104,41 +99,41 @@ describe("RegistryService Integration", () => {
   });
 
   describe("fetchBlob", () => {
-    itNetwork("should fetch a blob from ghcr.io", async () => {
-      const parsed = parseReference(TEST_IMAGE_REF);
+    itNetwork(
+      "should fetch a blob from ghcr.io",
+      async () => {
+        const parsed = parseReference(TEST_IMAGE_REF);
 
-      // First get manifest to find a blob
-      const manifest = await fetchManifest(
-        parsed.registry,
-        parsed.repository,
-        parsed.tag
-      );
+        // First get manifest to find a blob
+        const manifest = await fetchManifest(parsed.registry, parsed.repository, parsed.tag);
 
-      // Fetch the config blob (usually small)
-      const configDigest = manifest.config.digest;
-      const destPath = join(TEST_IMAGES_DIR, "test-config.json");
+        // Fetch the config blob (usually small)
+        const configDigest = manifest.config.digest;
+        const destPath = join(TEST_IMAGES_DIR, "test-config.json");
 
-      let progressCalled = false;
-      await fetchBlob(
-        parsed.registry,
-        parsed.repository,
-        configDigest,
-        destPath,
-        (downloaded, total) => {
-          progressCalled = true;
-          expect(downloaded).toBeGreaterThanOrEqual(0);
-          expect(total).toBeGreaterThanOrEqual(0);
-        }
-      );
+        let progressCalled = false;
+        await fetchBlob(
+          parsed.registry,
+          parsed.repository,
+          configDigest,
+          destPath,
+          (downloaded, total) => {
+            progressCalled = true;
+            expect(downloaded).toBeGreaterThanOrEqual(0);
+            expect(total).toBeGreaterThanOrEqual(0);
+          }
+        );
 
-      // Verify file was created
-      const fileStats = await stat(destPath);
-      expect(fileStats.size).toBeGreaterThan(0);
-      expect(progressCalled).toBe(true);
+        // Verify file was created
+        const fileStats = await stat(destPath);
+        expect(fileStats.size).toBeGreaterThan(0);
+        expect(progressCalled).toBe(true);
 
-      // Clean up
-      await rm(destPath, { force: true });
-    }, 30000); // 30s timeout for network
+        // Clean up
+        await rm(destPath, { force: true });
+      },
+      30000
+    ); // 30s timeout for network
   });
 
   describe("RegistryService.pullImage", () => {
@@ -195,9 +190,7 @@ describe("RegistryService Integration", () => {
 
         // Same ID, updated timestamp
         expect(image2.id).toBe(imageId);
-        expect(secondPulledAt.getTime()).toBeGreaterThanOrEqual(
-          firstPulledAt.getTime()
-        );
+        expect(secondPulledAt.getTime()).toBeGreaterThanOrEqual(firstPulledAt.getTime());
       } catch (error) {
         console.warn("Network test failed, may require connectivity:", error);
       }

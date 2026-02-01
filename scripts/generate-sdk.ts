@@ -137,7 +137,11 @@ function schemaToTypeScript(name: string, schema: Schema, schemas: Record<string
 /**
  * Generate TypeScript type from schema
  */
-function generateTypeFromSchema(schema: Schema, schemas: Record<string, Schema>, indent: number): string {
+function generateTypeFromSchema(
+  schema: Schema,
+  schemas: Record<string, Schema>,
+  indent: number
+): string {
   if (schema.$ref) {
     const refName = schema.$ref.replace("#/components/schemas/", "");
     return toTypeName(refName);
@@ -331,7 +335,7 @@ function generateClient(spec: OpenAPISpec): string {
     " * Do not edit manually.",
     " */",
     "",
-    'import type {',
+    "import type {",
     `  ${typeArray.join(",\n  ")}`,
     '} from "./types";',
     "",
@@ -362,7 +366,7 @@ function generateClient(spec: OpenAPISpec): string {
     "      });",
     "    }",
     "",
-    '    const headers: Record<string, string> = {',
+    "    const headers: Record<string, string> = {",
     '      "Content-Type": "application/json",',
     "    };",
     "",
@@ -464,7 +468,9 @@ function generateClient(spec: OpenAPISpec): string {
 
         const optionsStr = requestOptions.length > 0 ? `, { ${requestOptions.join(", ")} }` : "";
         const returnTypeGeneric = returnType.replace("Promise<", "").replace(">", "");
-        parts.push(`    return this.request<${returnTypeGeneric}>("${method.toUpperCase()}", ${requestPath}${optionsStr});`);
+        parts.push(
+          `    return this.request<${returnTypeGeneric}>("${method.toUpperCase()}", ${requestPath}${optionsStr});`
+        );
         parts.push("  }");
       }
     }
@@ -481,7 +487,9 @@ function toMethodName(operationId: string): string {
   return operationId
     .replace(/[^a-zA-Z0-9]/g, "_")
     .split("_")
-    .map((part, i) => (i === 0 ? part.toLowerCase() : part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()))
+    .map((part, i) =>
+      i === 0 ? part.toLowerCase() : part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()
+    )
     .join("");
 }
 

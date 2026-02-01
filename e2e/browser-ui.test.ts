@@ -121,10 +121,7 @@ async function agentBrowser(
 /**
  * Execute agent-browser command, expecting success
  */
-async function ab(
-  args: string[],
-  options: { timeout?: number } = {}
-): Promise<string> {
+async function ab(args: string[], options: { timeout?: number } = {}): Promise<string> {
   const result = await agentBrowser(args, options);
   if (result.exitCode !== 0) {
     throw new Error(
@@ -219,9 +216,7 @@ async function ensureQuickstartImage(): Promise<void> {
   });
   const images = (await response.json()) as Array<{ reference: string }>;
 
-  const hasQuickstart = images.some((img) =>
-    img.reference.includes("firecracker-quickstart")
-  );
+  const hasQuickstart = images.some((img) => img.reference.includes("firecracker-quickstart"));
 
   if (!hasQuickstart) {
     console.log("Downloading quickstart image via API...");
@@ -230,9 +225,7 @@ async function ensureQuickstartImage(): Promise<void> {
       headers: getAuthHeaders(),
     });
     if (!pullResponse.ok) {
-      throw new Error(
-        `Failed to download quickstart image: ${pullResponse.status}`
-      );
+      throw new Error(`Failed to download quickstart image: ${pullResponse.status}`);
     }
     console.log("Quickstart image downloaded");
   }
@@ -295,49 +288,55 @@ describe("Browser UI E2E", () => {
 
     // Wait for page to load and check if we need to log in
     console.log("Waiting for page to load...");
-    
+
     // Take initial snapshot to see what's on the page
     let snapshot = await ab(["snapshot", "-i"]);
     console.log("Initial page snapshot:", snapshot.substring(0, 500));
-    
+
     // Check if we're on the login page or dashboard
-    if (snapshot.includes("Welcome back") || snapshot.includes("Sign in") || snapshot.includes("credentials")) {
+    if (
+      snapshot.includes("Welcome back") ||
+      snapshot.includes("Sign in") ||
+      snapshot.includes("credentials")
+    ) {
       console.log("Login page detected, authenticating...");
-      
+
       // Find and fill email input (look for input fields)
-      const emailMatch = snapshot.match(/\[ref=([^\]]+)\][^\n]*email/i) || 
-                        snapshot.match(/\[ref=([^\]]+)\][^\n]*input/i);
+      const emailMatch =
+        snapshot.match(/\[ref=([^\]]+)\][^\n]*email/i) ||
+        snapshot.match(/\[ref=([^\]]+)\][^\n]*input/i);
       if (emailMatch) {
         console.log("Filling email field...");
         await ab(["fill", emailMatch[1], AUTH_EMAIL]);
       }
-      
+
       // Take new snapshot after filling email
       snapshot = await ab(["snapshot", "-i"]);
-      
+
       // Find and fill password input
       const passwordMatch = snapshot.match(/\[ref=([^\]]+)\][^\n]*password/i);
       if (passwordMatch) {
         console.log("Filling password field...");
         await ab(["fill", passwordMatch[1], AUTH_PASSWORD]);
       }
-      
+
       // Take new snapshot after filling password
       snapshot = await ab(["snapshot", "-i"]);
-      
+
       // Find and click sign in button
-      const signInMatch = snapshot.match(/\[ref=([^\]]+)\][^\n]*Sign in/i) ||
-                         snapshot.match(/\[ref=([^\]]+)\][^\n]*button/i);
+      const signInMatch =
+        snapshot.match(/\[ref=([^\]]+)\][^\n]*Sign in/i) ||
+        snapshot.match(/\[ref=([^\]]+)\][^\n]*button/i);
       if (signInMatch) {
         console.log("Clicking sign in button...");
         await ab(["click", signInMatch[1]]);
       }
-      
+
       // Wait for redirect to dashboard
       console.log("Waiting for dashboard...");
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      await new Promise((resolve) => setTimeout(resolve, 3000));
       snapshot = await ab(["snapshot", "-i"]);
-      
+
       if (!snapshot.includes("Dashboard") && !snapshot.includes("Create VM")) {
         throw new Error("Failed to log in or reach dashboard");
       }
@@ -454,9 +453,7 @@ describe("Browser UI E2E", () => {
 
       // Verify terminal container is present
       snapshot = await ab(["snapshot", "-i"]);
-      expect(
-        snapshot.includes("terminal") || snapshot.includes("Terminal")
-      ).toBe(true);
+      expect(snapshot.includes("terminal") || snapshot.includes("Terminal")).toBe(true);
     },
     TEST_TIMEOUT
   );
@@ -500,9 +497,7 @@ describe("Browser UI E2E", () => {
 
       // Verify we're still on the VM detail page
       snapshot = await ab(["snapshot", "-i"]);
-      expect(snapshot.includes("vCPU") || snapshot.includes("Memory")).toBe(
-        true
-      );
+      expect(snapshot.includes("vCPU") || snapshot.includes("Memory")).toBe(true);
     },
     TEST_TIMEOUT
   );
@@ -527,9 +522,7 @@ describe("Browser UI E2E", () => {
 
       // Verify terminal is replaced with "VM is stopped" message
       snapshot = await ab(["snapshot", "-i"]);
-      expect(
-        snapshot.includes("VM is stopped") || snapshot.includes("Start the VM")
-      ).toBe(true);
+      expect(snapshot.includes("VM is stopped") || snapshot.includes("Start the VM")).toBe(true);
     },
     TEST_TIMEOUT
   );

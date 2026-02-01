@@ -48,15 +48,17 @@ export async function seedInitialAdmin(
     }
   } catch (error: any) {
     // If user already exists, Better Auth returns an error
-    if (error?.message?.includes("User already exists") || 
-        error?.body?.message?.includes("already exists")) {
+    if (
+      error?.message?.includes("User already exists") ||
+      error?.body?.message?.includes("already exists")
+    ) {
       console.log(`ℹ️  Admin user ${initialAdminEmail} already exists`);
-      
+
       // Ensure the user has admin role
       const existingUser = await db.query.user.findFirst({
         where: eq(schema.user.email, initialAdminEmail),
       });
-      
+
       if (existingUser && existingUser.role !== "admin") {
         await db
           .update(schema.user)
@@ -66,7 +68,7 @@ export async function seedInitialAdmin(
       }
       return;
     }
-    
+
     console.error("❌ Failed to seed initial admin user:", error);
     // Don't throw - allow server to start even if seeding fails
   }

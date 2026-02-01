@@ -93,12 +93,7 @@ export async function createPipe(path: string): Promise<void> {
       if (code === 0) {
         resolve();
       } else {
-        reject(
-          new SerialConsoleError(
-            `Failed to create pipe at ${path}`,
-            "PIPE_CREATE_FAILED"
-          )
-        );
+        reject(new SerialConsoleError(`Failed to create pipe at ${path}`, "PIPE_CREATE_FAILED"));
       }
     });
     proc.on("error", (err) => {
@@ -145,9 +140,7 @@ export async function removePipe(path: string): Promise<void> {
  * IMPORTANT: Pipes must already exist (created during VM spawn). This function
  * does NOT create new pipes - it connects to existing ones.
  */
-export async function create(
-  options: SerialConsoleOptions
-): Promise<SerialConsole> {
+export async function create(options: SerialConsoleOptions): Promise<SerialConsole> {
   const pipeDir = options.pipeDir ?? DEFAULTS.pipeDir;
   const paths = generatePipePaths(options.vmId, pipeDir);
 
@@ -192,7 +185,7 @@ export async function create(
    * Note: Opening a FIFO for reading blocks until a writer connects
    */
   let readHandle: FileHandle | null = null;
-  
+
   const openStdout = async (): Promise<void> => {
     if (readHandle !== null) return;
 
@@ -203,15 +196,15 @@ export async function create(
 
     const readLoop = async () => {
       const buffer = new Uint8Array(4096);
-      
+
       try {
         while (active && readHandle) {
           // Read from the pipe using the file handle
           const result = await readHandle.read(buffer, 0, buffer.length);
-          
+
           if (result.bytesRead === 0) {
             // EOF or no data - wait a bit and retry
-            await new Promise(resolve => setTimeout(resolve, 10));
+            await new Promise((resolve) => setTimeout(resolve, 10));
             continue;
           }
 
@@ -223,19 +216,13 @@ export async function create(
             try {
               callback(data);
             } catch (err) {
-              console.error(
-                `[SerialConsole:${options.vmId}] Callback error:`,
-                err
-              );
+              console.error(`[SerialConsole:${options.vmId}] Callback error:`, err);
             }
           }
         }
       } catch (err) {
         if (active) {
-          console.error(
-            `[SerialConsole:${options.vmId}] Read error:`,
-            err
-          );
+          console.error(`[SerialConsole:${options.vmId}] Read error:`, err);
         }
       }
     };
@@ -246,21 +233,14 @@ export async function create(
 
   const write = async (data: string | Uint8Array): Promise<void> => {
     if (!active) {
-      throw new SerialConsoleError(
-        "Serial console is not active",
-        "CONSOLE_INACTIVE"
-      );
+      throw new SerialConsoleError("Serial console is not active", "CONSOLE_INACTIVE");
     }
 
     if (!writeHandle) {
-      throw new SerialConsoleError(
-        "Write pipe not initialized",
-        "PIPE_NOT_INITIALIZED"
-      );
+      throw new SerialConsoleError("Write pipe not initialized", "PIPE_NOT_INITIALIZED");
     }
 
-    const bytes =
-      typeof data === "string" ? new TextEncoder().encode(data) : data;
+    const bytes = typeof data === "string" ? new TextEncoder().encode(data) : data;
 
     try {
       // Write to the stdout pipe using the open file handle
@@ -331,9 +311,7 @@ export async function create(
  * Create pipes only (without starting the console)
  * Used when spawning Firecracker to ensure pipes exist before the process starts
  */
-export async function createPipes(
-  options: SerialConsoleOptions
-): Promise<SerialConsolePaths> {
+export async function createPipes(options: SerialConsoleOptions): Promise<SerialConsolePaths> {
   const pipeDir = options.pipeDir ?? DEFAULTS.pipeDir;
   const paths = generatePipePaths(options.vmId, pipeDir);
 
@@ -351,9 +329,7 @@ export async function createPipes(
 /**
  * Clean up pipes for a VM
  */
-export async function cleanupPipes(
-  options: SerialConsoleOptions
-): Promise<void> {
+export async function cleanupPipes(options: SerialConsoleOptions): Promise<void> {
   const pipeDir = options.pipeDir ?? DEFAULTS.pipeDir;
   const paths = generatePipePaths(options.vmId, pipeDir);
 

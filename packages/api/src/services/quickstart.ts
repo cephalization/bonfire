@@ -54,18 +54,18 @@ async function downloadFile(
   onProgress?: (downloaded: number, total: number) => void
 ): Promise<void> {
   const response = await fetch(url);
-  
+
   if (!response.ok) {
     throw new Error(`Failed to download ${url}: ${response.status} ${response.statusText}`);
   }
-  
+
   const totalSize = parseInt(response.headers.get("content-length") || "0", 10);
   const blob = await response.blob();
   const arrayBuffer = await blob.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
-  
+
   await writeFile(destPath, buffer);
-  
+
   if (onProgress) {
     onProgress(buffer.length, totalSize || buffer.length);
   }
@@ -92,28 +92,25 @@ export class QuickStartService {
    * @returns The downloaded image metadata
    */
   async downloadQuickStartImage(options?: {
-    onProgress?: (progress: { 
-      stage: string; 
-      downloadedBytes: number; 
-      totalBytes: number; 
+    onProgress?: (progress: {
+      stage: string;
+      downloadedBytes: number;
+      totalBytes: number;
       percentage: number;
     }) => void;
   }): Promise<QuickStartImage> {
     const { onProgress } = options || {};
-    
+
     const reference = "firecracker-quickstart:ubuntu-24.04";
     const imageId = createHash("sha256").update(reference).digest("hex");
     const imageDir = join(this.imagesDir, imageId);
-    
+
     // Ensure directory exists
     await mkdir(imageDir, { recursive: true });
 
     // Check if already exists
-    const [existing] = await this.db
-      .select()
-      .from(images)
-      .where(eq(images.id, imageId));
-    
+    const [existing] = await this.db.select().from(images).where(eq(images.id, imageId));
+
     if (existing) {
       return {
         id: existing.id,

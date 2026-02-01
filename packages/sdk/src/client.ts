@@ -16,7 +16,7 @@ import type {
 
 export interface ClientConfig {
   baseUrl?: string;
-  token?: string;  // Bearer token (optional)
+  token?: string; // Bearer token (optional)
   cookie?: string; // Cookie header value (optional)
 }
 

@@ -97,17 +97,17 @@ describe("getVMPipePaths", () => {
   it("returns paths consistent with generatePipePaths", () => {
     const vmId = "consistency-test-vm";
     const pipeDir = "/custom/pipe/dir";
-    
+
     const processPaths = getVMPipePaths(vmId, pipeDir);
     const serialPaths = generatePipePaths(vmId, pipeDir);
-    
+
     expect(processPaths.stdinPath).toBe(serialPaths.stdin);
     expect(processPaths.stdoutPath).toBe(serialPaths.stdout);
   });
 
   it("handles vmId with hyphens and numbers", () => {
     const paths = getVMPipePaths("vm-12345-abc-def");
-    
+
     expect(paths.stdinPath).toContain("vm-12345-abc-def.stdin");
     expect(paths.stdoutPath).toContain("vm-12345-abc-def.stdout");
   });
@@ -115,7 +115,7 @@ describe("getVMPipePaths", () => {
   it("handles UUID-style vmId", () => {
     const uuid = "550e8400-e29b-41d4-a716-446655440000";
     const paths = getVMPipePaths(uuid);
-    
+
     expect(paths.stdinPath).toContain(`${uuid}.stdin`);
     expect(paths.stdoutPath).toContain(`${uuid}.stdout`);
   });
@@ -139,19 +139,19 @@ describe("FirecrackerProcess interface", () => {
   it("pipe paths follow naming convention", () => {
     const vmId = "test-vm";
     const socketDir = "/var/lib/bonfire/vms";
-    
+
     // When spawned, paths should follow pattern: {socketDir}/{vmId}.{suffix}
     const expectedStdin = `${socketDir}/${vmId}.stdin`;
     const expectedStdout = `${socketDir}/${vmId}.stdout`;
     const expectedSocket = `${socketDir}/${vmId}.sock`;
-    
+
     const process: FirecrackerProcess = {
       pid: 9999,
       socketPath: expectedSocket,
       stdinPipePath: expectedStdin,
       stdoutPipePath: expectedStdout,
     };
-    
+
     expect(process.socketPath).toBe(expectedSocket);
     expect(process.stdinPipePath).toBe(expectedStdin);
     expect(process.stdoutPipePath).toBe(expectedStdout);
@@ -163,7 +163,7 @@ describe("SpawnOptions interface", () => {
     const options: SpawnOptions = {
       vmId: "required-vm-id",
     };
-    
+
     expect(options.vmId).toBe("required-vm-id");
     expect(options.socketDir).toBeUndefined();
     expect(options.binaryPath).toBeUndefined();
@@ -175,7 +175,7 @@ describe("SpawnOptions interface", () => {
       socketDir: "/custom/socket/dir",
       binaryPath: "/usr/local/bin/firecracker",
     };
-    
+
     expect(options.vmId).toBe("my-vm");
     expect(options.socketDir).toBe("/custom/socket/dir");
     expect(options.binaryPath).toBe("/usr/local/bin/firecracker");
@@ -185,7 +185,7 @@ describe("SpawnOptions interface", () => {
 describe("StopOptions interface", () => {
   it("all fields are optional", () => {
     const options: StopOptions = {};
-    
+
     expect(options.gracefulTimeoutMs).toBeUndefined();
     expect(options.sigtermTimeoutMs).toBeUndefined();
     expect(options.vmId).toBeUndefined();
@@ -197,7 +197,7 @@ describe("StopOptions interface", () => {
       vmId: "cleanup-vm",
       pipeDir: "/tmp/cleanup-test",
     };
-    
+
     expect(options.vmId).toBe("cleanup-vm");
     expect(options.pipeDir).toBe("/tmp/cleanup-test");
   });
@@ -207,7 +207,7 @@ describe("StopOptions interface", () => {
       gracefulTimeoutMs: 60000,
       sigtermTimeoutMs: 5000,
     };
-    
+
     expect(options.gracefulTimeoutMs).toBe(60000);
     expect(options.sigtermTimeoutMs).toBe(5000);
   });
@@ -217,9 +217,9 @@ describe("pipe creation behavior", () => {
   it("pipes are created in socketDir with vmId prefix", () => {
     const vmId = "pipe-test-vm";
     const socketDir = "/var/lib/bonfire/vms";
-    
+
     const paths = getVMPipePaths(vmId, socketDir);
-    
+
     // Verify naming convention
     expect(paths.stdinPath).toBe(`${socketDir}/${vmId}.stdin`);
     expect(paths.stdoutPath).toBe(`${socketDir}/${vmId}.stdout`);
@@ -245,12 +245,12 @@ describe("stdio redirection configuration", () => {
     // - fd 0 (stdin): reads from stdout pipe (input TO VM)
     // - fd 1 (stdout): writes to stdin pipe (output FROM VM)
     // - fd 2 (stderr): pipe for debugging
-    
+
     // This test documents the expected configuration
     const stdioCconfig = ["stdout_fd", "stdin_fd", "pipe"];
     expect(stdioCconfig[0]).toBe("stdout_fd"); // stdin (fd 0) <- from stdout pipe
     expect(stdioCconfig[1]).toBe("stdin_fd"); // stdout (fd 1) -> to stdin pipe
-    expect(stdioCconfig[2]).toBe("pipe");     // stderr (fd 2) -> captured
+    expect(stdioCconfig[2]).toBe("pipe"); // stderr (fd 2) -> captured
   });
 });
 
@@ -262,9 +262,9 @@ describe("pipe cleanup on VM stop", () => {
   it("cleanup targets correct pipe paths", () => {
     const vmId = "cleanup-target";
     const pipeDir = "/tmp/cleanup";
-    
+
     const paths = getVMPipePaths(vmId, pipeDir);
-    
+
     // Cleanup should target these paths
     expect(paths.stdinPath).toBe("/tmp/cleanup/cleanup-target.stdin");
     expect(paths.stdoutPath).toBe("/tmp/cleanup/cleanup-target.stdout");
@@ -277,7 +277,7 @@ describe("pipe creation failure handling", () => {
       "Failed to create pipe at /tmp/test.stdin",
       "PIPE_CREATE_FAILED"
     );
-    
+
     expect(error).toBeInstanceOf(Error);
     expect(error).toBeInstanceOf(SerialConsoleError);
     expect(error.code).toBe("PIPE_CREATE_FAILED");
@@ -291,7 +291,7 @@ describe("pipe creation failure handling", () => {
       "PIPE_CREATE_ERROR",
       cause
     );
-    
+
     expect(error.cause).toBe(cause);
     expect(error.code).toBe("PIPE_CREATE_ERROR");
   });
@@ -334,7 +334,7 @@ describe("error scenarios", () => {
       pid: undefined,
       socketPath: "/tmp/test.sock",
     };
-    
+
     expect(mockFailedSpawn.pid).toBeUndefined();
   });
 
@@ -342,7 +342,7 @@ describe("error scenarios", () => {
     // If process exits immediately with code !== 0, spawn should throw
     const exitCode = 1;
     const message = `Firecracker process exited prematurely with code ${exitCode}`;
-    
+
     expect(message).toContain("exited prematurely");
     expect(message).toContain("1");
   });
@@ -351,7 +351,7 @@ describe("error scenarios", () => {
     // If child.killed is true before we return, spawn failed
     const killed = true;
     const message = "Process was killed during startup";
-    
+
     expect(killed).toBe(true);
     expect(message).toContain("killed");
   });
@@ -362,7 +362,7 @@ describe("cleanup behavior", () => {
     // cleanupVMPipes should not throw, even if cleanup fails
     // This prevents stop/delete from failing due to cleanup issues
     expect(typeof cleanupVMPipes).toBe("function");
-    
+
     // The function should complete without throwing for non-existent pipes
     // We can't easily test this without actually calling it, but we can
     // verify the function exists and is the expected type
@@ -376,7 +376,7 @@ describe("cleanup behavior", () => {
       closeStdoutFd: true,
       removePipes: true,
     };
-    
+
     expect(cleanup.closeStdinFd).toBe(true);
     expect(cleanup.closeStdoutFd).toBe(true);
     expect(cleanup.removePipes).toBe(true);

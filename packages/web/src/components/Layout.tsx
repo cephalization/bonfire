@@ -220,12 +220,7 @@ function MobileMenu({
         <nav className="flex-1 space-y-1 p-4">
           {navItems.map((item) => (
             <DrawerClose key={item.path} asChild>
-              <NavLink
-                to={item.path}
-                icon={item.icon}
-                onClick={handleNavClick}
-                mobile
-              >
+              <NavLink to={item.path} icon={item.icon} onClick={handleNavClick} mobile>
                 {item.label}
               </NavLink>
             </DrawerClose>

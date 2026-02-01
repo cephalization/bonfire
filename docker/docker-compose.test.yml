@@ -75,7 +75,8 @@ services:
       - BONFIRE_SUBNET=10.0.200.0/24
       - BONFIRE_GATEWAY=10.0.200.1
       - BONFIRE_API_URL=http://localhost:3000
-    command: ["sh", "-c", "chmod +x /app/scripts/run-e2e-combined.sh && /app/scripts/run-e2e-combined.sh"]
+    command:
+      ["sh", "-c", "chmod +x /app/scripts/run-e2e-combined.sh && /app/scripts/run-e2e-combined.sh"]
     networks:
       - bonfire-test
 

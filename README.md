@@ -35,12 +35,14 @@ Docker is the recommended way to run Bonfire as it provides isolation and a cons
 ### Installation
 
 1. Clone the repository:
+
 ```bash
 git clone https://github.com/cephalization/bonfire.git
 cd bonfire
 ```
 
 2. Build and run with Docker Compose:
+
 ```bash
 docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml up
 ```
@@ -52,6 +54,7 @@ docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml up
    - Password: `admin123`
 
 This starts both API and web servers with:
+
 - Hot reload for both API and web code
 - Source code mounted as volumes for live editing
 - KVM device access for VM management
@@ -62,6 +65,7 @@ This starts both API and web servers with:
 > **Warning**: Running directly on bare metal modifies system networking configuration, installs system packages, and requires root access. This approach carries more risk and is only recommended for advanced users who understand the implications.
 
 **Prerequisites:**
+
 - Linux host with KVM support (`/dev/kvm` must exist)
 - Node.js 24+ (use corepack + pnpm)
 - Root access (for network/VM management)
@@ -69,23 +73,27 @@ This starts both API and web servers with:
 **Steps:**
 
 1. Clone the repository:
+
 ```bash
 git clone https://github.com/cephalization/bonfire.git
 cd bonfire
 ```
 
 2. Install dependencies:
+
 ```bash
 corepack enable
 pnpm install
 ```
 
 3. Run the host setup script (requires root - installs Firecracker, configures networking):
+
 ```bash
 sudo ./scripts/setup.sh  # installs Firecracker, sets up VM bridge/NAT, creates .env
 ```
 
 4. Start the development servers:
+
 ```bash
 pnpm run dev  # runs both API and web servers in parallel via mprocs
 ```
@@ -229,19 +237,19 @@ pnpm run build -- --filter=@bonfire/api
 
 ## Default Configuration
 
-| Setting | Default Value |
-|---------|---------------|
-| VM vCPUs | 1 |
-| VM Memory | 512 MiB |
-| Bridge Name | `bonfire0` |
-| Bridge Subnet | `10.0.100.0/24` |
-| Gateway IP | `10.0.100.1` |
-| VM IP Range | `10.0.100.2` - `10.0.100.254` |
-| Images Directory | `/var/lib/bonfire/images/` |
-| VMs Directory | `/var/lib/bonfire/vms/` |
-| Database Path | `/var/lib/bonfire/bonfire.db` |
-| API Port | `3000` |
-| Default Image | `firecracker-quickstart:ubuntu-24.04` |
+| Setting          | Default Value                         |
+| ---------------- | ------------------------------------- |
+| VM vCPUs         | 1                                     |
+| VM Memory        | 512 MiB                               |
+| Bridge Name      | `bonfire0`                            |
+| Bridge Subnet    | `10.0.100.0/24`                       |
+| Gateway IP       | `10.0.100.1`                          |
+| VM IP Range      | `10.0.100.2` - `10.0.100.254`         |
+| Images Directory | `/var/lib/bonfire/images/`            |
+| VMs Directory    | `/var/lib/bonfire/vms/`               |
+| Database Path    | `/var/lib/bonfire/bonfire.db`         |
+| API Port         | `3000`                                |
+| Default Image    | `firecracker-quickstart:ubuntu-24.04` |
 
 ## Documentation
 

@@ -137,9 +137,7 @@ type StopOptions = {
   sigtermTimeoutMs?: number;
 };
 
-async function spawnFirecracker(
-  options: SpawnOptions
-): Promise<FirecrackerProcess> {
+async function spawnFirecracker(options: SpawnOptions): Promise<FirecrackerProcess> {
   const socketDir = options.socketDir ?? "/tmp/bonfire-test";
   return {
     pid: 12345,
@@ -149,10 +147,7 @@ async function spawnFirecracker(
   };
 }
 
-async function configureVMProcess(
-  socketPath: string,
-  config: VMConfiguration
-): Promise<void> {}
+async function configureVMProcess(socketPath: string, config: VMConfiguration): Promise<void> {}
 
 async function startVMProcess(socketPath: string): Promise<void> {}
 
@@ -266,9 +261,7 @@ async function release(resources: Partial<NetworkResources>): Promise<void> {}
 /**
  * Creates a mock Network service with IP allocation tracking
  */
-export function createMockNetworkService(
-  subnet: string = "10.0.100.0/24"
-): MockNetworkService {
+export function createMockNetworkService(subnet: string = "10.0.100.0/24"): MockNetworkService {
   // Internal state for this mock instance
   const state = {
     allocatedIPs: new Set<string>(),
@@ -493,9 +486,7 @@ export interface TestApp {
  * cleanup();
  * ```
  */
-export async function createTestApp(
-  config: TestAppConfig = {}
-): Promise<TestApp> {
+export async function createTestApp(config: TestAppConfig = {}): Promise<TestApp> {
   // Create fresh temp database
   const dbPath = `/tmp/bonfire-test-${randomUUID()}.db`;
   const sqlite = new Database(dbPath);
