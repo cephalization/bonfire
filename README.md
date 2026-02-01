@@ -1,5 +1,7 @@
 # Bonfire
 
+> **Warning**: This is an experimental project intended for learning and exploration. It is not production-ready and may have security vulnerabilities, bugs, or breaking changes. Use at your own risk.
+
 A self-hosted platform for ephemeral Firecracker microVMs, optimized for remote code development and execution.
 
 ## Features
@@ -21,19 +23,54 @@ A self-hosted platform for ephemeral Firecracker microVMs, optimized for remote 
 - **CLI**: Clack
 - **VMs**: Firecracker microVMs
 
-## Quick Start
+## Quick Start (Docker - Recommended)
+
+Docker is the recommended way to run Bonfire as it provides isolation and a consistent environment.
 
 ### Prerequisites
 
 - Linux host with KVM support (`/dev/kvm` must exist)
-- Node.js 24+ (use corepack + pnpm)
-- Root access (for network/VM management)
+- Docker and Docker Compose
 
 ### Installation
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/bonfire.git
+git clone https://github.com/cephalization/bonfire.git
+cd bonfire
+```
+
+2. Build and run with Docker Compose:
+```bash
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml up
+```
+
+3. Open http://localhost:5173 in your browser
+
+4. Log in with the default admin credentials:
+   - Email: `admin@example.com`
+   - Password: `changeme123`
+
+This starts both API and web servers with:
+- Hot reload for both API and web code
+- Source code mounted as volumes for live editing
+- KVM device access for VM management
+- Ports 3000 (API) and 5173 (Web UI) exposed
+
+### Alternative: Bare Metal Installation
+
+> **Warning**: Running directly on bare metal modifies system networking configuration, installs system packages, and requires root access. This approach carries more risk and is only recommended for advanced users who understand the implications.
+
+**Prerequisites:**
+- Linux host with KVM support (`/dev/kvm` must exist)
+- Node.js 24+ (use corepack + pnpm)
+- Root access (for network/VM management)
+
+**Steps:**
+
+1. Clone the repository:
+```bash
+git clone https://github.com/cephalization/bonfire.git
 cd bonfire
 ```
 
@@ -62,21 +99,6 @@ pnpm run dev  # runs both API and web servers in parallel via mprocs
 The mprocs TUI will show both processes. Use arrow keys to switch between them,
 and press `q` to quit all processes.
 
-### Alternative: Docker Development
-
-If you prefer to use Docker for development:
-
-```bash
-# Build and run with Docker Compose (includes hot reload)
-docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml up
-```
-
-This starts both API and web servers with:
-- Hot reload for both API and web code
-- Source code mounted as volumes for live editing
-- KVM device access for VM management
-- Ports 3000 (API) and 5173 (Web UI) exposed
-
 ## Development Setup
 
 ### Monorepo Structure
@@ -100,14 +122,14 @@ Review and update the values as needed:
 
 ```env
 DB_PATH=/var/lib/bonfire/bonfire.db
-BETTER_AUTH_SECRET=change-me-in-production-32-chars-min
+BETTER_AUTH_SECRET=<generate-a-secure-random-string>
 BETTER_AUTH_URL=http://localhost:3000
 PORT=3000
 NODE_ENV=development
 
 # Initial admin user (required for first login)
 INITIAL_ADMIN_EMAIL=admin@example.com
-INITIAL_ADMIN_PASSWORD=changeme123
+INITIAL_ADMIN_PASSWORD=<choose-a-strong-password>
 INITIAL_ADMIN_NAME=Admin
 ```
 
@@ -115,7 +137,7 @@ INITIAL_ADMIN_NAME=Admin
 
 Bonfire uses Better Auth for authentication with email/password. On first startup, if `INITIAL_ADMIN_EMAIL` and `INITIAL_ADMIN_PASSWORD` are configured, an admin user will be automatically created.
 
-**Important**: Change the default admin credentials before deploying to production!
+> **Security Note**: The default credentials (`admin@example.com` / `changeme123`) are for local development only. Always change these values in your `.env` file before exposing the service to any network.
 
 - Users can have either `admin` or `member` role
 - Admin users have full permissions (all API endpoints)
@@ -228,7 +250,7 @@ pnpm run build -- --filter=@bonfire/api
 
 ## Status
 
-Under active development. See [PLAN.md](./PLAN.md) for implementation status.
+This is an experimental learning project under active development. Expect breaking changes, incomplete features, and potential security issues. See [PLAN.md](./PLAN.md) for implementation status.
 
 ## License
 
