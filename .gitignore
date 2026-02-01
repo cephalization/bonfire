@@ -38,6 +38,10 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# Accidental per-package pnpm state (should not be committed)
+packages/**/.pnpm-store/
+packages/**/pnpm-lock.yaml
+
 # Runtime data
 pids/
 *.pid

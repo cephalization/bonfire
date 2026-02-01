@@ -58,20 +58,24 @@ services:
 
   web:
     build:
-      context: ../packages/web
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: docker/Dockerfile.web
     image: bonfire-web:dev
     ports:
       - "5173:5173"      # Vite dev server (Web UI)
       - "5174:5174"      # Vite HMR websocket
     volumes:
       # Mount source code for hot reload
-      - ../packages/web:/app:cached
+      - ../packages/web:/app/packages/web:cached
       # Preserve node_modules inside container
       - /app/node_modules
+      - /app/packages/web/node_modules
     environment:
       - NODE_ENV=development
       - PROXY_API_TARGET=http://api:3000
+      - COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+    # Override command to run in development mode
+    command: ["sh", "-c", "cd /app && corepack enable && corepack prepare pnpm@10.0.0 --activate && pnpm install && pnpm --filter @bonfire/web dev -- --host --clearScreen false"]
     # Use root for development to avoid permission issues with volume mounts
     user: root
     # Development-specific settings
