@@ -23,11 +23,6 @@ services:
       - ../packages/api:/app/packages/api:cached
       - ../packages/sdk:/app/packages/sdk:cached
       - ../packages/cli:/app/packages/cli:cached
-      # Preserve node_modules inside container
-      - /app/node_modules
-      - /app/packages/api/node_modules
-      - /app/packages/sdk/node_modules
-      - /app/packages/cli/node_modules
       # Named volume for data persistence
       - bonfire-data:/var/lib/bonfire
       # KVM device for VM management
@@ -67,9 +62,6 @@ services:
     volumes:
       # Mount source code for hot reload
       - ../packages/web:/app/packages/web:cached
-      # Preserve node_modules inside container
-      - /app/node_modules
-      - /app/packages/web/node_modules
     environment:
       - NODE_ENV=development
       - PROXY_API_TARGET=http://api:3000
