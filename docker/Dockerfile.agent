@@ -1,0 +1,188 @@
+# Agent-Ready VM Image Dockerfile
+# Builds a Firecracker-compatible rootfs with OpenCode and dependencies
+#
+# Usage:
+#   docker build -f docker/Dockerfile.agent -t bonfire-agent-image .
+#   docker create --name agent-rootfs bonfire-agent-image
+#   docker cp agent-rootfs:/agent-rootfs.ext4 ./agent-rootfs.ext4
+#   docker rm agent-rootfs
+#
+# The resulting agent-rootfs.ext4 can be used with Firecracker
+
+FROM ubuntu:24.04 AS builder
+
+# Prevent interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install base system packages
+RUN apt-get update && apt-get install -y \
+    # Core utilities
+    curl \
+    wget \
+    ca-certificates \
+    git \
+    openssh-server \
+    sudo \
+    systemd \
+    systemd-sysv \
+    # Build tools
+    build-essential \
+    python3 \
+    python3-pip \
+    pkg-config \
+    # Common libraries
+    libssl-dev \
+    zlib1g-dev \
+    libffi-dev \
+    # Network tools
+    iproute2 \
+    iptables \
+    iputils-ping \
+    net-tools \
+    # Text editors (useful for debugging)
+    nano \
+    vim-tiny \
+    # Compression tools
+    xz-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+# Configure SSH server
+RUN mkdir -p /var/run/sshd \
+    && sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin no/' /etc/ssh/sshd_config \
+    && sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config \
+    && sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config \
+    && echo "AllowUsers agent" >> /etc/ssh/sshd_config
+
+# Create agent user (uid 1000)
+# Remove ubuntu user if it exists (Ubuntu 24.04 creates uid 1000 by default)
+RUN if id -u 1000 > /dev/null 2>&1; then userdel -r $(id -un 1000) 2>/dev/null || true; fi \
+    && useradd -m -u 1000 -s /bin/bash agent \
+    && mkdir -p /home/agent/.ssh \
+    && chmod 700 /home/agent/.ssh
+
+# Add agent to sudoers with passwordless sudo
+RUN echo "agent ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/agent \
+    && chmod 440 /etc/sudoers.d/agent
+
+# Install Node.js 22.x (LTS)
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Enable corepack and install pnpm
+RUN corepack enable \
+    && corepack prepare pnpm@latest --activate
+
+# Install OpenCode as agent user
+USER agent
+WORKDIR /home/agent
+
+# Create .local/bin directory
+RUN mkdir -p /home/agent/.local/bin
+
+# Install OpenCode
+RUN curl -fsSL https://opencode.ai/install | bash
+
+# Ensure .local/bin is in PATH
+ENV PATH="/home/agent/.local/bin:${PATH}"
+
+# Set up systemd user directory structure
+RUN mkdir -p /home/agent/.config/systemd/user
+
+# Create systemd user service template for OpenCode
+# Using printf for more reliable multi-line file creation in Docker
+RUN printf '%s\n' \
+    '[Unit]' \
+    'Description=OpenCode server for workspace %i' \
+    'After=network.target' \
+    '' \
+    '[Service]' \
+    'Type=simple' \
+    'WorkingDirectory=/home/agent/workspaces/%i' \
+    'Environment=OPENCODE_SERVER_PASSWORD=%i' \
+    'Environment=OPENCODE_CONFIG_CONTENT={"share":"disabled","permission":"allow","autoupdate":false,"server":{"port":4096,"hostname":"0.0.0.0"}}' \
+    'ExecStart=/home/agent/.opencode/bin/opencode web --port 4096 --hostname 0.0.0.0' \
+    'Restart=on-failure' \
+    'RestartSec=5' \
+    '' \
+    '[Install]' \
+    'WantedBy=default.target' \
+    > /home/agent/.config/systemd/user/opencode@.service
+
+# Enable linger for agent user (systemd user services run without login)
+USER root
+RUN loginctl enable-linger agent || true
+
+# Create workspaces directory
+RUN mkdir -p /home/agent/workspaces \
+    && chown -R agent:agent /home/agent/workspaces
+
+# Fix permissions
+RUN chown -R agent:agent /home/agent \
+    && chmod 755 /home/agent \
+    && chmod 700 /home/agent/.ssh
+
+# Ensure SSH host keys are generated on first boot by removing pre-generated ones
+RUN rm -f /etc/ssh/ssh_host_*_key /etc/ssh/ssh_host_*_key.pub
+
+# Create a first-boot script to generate SSH keys and set up runtime environment
+RUN mkdir -p /usr/local/bin && cat > /usr/local/bin/bonfire-first-boot.sh << 'EOF'
+#!/bin/bash
+# First boot setup script - runs once on VM startup
+
+# Generate SSH host keys if they don't exist
+if [ ! -f /etc/ssh/ssh_host_rsa_key ]; then
+    echo "Generating SSH host keys..."
+    ssh-keygen -A
+fi
+
+# Ensure agent user has proper runtime directories
+mkdir -p /run/user/1000
+chown agent:agent /run/user/1000
+chmod 700 /run/user/1000
+
+# Enable linger for agent user (systemd user services)
+if [ -d /var/lib/systemd/linger ]; then
+    touch /var/lib/systemd/linger/agent
+fi
+
+echo "First boot setup complete"
+EOF
+RUN chmod +x /usr/local/bin/bonfire-first-boot.sh
+
+# Create systemd service for first-boot script
+RUN cat > /etc/systemd/system/bonfire-first-boot.service << 'EOF'
+[Unit]
+Description=Bonfire First Boot Setup
+After=local-fs.target
+Before=ssh.service
+ConditionPathExists=!/var/lib/bonfire/.first-boot-complete
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/bonfire-first-boot.sh
+ExecStartPost=/bin/touch /var/lib/bonfire/.first-boot-complete
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Enable services
+RUN mkdir -p /var/lib/bonfire \
+    && systemctl enable bonfire-first-boot.service || true \
+    && systemctl enable ssh || true
+
+# Final stage: Create ext4 rootfs image
+FROM scratch AS export
+
+# Copy the entire filesystem from builder
+COPY --from=builder / /
+
+# Metadata labels
+LABEL org.opencontainers.image.title="Bonfire Agent-Ready VM Image"
+LABEL org.opencontainers.image.description="Firecracker VM image with OpenCode, Node.js, pnpm, and SSH"
+LABEL org.opencontainers.image.version="1.0.0"
+
+# Default to systemd init
+CMD ["/sbin/init"]
