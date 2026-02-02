@@ -21,30 +21,55 @@ RUN apt-get update && apt-get install -y \
     wget \
     ca-certificates \
     git \
+    git-lfs \
     openssh-server \
+    openssh-client \
     sudo \
     systemd \
     systemd-sysv \
     # Build tools
     build-essential \
+    cmake \
     python3 \
+    python3-venv \
     python3-pip \
+    pipx \
     pkg-config \
     # Common libraries
     libssl-dev \
     zlib1g-dev \
     libffi-dev \
+    libsqlite3-dev \
     # Network tools
     iproute2 \
     iptables \
     iputils-ping \
     net-tools \
+    dnsutils \
+    netcat-openbsd \
+    socat \
+    procps \
+    psmisc \
+    lsof \
+    strace \
+    jq \
+    ripgrep \
+    fd-find \
     # Text editors (useful for debugging)
     nano \
     vim-tiny \
+    less \
+    tmux \
+    rsync \
     # Compression tools
     xz-utils \
+    zip \
+    unzip \
     && rm -rf /var/lib/apt/lists/*
+
+# Restore apt state directories (so apt-get update/install works in the VM)
+RUN mkdir -p /var/lib/apt/lists/partial /var/cache/apt/archives/partial \
+    && chmod 755 /var/lib/apt/lists /var/lib/apt/lists/partial /var/cache/apt/archives /var/cache/apt/archives/partial
 
 # Configure SSH server
 RUN mkdir -p /var/run/sshd \
@@ -64,14 +89,23 @@ RUN if id -u 1000 > /dev/null 2>&1; then userdel -r $(id -un 1000) 2>/dev/null |
 RUN echo "agent ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/agent \
     && chmod 440 /etc/sudoers.d/agent
 
+# Ensure pipx binaries are on PATH for agent shells
+ENV PIPX_BIN_DIR=/home/agent/.local/bin
+
 # Install Node.js 22.x (LTS)
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
+# Restore apt state directories again (NodeSource install cleans lists)
+RUN mkdir -p /var/lib/apt/lists/partial /var/cache/apt/archives/partial
+
 # Enable corepack and install pnpm
 RUN corepack enable \
     && corepack prepare pnpm@latest --activate
+
+# Prefer systemd-resolved stub resolv.conf when available
+RUN ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf || true
 
 # Install OpenCode as agent user
 USER agent
@@ -82,6 +116,10 @@ RUN mkdir -p /home/agent/.local/bin
 
 # Install OpenCode
 RUN curl -fsSL https://opencode.ai/install | bash
+
+# Ensure a stable opencode path for tooling
+RUN mkdir -p /home/agent/.local/bin \
+    && if [ -f /home/agent/.opencode/bin/opencode ]; then ln -sf /home/agent/.opencode/bin/opencode /home/agent/.local/bin/opencode; fi
 
 # Ensure .local/bin is in PATH
 ENV PATH="/home/agent/.local/bin:${PATH}"
@@ -100,7 +138,7 @@ RUN printf '%s\n' \
     'Type=simple' \
     'WorkingDirectory=/home/agent/workspaces/%i' \
     'Environment=OPENCODE_SERVER_PASSWORD=%i' \
-    'Environment=OPENCODE_CONFIG_CONTENT={"share":"disabled","permission":"allow","autoupdate":false,"server":{"port":4096,"hostname":"0.0.0.0"}}' \
+    'PassEnvironment=OPENCODE_CONFIG_CONTENT' \
     'ExecStart=/home/agent/.opencode/bin/opencode web --port 4096 --hostname 0.0.0.0' \
     'Restart=on-failure' \
     'RestartSec=5' \
@@ -112,6 +150,17 @@ RUN printf '%s\n' \
 # Enable linger for agent user (systemd user services run without login)
 USER root
 RUN loginctl enable-linger agent || true
+
+# Enable serial console autologin on ttyS0 (required for serial-only bootstrap)
+RUN mkdir -p /etc/systemd/system/serial-getty@ttyS0.service.d \
+    && cat > /etc/systemd/system/serial-getty@ttyS0.service.d/autologin.conf << 'EOF'
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --autologin agent --noclear %I $TERM
+EOF
+
+# Ensure the getty is enabled (safe if already enabled)
+RUN systemctl enable serial-getty@ttyS0.service || true
 
 # Create workspaces directory
 RUN mkdir -p /home/agent/workspaces \

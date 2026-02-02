@@ -19,6 +19,12 @@ services:
       - ../packages/sdk:/app/packages/sdk:cached
       - ../packages/cli:/app/packages/cli:cached
 
+      # Dev DX: mount local agent image artifacts
+      # After running ./scripts/build-agent-image-docker.sh, the UI can register:
+      #   /app/images/agent-kernel
+      #   /app/images/agent-rootfs.ext4
+      - ../images:/app/images:ro
+
       # Data persistence
       - bonfire-data:/var/lib/bonfire
       - /dev/kvm:/dev/kvm

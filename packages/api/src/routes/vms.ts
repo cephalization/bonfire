@@ -12,6 +12,9 @@ import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
+import { mkdir, rm, stat } from "fs/promises";
+import { execFile } from "child_process";
+import { promisify } from "util";
 import * as schema from "../db/schema";
 import { vms } from "../db/schema";
 import { NetworkService } from "../services/network";
@@ -23,6 +26,56 @@ import {
   type FirecrackerProcess,
 } from "../services/firecracker/process";
 import type { VMConfiguration } from "../services/firecracker/socket-client";
+
+const execFileAsync = promisify(execFile);
+
+const VM_RUNTIME_DIR = "/var/lib/bonfire/vms";
+
+function getVmRootfsPath(vmId: string): string {
+  return `${VM_RUNTIME_DIR}/${vmId}.rootfs.ext4`;
+}
+
+async function ensureVmRootfsCopy(options: {
+  vmId: string;
+  imageRootfsPath: string;
+}): Promise<string> {
+  const { vmId, imageRootfsPath } = options;
+
+  // Unit tests should not depend on a writable /var/lib/bonfire.
+  if (process.env.NODE_ENV === "test" || process.env.VITEST) {
+    return imageRootfsPath;
+  }
+
+  const destPath = getVmRootfsPath(vmId);
+
+  // Ensure runtime dir exists (Firecracker socket dir uses the same base).
+  await mkdir(VM_RUNTIME_DIR, { recursive: true });
+
+  // If the file already exists, reuse it.
+  // This preserves VM state across stop/start within the same VM id.
+  try {
+    await stat(destPath);
+    return destPath;
+  } catch {
+    // continue
+  }
+
+  // Copy as sparse to avoid writing zero-filled blocks.
+  // The agent rootfs ext4 produced by our build script is sparse.
+  try {
+    await execFileAsync("cp", ["--sparse=always", "--reflink=auto", imageRootfsPath, destPath]);
+  } catch (err) {
+    // Fallback for environments without those flags.
+    try {
+      await execFileAsync("cp", [imageRootfsPath, destPath]);
+    } catch (err2) {
+      const message = err2 instanceof Error ? err2.message : String(err2);
+      throw new Error(`Failed to prepare writable rootfs copy: ${message}`);
+    }
+  }
+
+  return destPath;
+}
 
 // ============================================================================
 // OpenAPI Schemas
@@ -594,6 +647,13 @@ export function createVMsRouter(config: VMsRouterConfig): OpenAPIHono {
         }
       }
 
+      // Clean up per-VM writable rootfs copy (best-effort)
+      try {
+        await rm(getVmRootfsPath(id), { force: true });
+      } catch {
+        // ignore
+      }
+
       // Delete the VM record
       await db.delete(vms).where(eq(vms.id, id));
 
@@ -641,6 +701,14 @@ export function createVMsRouter(config: VMsRouterConfig): OpenAPIHono {
 
       let firecrackerProcess: FirecrackerProcess;
       try {
+        // Ensure rootfs is writable. If the image rootfs is on a read-only mount
+        // (e.g. bind-mounted from the host), Firecracker cannot attach it RW.
+        // We always use a per-VM copy to avoid corrupting a shared base image.
+        const rootfsPath = await ensureVmRootfsCopy({
+          vmId: id,
+          imageRootfsPath: image.rootfsPath,
+        });
+
         // 2. Spawn Firecracker process
         firecrackerProcess = await spawnFirecrackerFn({ vmId: id });
 
@@ -657,7 +725,7 @@ export function createVMsRouter(config: VMsRouterConfig): OpenAPIHono {
           drives: [
             {
               drive_id: "rootfs",
-              path_on_host: image.rootfsPath,
+              path_on_host: rootfsPath,
               is_root_device: true,
               is_read_only: false,
             },

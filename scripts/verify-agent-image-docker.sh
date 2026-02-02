@@ -123,6 +123,8 @@ check_dir() {
 echo "=== System Packages ==="
 check_file_or_link "/usr/sbin/sshd" "SSH server (sshd) is installed"
 check_file_or_link "/usr/bin/git" "Git is installed"
+check_file_or_link "/usr/bin/sudo" "sudo is installed"
+check_dir "/var/lib/apt/lists/partial" "apt lists partial directory exists"
 check_file_or_link "/usr/bin/curl" "curl is installed"
 check_file_or_link "/usr/bin/wget" "wget is installed"
 check_file_or_link "/usr/bin/gcc" "build-essential (gcc) is installed"
@@ -133,8 +135,8 @@ check_file_or_link "/usr/bin/node" "Node.js is installed"
 check_file_or_link "/usr/bin/corepack" "corepack is installed (pnpm via corepack)"
 
 echo "=== OpenCode ==="
-if debugfs -R "stat /home/agent/.opencode/bin/opencode" /rootfs.ext4 2>&1 | grep -q "Type: regular"; then
-    echo "PASS: OpenCode binary is installed at /home/agent/.opencode/bin/opencode"
+if debugfs -R "stat /home/agent/.opencode/bin/opencode" /rootfs.ext4 2>&1 | grep -q "Type: regular" || debugfs -R "stat /home/agent/.local/bin/opencode" /rootfs.ext4 2>&1 | grep -q "Type: regular"; then
+    echo "PASS: OpenCode binary is installed"
     ((passed++))
     
     if debugfs -R "cat /home/agent/.bashrc" /rootfs.ext4 2>/dev/null | grep -q ".opencode/bin"; then
@@ -206,6 +208,14 @@ if debugfs -R "stat $service_path" /rootfs.ext4 2>&1 | grep -q "Type: regular"; 
             echo "FAIL: Service missing OPENCODE_SERVER_PASSWORD"
             ((failed++))
         fi
+
+        if echo "$service_content" | grep -q "OPENCODE_CONFIG_CONTENT"; then
+            echo "PASS: Service references OPENCODE_CONFIG_CONTENT"
+            ((passed++))
+        else
+            echo "WARN: Service does not reference OPENCODE_CONFIG_CONTENT"
+            ((warnings++))
+        fi
     else
         echo "FAIL: OpenCode systemd service template exists but is EMPTY"
         ((failed++))
@@ -221,6 +231,9 @@ fi
 
 echo "=== Workspace ==="
 check_dir "/home/agent/workspaces" "Workspaces directory exists"
+
+echo "=== Serial Autologin ==="
+check_file_or_link "/etc/systemd/system/serial-getty@ttyS0.service.d/autologin.conf" "serial-getty@ttyS0 autologin drop-in exists"
 
 echo ""
 echo "========================================"

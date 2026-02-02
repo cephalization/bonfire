@@ -11,6 +11,14 @@ vi.mock("@/lib/api", async () => {
   return {
     ...actual,
     listImages: vi.fn(async () => []),
+    registerLocalImage: vi.fn(async () => ({
+      id: "img-local",
+      reference: "local:agent-ready",
+      kernelPath: "/tmp/kernel",
+      rootfsPath: "/tmp/rootfs.ext4",
+      sizeBytes: 0,
+      pulledAt: "2024-01-01T00:00:00Z",
+    })),
     createVM: vi.fn(
       async () =>
         ({

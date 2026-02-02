@@ -75,6 +75,12 @@ export interface PullImageRequest {
   reference: string;
 }
 
+export interface RegisterLocalImageRequest {
+  reference?: string;
+  kernelPath?: string;
+  rootfsPath?: string;
+}
+
 export interface ExecRequest {
   command: string;
   args?: string[];
@@ -296,6 +302,20 @@ export async function quickStartImage(config?: APIClientConfig): Promise<Image> 
     "/api/images/quickstart",
     {
       method: "POST",
+    },
+    config
+  );
+}
+
+export async function registerLocalImage(
+  request: RegisterLocalImageRequest,
+  config?: APIClientConfig
+): Promise<Image> {
+  return apiFetch<Image>(
+    "/api/images/local",
+    {
+      method: "POST",
+      body: JSON.stringify(request),
     },
     config
   );
