@@ -275,7 +275,8 @@ export async function createSerialRunner(
 }
 
 function includesLoginPrompt(text: string): boolean {
-  return /(^|\n)\s*login:\s*$/im.test(text) || /(^|\n)\s*password:\s*$/im.test(text);
+  // Be permissive: getty often prints hostname prefixes like `localhost login:`.
+  return /\blogin:\s*$/im.test(text) || /\bpassword:\s*$/im.test(text);
 }
 
 function looksLikeShellPrompt(text: string): boolean {

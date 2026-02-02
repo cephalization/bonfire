@@ -125,9 +125,64 @@ export function runMigrations(dbPath: string = config.dbPath): void {
         "created_at" INTEGER NOT NULL,
         "updated_at" INTEGER NOT NULL,
         FOREIGN KEY ("user_id") REFERENCES "user"("id") ON DELETE CASCADE,
-        FOREIGN KEY ("vm_id") REFERENCES "vms"("id")
+        FOREIGN KEY ("vm_id") REFERENCES "vms"("id") ON DELETE SET NULL
       );
     `);
+
+    // If agent_sessions was created previously without ON DELETE SET NULL on vm_id,
+    // rebuild it in-place (SQLite cannot ALTER a FK constraint).
+    try {
+      const fks = db.prepare(`PRAGMA foreign_key_list('agent_sessions')`).all() as Array<{
+        from: string;
+        on_delete: string;
+      }>;
+      const vmFk = fks.find((fk) => fk.from === "vm_id");
+      if (vmFk && String(vmFk.on_delete || "").toUpperCase() !== "SET NULL") {
+        console.log("🔧 Migrating agent_sessions vm_id foreign key to ON DELETE SET NULL...");
+        db.exec("PRAGMA foreign_keys=off;");
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS "agent_sessions__new" (
+            "id" TEXT PRIMARY KEY NOT NULL,
+            "user_id" TEXT NOT NULL,
+            "title" TEXT,
+            "repo_url" TEXT NOT NULL,
+            "branch" TEXT,
+            "vm_id" TEXT,
+            "workspace_path" TEXT,
+            "status" TEXT DEFAULT 'creating' NOT NULL,
+            "error_message" TEXT,
+            "created_at" INTEGER NOT NULL,
+            "updated_at" INTEGER NOT NULL,
+            FOREIGN KEY ("user_id") REFERENCES "user"("id") ON DELETE CASCADE,
+            FOREIGN KEY ("vm_id") REFERENCES "vms"("id") ON DELETE SET NULL
+          );
+        `);
+        db.exec(`
+          INSERT INTO "agent_sessions__new" (
+            id, user_id, title, repo_url, branch, vm_id, workspace_path, status, error_message, created_at, updated_at
+          )
+          SELECT
+            id, user_id, title, repo_url, branch, vm_id, workspace_path, status, error_message, created_at, updated_at
+          FROM "agent_sessions";
+        `);
+        db.exec(`DROP TABLE "agent_sessions";`);
+        db.exec(`ALTER TABLE "agent_sessions__new" RENAME TO "agent_sessions";`);
+
+        // Recreate indexes (idempotent)
+        db.exec(
+          `CREATE INDEX IF NOT EXISTS idx_agent_sessions_user_id ON "agent_sessions"("user_id");`
+        );
+        db.exec(
+          `CREATE INDEX IF NOT EXISTS idx_agent_sessions_status ON "agent_sessions"("status");`
+        );
+        db.exec(
+          `CREATE INDEX IF NOT EXISTS idx_agent_sessions_vm_id ON "agent_sessions"("vm_id");`
+        );
+        db.exec("PRAGMA foreign_keys=on;");
+      }
+    } catch {
+      // best-effort; do not block server startup
+    }
 
     // Create indexes for better performance
     db.exec(`CREATE INDEX IF NOT EXISTS idx_session_user_id ON "session"("user_id");`);

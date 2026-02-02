@@ -94,7 +94,7 @@ export const agentSessions = sqliteTable("agent_sessions", {
   title: text("title"),
   repoUrl: text("repo_url").notNull(),
   branch: text("branch"),
-  vmId: text("vm_id").references(() => vms.id),
+  vmId: text("vm_id").references(() => vms.id, { onDelete: "set null" }),
   workspacePath: text("workspace_path"),
   status: text("status", {
     enum: ["creating", "ready", "error", "archived"],

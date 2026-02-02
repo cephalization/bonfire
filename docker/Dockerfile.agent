@@ -104,8 +104,22 @@ RUN mkdir -p /var/lib/apt/lists/partial /var/cache/apt/archives/partial
 RUN corepack enable \
     && corepack prepare pnpm@latest --activate
 
-# Prefer systemd-resolved stub resolv.conf when available
-RUN ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf || true
+# Provide a sane default resolv.conf for early boot / minimal DNS setups.
+# We intentionally avoid relying on systemd-resolved's stub being wired up,
+# because serial bootstrap needs working DNS before any higher-level network
+# manager is guaranteed to be ready.
+RUN printf '%s\n' 'nameserver 1.1.1.1' 'nameserver 8.8.8.8' > /etc/resolv.conf \
+    && chmod 644 /etc/resolv.conf
+
+# Avoid sudo warnings about hostname resolution.
+RUN printf '%s\n' 'localhost' > /etc/hostname \
+    && printf '%s\n' \
+      '127.0.0.1 localhost' \
+      '127.0.1.1 localhost' \
+      '::1 localhost ip6-localhost ip6-loopback' \
+      'ff02::1 ip6-allnodes' \
+      'ff02::2 ip6-allrouters' \
+      > /etc/hosts
 
 # Install OpenCode as agent user
 USER agent
@@ -153,14 +167,29 @@ RUN loginctl enable-linger agent || true
 
 # Enable serial console autologin on ttyS0 (required for serial-only bootstrap)
 RUN mkdir -p /etc/systemd/system/serial-getty@ttyS0.service.d \
-    && cat > /etc/systemd/system/serial-getty@ttyS0.service.d/autologin.conf << 'EOF'
-[Service]
-ExecStart=
-ExecStart=-/sbin/agetty --autologin agent --noclear %I $TERM
-EOF
+    && printf '%s\n' \
+      '[Service]' \
+      'ExecStart=' \
+      'ExecStart=-/sbin/agetty --autologin agent --noclear %I $TERM' \
+      > /etc/systemd/system/serial-getty@ttyS0.service.d/autologin.conf
+
+# Firecracker often presents ttyS0 as the kernel console (/dev/console).
+# Ensure the console getty also autologins so serial bootstrap can get a shell.
+RUN mkdir -p /etc/systemd/system/console-getty.service.d \
+    && printf '%s\n' \
+      '[Service]' \
+      'ExecStart=' \
+      'ExecStart=-/sbin/agetty --autologin agent --noclear --keep-baud 115200,38400,9600 console 115200 vt102' \
+      > /etc/systemd/system/console-getty.service.d/autologin.conf
 
 # Ensure the getty is enabled (safe if already enabled)
 RUN systemctl enable serial-getty@ttyS0.service || true
+
+# In image builds, systemctl may be a no-op. Ensure the unit is enabled by
+# creating the wanted-by symlink directly as well.
+RUN mkdir -p /etc/systemd/system/getty.target.wants \
+    && ln -sf /lib/systemd/system/serial-getty@.service \
+      /etc/systemd/system/getty.target.wants/serial-getty@ttyS0.service
 
 # Create workspaces directory
 RUN mkdir -p /home/agent/workspaces \
@@ -221,6 +250,13 @@ EOF
 RUN mkdir -p /var/lib/bonfire \
     && systemctl enable bonfire-first-boot.service || true \
     && systemctl enable ssh || true
+
+# Same enablement safety net (systemctl may not persist during image build).
+RUN mkdir -p /etc/systemd/system/multi-user.target.wants \
+    && ln -sf /etc/systemd/system/bonfire-first-boot.service \
+      /etc/systemd/system/multi-user.target.wants/bonfire-first-boot.service \
+    && ln -sf /lib/systemd/system/ssh.service \
+      /etc/systemd/system/multi-user.target.wants/ssh.service
 
 # Final stage: Create ext4 rootfs image
 FROM scratch AS export

@@ -15,6 +15,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { eq } from "drizzle-orm";
 import * as schema from "../db/schema";
 import { agentSessions } from "../db/schema";
+import { vms } from "../db/schema";
 import { createSerialConsole } from "./firecracker";
 import {
   clearActiveSerialConnection,
@@ -124,6 +125,21 @@ export class RealBootstrapService implements BootstrapService {
     }
 
     try {
+      // Ensure the VM is truly running. In dev, the API can restart and kill
+      // the Firecracker child, leaving stale runtime fields in the DB.
+      const [vm] = await this.db.select().from(vms).where(eq(vms.id, vmId));
+      if (!vm) {
+        throw new Error("Associated VM not found");
+      }
+      if (vm.status !== "running" || !vm.pid || !vm.socketPath) {
+        throw new Error("VM is not running (missing runtime info)");
+      }
+      try {
+        process.kill(vm.pid, 0);
+      } catch {
+        throw new Error("VM is not running (firecracker process is not alive)");
+      }
+
       // Update session with VM ID and workspace path (status remains 'creating').
       const now = new Date();
       await this.db
@@ -166,6 +182,20 @@ export class RealBootstrapService implements BootstrapService {
             .where(eq(agentSessions.id, sessionId));
         }
 
+        // If this session is being retried, the workspace path may already exist and contain
+        // a partial clone. Reset it so `git clone` is idempotent.
+        await execOk(
+          runner,
+          `bash -lc ${shQuote(
+            `set -e; ` +
+              `if [ -d ${shQuote(workspacePath)} ] && [ "$(ls -A ${shQuote(workspacePath)} 2>/dev/null)" ]; then ` +
+              `rm -rf ${shQuote(workspacePath)}; ` +
+              `fi; ` +
+              `mkdir -p ${shQuote(workspacePath)}`
+          )}`,
+          "Failed to prepare workspace"
+        );
+
         await this.updateCreatingMessage(sessionId, "Bootstrapping: cloning repo");
         await ensureGitAvailable(runner, sessionId);
         await execOk(
@@ -197,7 +227,23 @@ export class RealBootstrapService implements BootstrapService {
 
           const startResult = await runner.run(startCmd);
           if (startResult.exitCode !== 0) {
-            throw new Error(`Failed to start OpenCode: ${truncate(startResult.output)}`);
+            // Some images don't have a functioning systemd user session (no user bus / linger).
+            // Fall back to running OpenCode directly.
+            const fallbackCmd =
+              `cd ${shQuote(workspacePath)} ` +
+              `&& ${tmpHomePrelude(sessionId)} ` +
+              `export OPENCODE_SERVER_PASSWORD=${shQuote(sessionId)} OPENCODE_CONFIG_CONTENT=${shQuote(configContent)} ` +
+              `&& nohup /home/agent/.opencode/bin/opencode web --port ${opencodePort} --hostname 0.0.0.0 ` +
+              `> ${shQuote(`/tmp/opencode-${sessionId}.log`)} 2>&1 &`;
+
+            const fallbackResult = await runner.run(`bash -lc ${shQuote(fallbackCmd)}`);
+            if (fallbackResult.exitCode !== 0) {
+              throw new Error(
+                `Failed to start OpenCode (systemd user + fallback failed): ${truncate(
+                  startResult.output + "\n" + fallbackResult.output
+                )}`
+              );
+            }
           }
         } else {
           const fallbackCmd =
@@ -549,19 +595,26 @@ function buildNetworkSetupCommand(vmIp: string): string {
     '$SUDO ip link set dev "$IFACE" up; ' +
     `$SUDO ip addr add ${vmIp}/24 dev \"$IFACE\" || true; ` +
     "$SUDO ip route replace default via 10.0.100.1; " +
-    // DNS: prefer systemd-resolved tooling because /etc/resolv.conf may be read-only.
+    // DNS: try systemd-resolved first, then fall back to writing /etc/resolv.conf.
     "if command -v resolvectl >/dev/null 2>&1; then " +
-    '  $SUDO resolvectl dns "$IFACE" 1.1.1.1 8.8.8.8; ' +
+    '  $SUDO resolvectl dns "$IFACE" 1.1.1.1 8.8.8.8 || true; ' +
     "  $SUDO resolvectl domain \"$IFACE\" '~.' || true; " +
     "elif command -v systemd-resolve >/dev/null 2>&1; then " +
-    '  $SUDO systemd-resolve --interface="$IFACE" --set-dns=1.1.1.1 --set-dns=8.8.8.8; ' +
-    "else " +
-    '  if [ -w /etc/resolv.conf ]; then echo "nameserver 1.1.1.1" | $SUDO tee /etc/resolv.conf >/dev/null; ' +
-    "  else echo '/etc/resolv.conf is not writable; DNS may be unavailable' >&2; fi; " +
+    '  $SUDO systemd-resolve --interface="$IFACE" --set-dns=1.1.1.1 --set-dns=8.8.8.8 || true; ' +
     "fi; " +
-    // Validate L2/L3 and (best-effort) DNS.
-    "ping -c 1 -W 1 10.0.100.1; " +
-    "if command -v getent >/dev/null 2>&1; then getent hosts github.com >/dev/null 2>&1 || true; fi";
+    // If DNS still isn't working, force resolv.conf (covers images without working resolved/dbus).
+    "if command -v getent >/dev/null 2>&1; then " +
+    "  getent hosts github.com >/dev/null 2>&1 || ( " +
+    // Don't rely on `/etc/resolv.conf` being writable by the current user.
+    // Use sudo (agent image provides passwordless sudo).
+    '    printf "nameserver 1.1.1.1\\nnameserver 8.8.8.8\\n" | $SUDO tee /etc/resolv.conf >/dev/null; ' +
+    "    getent hosts github.com >/dev/null 2>&1 " +
+    "  ); " +
+    "fi; " +
+    // Validate route exists. Avoid `ping` here: it requires CAP_NET_RAW or setuid ping,
+    // which may not be available inside minimal/locked-down images.
+    "$SUDO ip route show default | grep -q 'default via 10.0.100.1'; " +
+    "true";
 
   return `bash -lc ${shQuote(script)}`;
 }

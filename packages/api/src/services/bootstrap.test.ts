@@ -212,8 +212,17 @@ describe("Bootstrap Service", () => {
       // Insert a VM
       const now = new Date();
       sqlite.exec(`
-        INSERT INTO vms (id, name, status, ip_address, created_at, updated_at)
-        VALUES ('vm-123', 'test-vm', 'running', '192.168.1.1', ${now.getTime()}, ${now.getTime()})
+        INSERT INTO vms (id, name, status, ip_address, pid, socket_path, created_at, updated_at)
+        VALUES (
+          'vm-123',
+          'test-vm',
+          'running',
+          '192.168.1.1',
+          ${process.pid},
+          '/tmp/mock-firecracker.sock',
+          ${now.getTime()},
+          ${now.getTime()}
+        )
       `);
 
       // Insert a session
@@ -266,8 +275,17 @@ describe("Bootstrap Service", () => {
       // Insert a VM
       const now = new Date();
       sqlite.exec(`
-        INSERT INTO vms (id, name, status, ip_address, created_at, updated_at)
-        VALUES ('vm-123', 'test-vm', 'running', '192.168.1.1', ${now.getTime()}, ${now.getTime()})
+        INSERT INTO vms (id, name, status, ip_address, pid, socket_path, created_at, updated_at)
+        VALUES (
+          'vm-123',
+          'test-vm',
+          'running',
+          '192.168.1.1',
+          ${process.pid},
+          '/tmp/mock-firecracker.sock',
+          ${now.getTime()},
+          ${now.getTime()}
+        )
       `);
 
       // Insert a session
@@ -313,8 +331,17 @@ describe("Bootstrap Service", () => {
       // Insert a VM
       const now = new Date();
       sqlite.exec(`
-        INSERT INTO vms (id, name, status, ip_address, created_at, updated_at)
-        VALUES ('vm-123', 'test-vm', 'running', '192.168.1.1', ${now.getTime()}, ${now.getTime()})
+        INSERT INTO vms (id, name, status, ip_address, pid, socket_path, created_at, updated_at)
+        VALUES (
+          'vm-123',
+          'test-vm',
+          'running',
+          '192.168.1.1',
+          ${process.pid},
+          '/tmp/mock-firecracker.sock',
+          ${now.getTime()},
+          ${now.getTime()}
+        )
       `);
 
       // Insert a session with branch
@@ -371,8 +398,17 @@ describe("Bootstrap Service", () => {
       // Insert a VM
       const now = new Date();
       sqlite.exec(`
-        INSERT INTO vms (id, name, status, ip_address, created_at, updated_at)
-        VALUES ('vm-123', 'test-vm', 'running', '192.168.1.1', ${now.getTime()}, ${now.getTime()})
+        INSERT INTO vms (id, name, status, ip_address, pid, socket_path, created_at, updated_at)
+        VALUES (
+          'vm-123',
+          'test-vm',
+          'running',
+          '192.168.1.1',
+          ${process.pid},
+          '/tmp/mock-firecracker.sock',
+          ${now.getTime()},
+          ${now.getTime()}
+        )
       `);
 
       // Insert a session

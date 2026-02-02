@@ -203,6 +203,26 @@ export function attachTerminalWebSocketServer(server: Server, config: TerminalWs
         return;
       }
 
+      // Guard against stale DB state (e.g. API hot-reload killed Firecracker).
+      if (!vm.pid || !vm.socketPath) {
+        wss.handleUpgrade(req, socket, head, (ws) => {
+          ws.send(JSON.stringify({ error: "VM is not running (missing runtime info)" }));
+          ws.close();
+        });
+        return;
+      }
+      try {
+        process.kill(vm.pid, 0);
+      } catch {
+        wss.handleUpgrade(req, socket, head, (ws) => {
+          ws.send(
+            JSON.stringify({ error: "VM is not running (firecracker process is not alive)" })
+          );
+          ws.close();
+        });
+        return;
+      }
+
       wss.handleUpgrade(req, socket, head, (ws) => {
         handleConnection(ws, vmId);
       });
