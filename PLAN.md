@@ -458,27 +458,44 @@ echo "Bonfire host setup complete!"
 
 ## Docker Compose (`docker/docker-compose.yml`)
 
-> **Agent Note**: Bonfire requires access to `/dev/kvm` and network capabilities. The container needs to be privileged or have specific capabilities.
+> **Agent Note**: Bonfire requires access to `/dev/kvm` and network capabilities. The API container needs to be privileged or have specific capabilities.
+
+Bonfire runs as two services:
+
+- `web`: serves the UI and reverse-proxies `/api/*` (including WebSockets) to the API.
+- `api`: serves the HTTP API on port 3000 (also published directly for SDK access).
+
+Database migrations run automatically on `api` container start.
 
 ```yaml
-version: "3.8"
-
 services:
-  bonfire:
-    build: .
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.api
     ports:
-      - "3000:3000" # API
-      - "5173:5173" # Web UI (dev)
+      - "3000:3000" # API (direct, for SDK)
     volumes:
       - bonfire-data:/var/lib/bonfire
       - /dev/kvm:/dev/kvm
-    privileged: true # Required for network/VM management
+    privileged: true
     cap_add:
       - NET_ADMIN
       - SYS_ADMIN
     environment:
       - DATABASE_URL=/var/lib/bonfire/bonfire.db
-      - BETTER_AUTH_SECRET=change-me-in-production
+      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
+      - BETTER_AUTH_URL=https://your-hostname
+
+  web:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.web
+    ports:
+      - "80:80" # Web UI (reverse proxy + SPA)
+    depends_on:
+      api:
+        condition: service_healthy
 
 volumes:
   bonfire-data:

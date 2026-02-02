@@ -1,33 +1,45 @@
 services:
-  bonfire:
+  api:
     build:
       context: ..
-      dockerfile: docker/Dockerfile
+      dockerfile: docker/Dockerfile.api
+    image: bonfire-api:prod
     ports:
-      - "3000:3000" # API
-      - "5173:5173" # Web UI (dev)
+      - "3000:3000" # API (direct, for SDK)
     volumes:
       - bonfire-data:/var/lib/bonfire
       - /dev/kvm:/dev/kvm
-    privileged: true # Required for network/VM management
+    privileged: true
     cap_add:
       - NET_ADMIN
       - SYS_ADMIN
     environment:
-      - DATABASE_URL=/var/lib/bonfire/bonfire.db
-      - BETTER_AUTH_SECRET=change-me-in-production
-      - NODE_ENV=production
-      # Initial admin user configuration (required for first-time setup)
-      # Change these before deploying to production!
-      - INITIAL_ADMIN_EMAIL=admin@example.com
-      - INITIAL_ADMIN_PASSWORD=changeme123
-      - INITIAL_ADMIN_NAME=Admin
+      NODE_ENV: production
+      DATABASE_URL: /var/lib/bonfire/bonfire.db
+      # In production, override these via environment or docker/docker-compose.prod.yml
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-dev-secret-do-not-use-in-production}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
+      INITIAL_ADMIN_EMAIL: ${INITIAL_ADMIN_EMAIL:-admin@example.com}
+      INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:-changeme123}
+      INITIAL_ADMIN_NAME: ${INITIAL_ADMIN_NAME:-Admin}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 5s
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.web
+    image: bonfire-web:prod
+    ports:
+      - "80:80" # Web UI (reverse proxy + SPA)
+    depends_on:
+      api:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:

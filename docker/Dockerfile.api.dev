@@ -1,0 +1,63 @@
+# syntax=docker/dockerfile:1.7
+
+FROM node:24-bookworm
+
+WORKDIR /app
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+ENV NODE_ENV=development
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash \
+    ca-certificates \
+    curl \
+    jq \
+    iproute2 \
+    iptables \
+    procps \
+    python3 \
+    make \
+    g++ \
+  && rm -rf /var/lib/apt/lists/*
+
+# Install Firecracker (latest by default).
+ARG FIRECRACKER_VERSION=latest
+RUN set -eu; \
+  arch="$(dpkg --print-architecture)"; \
+  case "$arch" in \
+    amd64) arch_tag="x86_64" ;; \
+    arm64) arch_tag="aarch64" ;; \
+    *) echo "Unsupported architecture: $arch" >&2; exit 1 ;; \
+  esac; \
+  release_url="https://github.com/firecracker-microvm/firecracker/releases"; \
+  if [ "$FIRECRACKER_VERSION" = "latest" ]; then \
+    version="$(curl -fsSLI -o /dev/null -w '%{url_effective}' "${release_url}/latest" | sed 's#.*/tag/v##')"; \
+  else \
+    version="$FIRECRACKER_VERSION"; \
+  fi; \
+  curl -fsSL "${release_url}/download/v${version}/firecracker-v${version}-${arch_tag}.tgz" | tar -xz -C /tmp; \
+  cp "/tmp/release-v${version}-${arch_tag}/firecracker-v${version}-${arch_tag}" /usr/local/bin/firecracker; \
+  chmod +x /usr/local/bin/firecracker; \
+  rm -rf "/tmp/release-v${version}-${arch_tag}"; \
+  /usr/local/bin/firecracker --version || true
+
+RUN mkdir -p /var/lib/bonfire/images /var/lib/bonfire/vms
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json tsconfig.json ./
+COPY packages/api/package.json packages/api/package.json
+COPY packages/web/package.json packages/web/package.json
+COPY packages/sdk/package.json packages/sdk/package.json
+COPY packages/cli/package.json packages/cli/package.json
+
+RUN corepack enable \
+  && corepack prepare pnpm@10.0.0 --activate \
+  && pnpm config set store-dir /pnpm/store
+
+RUN pnpm install --frozen-lockfile
+
+COPY . .
+
+EXPOSE 3000
+
+CMD ["bash", "-lc", "cd /app/packages/api && chmod +x start.sh && ./start.sh"]

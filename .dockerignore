@@ -1,6 +1,10 @@
+node_modules
 **/node_modules
+images
+**/images
 **/dist
 **/.turbo
+**/out
 **/.DS_Store
 .git
 .github
@@ -10,7 +14,10 @@
 .vscode
 
 # Local data/state
+.pnpm-store
 **/.pnpm-store
+.pnpm
 **/.pnpm
+.cache
 **/.cache
 **/tmp
