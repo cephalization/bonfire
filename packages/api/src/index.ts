@@ -31,6 +31,8 @@ import { seedInitialAdmin } from "./db/seed";
 import { serve } from "@hono/node-server";
 import { fileURLToPath } from "url";
 import { attachTerminalWebSocketServer } from "./ws/terminal";
+import { startAgentSessionWatchdog } from "./services/agent-session-watchdog";
+import { startVmWatchdog } from "./services/vm-watchdog";
 
 export const API_VERSION = config.apiVersion;
 
@@ -281,6 +283,32 @@ if (process.argv[1] && process.argv[1] === fileURLToPath(import.meta.url)) {
   attachTerminalWebSocketServer(server as any, {
     db,
     auth,
+  });
+
+  // Dev-friendly safety net: bootstrapping runs in-process, so a restart can
+  // strand sessions in "creating" forever. The watchdog turns stale ones into
+  // actionable errors so users can retry.
+  startAgentSessionWatchdog({
+    db,
+    intervalMs: 15_000,
+    thresholds:
+      process.env.NODE_ENV === "development"
+        ? {
+            byMessage: {
+              // Connecting serial should be fast; tighten for faster feedback in dev.
+              "Bootstrapping: connecting serial": 45_000,
+            },
+          }
+        : undefined,
+  });
+
+  // Similar to agent sessions: in dev, hot-reload can restart the API process.
+  // Without reconciliation, VMs can be left "running" in the DB even though
+  // their Firecracker child process died.
+  startVmWatchdog({
+    db,
+    networkService: new NetworkService(),
+    intervalMs: 20_000,
   });
 
   console.log(`✅ Server running at http://localhost:${config.port}`);

@@ -191,8 +191,10 @@ export async function create(options: SerialConsoleOptions): Promise<SerialConso
 
     // Read from the stdin pipe (VM output goes here due to stdio mapping in process.ts)
     // Note: pipe names are from VM perspective, but process.ts maps VM stdout -> .stdin pipe
-    // Use a file handle instead of a streaming helper for more reliable FIFO reading
-    readHandle = await fsOpen(paths.stdin, "r");
+    // Open as read+write to avoid blocking if the writer isn't connected yet.
+    // For FIFOs, opening read-only can block until a writer opens the other end.
+    // Using r+ keeps the fd usable and makes serial bootstrap more reliable.
+    readHandle = await fsOpen(paths.stdin, "r+");
 
     const readLoop = async () => {
       const buffer = new Uint8Array(4096);

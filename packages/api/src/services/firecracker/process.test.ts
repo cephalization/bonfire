@@ -244,13 +244,13 @@ describe("stdio redirection configuration", () => {
     // When spawning Firecracker:
     // - fd 0 (stdin): reads from stdout pipe (input TO VM)
     // - fd 1 (stdout): writes to stdin pipe (output FROM VM)
-    // - fd 2 (stderr): pipe for debugging
+    // - fd 2 (stderr): file for logs
 
     // This test documents the expected configuration
-    const stdioCconfig = ["stdout_fd", "stdin_fd", "pipe"];
+    const stdioCconfig = ["stdout_fd", "stdin_fd", "log_fd"];
     expect(stdioCconfig[0]).toBe("stdout_fd"); // stdin (fd 0) <- from stdout pipe
     expect(stdioCconfig[1]).toBe("stdin_fd"); // stdout (fd 1) -> to stdin pipe
-    expect(stdioCconfig[2]).toBe("pipe"); // stderr (fd 2) -> captured
+    expect(stdioCconfig[2]).toBe("log_fd"); // stderr (fd 2) -> file
   });
 });
 

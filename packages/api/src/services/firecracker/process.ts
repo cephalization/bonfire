@@ -5,7 +5,7 @@
  */
 
 import { spawn, type ChildProcess } from "child_process";
-import { mkdir, unlink, open as fsOpen } from "fs/promises";
+import { mkdir, unlink, open as fsOpen, readFile } from "fs/promises";
 import { dirname } from "path";
 import {
   configureVM,
@@ -44,6 +44,25 @@ const DEFAULTS = {
   sigtermTimeoutMs: 10000,
 } as const;
 
+function shouldDetachFirecracker(): boolean {
+  const raw = process.env.BONFIRE_FIRECRACKER_DETACH;
+  if (raw !== undefined) return raw !== "0" && raw.toLowerCase() !== "false";
+  // In dev, hot-reload restarts the API process. Detaching keeps VMs alive.
+  return process.env.NODE_ENV === "development";
+}
+
+async function isFirecrackerProcess(pid: number, socketPath?: string | null): Promise<boolean> {
+  try {
+    const cmdline = await readFile(`/proc/${pid}/cmdline`);
+    const text = cmdline.toString("utf8").replace(/\0/g, " ");
+    if (!/\bfirecracker\b/.test(text)) return false;
+    if (socketPath && !text.includes(socketPath)) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Spawns a Firecracker process with API socket and serial console pipes
  */
@@ -51,6 +70,7 @@ export async function spawnFirecracker(options: SpawnOptions): Promise<Firecrack
   const socketDir = options.socketDir ?? DEFAULTS.socketDir;
   const binaryPath = options.binaryPath ?? DEFAULTS.binaryPath;
   const socketPath = `${socketDir}/${options.vmId}.sock`;
+  const detach = shouldDetachFirecracker();
 
   console.log(`[Firecracker] Spawning process for VM ${options.vmId}`);
   console.log(`[Firecracker] Binary: ${binaryPath}`);
@@ -76,6 +96,7 @@ export async function spawnFirecracker(options: SpawnOptions): Promise<Firecrack
   // We need to open them before spawning so we can pass the fds
   let stdinFd: Awaited<ReturnType<typeof fsOpen>> | null = null;
   let stdoutFd: Awaited<ReturnType<typeof fsOpen>> | null = null;
+  let stderrFd: Awaited<ReturnType<typeof fsOpen>> | null = null;
   let child: ChildProcess | null = null;
 
   try {
@@ -87,14 +108,24 @@ export async function spawnFirecracker(options: SpawnOptions): Promise<Firecrack
     stdinFd = await fsOpen(pipePaths.stdin, "r+");
     stdoutFd = await fsOpen(pipePaths.stdout, "r+");
 
+    // Avoid piping stderr to the parent process. Dev hot-reload restarts the API
+    // process; if stderr is a pipe, the child may crash on SIGPIPE when the
+    // reader disappears. Log to a per-VM file instead.
+    const stderrLogPath = `${socketDir}/${options.vmId}.firecracker.stderr.log`;
+    stderrFd = await fsOpen(stderrLogPath, "a");
+
     // Spawn firecracker process with pipes for stdio
     // stdin (fd 0) <- from stdout pipe (input TO VM)
     // stdout (fd 1) -> to stdin pipe (output FROM VM)
-    // stderr (fd 2) -> pipe for debugging
+    // stderr (fd 2) -> log file
     child = spawn(binaryPath, ["--api-sock", socketPath], {
-      detached: false,
-      stdio: [stdoutFd.fd, stdinFd.fd, "pipe"],
+      detached: detach,
+      stdio: [stdoutFd.fd, stdinFd.fd, stderrFd.fd],
     });
+
+    if (detach) {
+      child.unref();
+    }
 
     const pid = child.pid;
     if (!pid) {
@@ -119,20 +150,17 @@ export async function spawnFirecracker(options: SpawnOptions): Promise<Firecrack
       // Ignore close errors
     }
 
-    // Capture stderr for debugging
-    let stderrData = "";
-
-    child.stderr?.on("data", (data: Buffer) => {
-      const str = data.toString();
-      stderrData += str;
-      console.error(`[Firecracker:${pid}] stderr: ${str.trim()}`);
-    });
+    try {
+      await stderrFd.close();
+      stderrFd = null;
+    } catch {
+      // Ignore close errors
+    }
 
     // Handle process exit
     child.on("exit", (code: number | null, signal: string | null) => {
       if (code !== 0 && code !== null) {
         console.error(`[Firecracker:${pid}] Process exited with code ${code}`);
-        console.error(`[Firecracker:${pid}] stderr: ${stderrData}`);
       } else if (signal) {
         console.log(`[Firecracker:${pid}] Process exited with signal ${signal}`);
       }
@@ -182,6 +210,14 @@ export async function spawnFirecracker(options: SpawnOptions): Promise<Firecrack
     if (stdoutFd) {
       try {
         await stdoutFd.close();
+      } catch {
+        // Ignore close errors
+      }
+    }
+
+    if (stderrFd) {
+      try {
+        await stderrFd.close();
       } catch {
         // Ignore close errors
       }
@@ -324,7 +360,7 @@ export function getVMPipePaths(
 async function isProcessRunning(pid: number): Promise<boolean> {
   try {
     process.kill(pid, 0); // Signal 0 checks if process exists
-    return true;
+    return await isFirecrackerProcess(pid);
   } catch {
     return false;
   }
