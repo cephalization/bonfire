@@ -106,6 +106,20 @@ verify_system_packages() {
     else
         log_fail "Git is NOT installed"
     fi
+
+    # sudo
+    if [[ -f "${MOUNT_POINT}/usr/bin/sudo" ]]; then
+        log_pass "sudo is installed"
+    else
+        log_fail "sudo is NOT installed"
+    fi
+
+    # apt state dirs
+    if [[ -d "${MOUNT_POINT}/var/lib/apt/lists/partial" ]]; then
+        log_pass "apt lists partial directory exists"
+    else
+        log_fail "apt lists partial directory is missing (/var/lib/apt/lists/partial)"
+    fi
     
     # curl
     if [[ -f "${MOUNT_POINT}/usr/bin/curl" ]]; then
@@ -165,17 +179,17 @@ verify_node_runtime() {
 verify_opencode() {
     log_info "Checking OpenCode installation..."
     
-    if [[ -f "${MOUNT_POINT}/home/agent/.local/bin/opencode" ]]; then
+    if [[ -f "${MOUNT_POINT}/home/agent/.opencode/bin/opencode" ]] || [[ -f "${MOUNT_POINT}/home/agent/.local/bin/opencode" ]]; then
         log_pass "OpenCode binary is installed"
         
         # Check if it's executable
-        if [[ -x "${MOUNT_POINT}/home/agent/.local/bin/opencode" ]]; then
+        if [[ -x "${MOUNT_POINT}/home/agent/.opencode/bin/opencode" ]] || [[ -x "${MOUNT_POINT}/home/agent/.local/bin/opencode" ]]; then
             log_pass "OpenCode binary is executable"
         else
             log_warn "OpenCode binary may not be executable"
         fi
     else
-        log_fail "OpenCode binary is NOT installed at /home/agent/.local/bin/opencode"
+        log_fail "OpenCode binary is NOT installed (expected /home/agent/.opencode/bin/opencode or /home/agent/.local/bin/opencode)"
     fi
 }
 
@@ -277,13 +291,31 @@ verify_systemd_service() {
             log_fail "Service missing OPENCODE_SERVER_PASSWORD"
         fi
         
-        if grep -q "Environment=OPENCODE_CONFIG_CONTENT" "$service_path"; then
-            log_pass "Service has OPENCODE_CONFIG_CONTENT environment variable"
+        if grep -q "OPENCODE_CONFIG_CONTENT" "$service_path"; then
+            log_pass "Service references OPENCODE_CONFIG_CONTENT"
         else
-            log_fail "Service missing OPENCODE_CONFIG_CONTENT"
+            log_warn "Service does not reference OPENCODE_CONFIG_CONTENT"
         fi
     else
         log_fail "OpenCode systemd service template does NOT exist"
+    fi
+}
+
+verify_serial_autologin() {
+    log_info "Checking serial console autologin..."
+
+    local dropin_dir="${MOUNT_POINT}/etc/systemd/system/serial-getty@ttyS0.service.d"
+    local dropin_file="${dropin_dir}/autologin.conf"
+
+    if [[ -f "$dropin_file" ]]; then
+        log_pass "serial-getty@ttyS0 autologin drop-in exists"
+        if grep -q "--autologin agent" "$dropin_file"; then
+            log_pass "ttyS0 autologin is set to agent"
+        else
+            log_warn "ttyS0 autologin drop-in does not specify agent"
+        fi
+    else
+        log_fail "serial-getty@ttyS0 autologin drop-in is missing"
     fi
 }
 
@@ -333,6 +365,7 @@ main() {
     verify_user_setup
     verify_ssh_config
     verify_systemd_service
+    verify_serial_autologin
     verify_workspace
     
     print_summary

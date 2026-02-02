@@ -24,7 +24,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 OUTPUT_DIR="${1:-${PROJECT_ROOT}/images}"
 IMAGE_NAME="bonfire-agent-build"
-IMAGE_SIZE_MB="2048"  # 2GB should be plenty for development
+IMAGE_SIZE_MB="4096"  # 4GB should be plenty for development
 KERNEL_VERSION="5.10.242"
 CI_BUILD_ID="v1.14-itazur"
 KERNEL_URL="https://s3.amazonaws.com/spec.ccfc.min/firecracker-ci/${CI_BUILD_ID}/x86_64/vmlinux-${KERNEL_VERSION}"
@@ -45,6 +45,33 @@ log_warn() {
 
 log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
+}
+
+cleanup_partial_outputs() {
+    # If the build fails partway through, avoid leaving behind a valid-but-empty ext4.
+    local rootfs_path="${OUTPUT_DIR}/agent-rootfs.ext4"
+    if [[ -f "${rootfs_path}" ]]; then
+        rm -f "${rootfs_path}" || true
+    fi
+}
+
+trap cleanup_partial_outputs ERR
+
+delete_existing_outputs() {
+    local rootfs_path="${OUTPUT_DIR}/agent-rootfs.ext4"
+    local kernel_path="${OUTPUT_DIR}/agent-kernel"
+
+    mkdir -p "${OUTPUT_DIR}"
+
+    if [[ -f "${rootfs_path}" ]]; then
+        log_warn "Deleting existing rootfs: ${rootfs_path}"
+        rm -f "${rootfs_path}"
+    fi
+
+    if [[ -f "${kernel_path}" ]]; then
+        log_warn "Deleting existing kernel: ${kernel_path}"
+        rm -f "${kernel_path}"
+    fi
 }
 
 # Check prerequisites
@@ -270,6 +297,10 @@ main() {
     echo ""
     
     check_prerequisites
+
+    # Always rebuild from scratch to avoid stale/partial artifacts.
+    delete_existing_outputs
+
     download_kernel
     build_docker_image
     

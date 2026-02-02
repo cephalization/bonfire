@@ -15,7 +15,11 @@ import { eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type * as schema from "../db/schema";
 import { vms } from "../db/schema";
-import type { SerialConsole } from "../services/firecracker";
+import {
+  hasActiveSerialConnection,
+  getActiveSerialConnectionCount,
+  closeAllSerialConnections,
+} from "../services/firecracker/serial-connections";
 
 // ==========================================================================
 // OpenAPI Schemas
@@ -140,9 +144,6 @@ export interface TerminalRouterConfig {
   db: BetterSQLite3Database<typeof schema>;
 }
 
-// Active serial console connections (exclusive per VM)
-const activeConnections = new Map<string, SerialConsole>();
-
 /**
  * Creates the terminal HTTP router.
  *
@@ -165,7 +166,7 @@ export function createTerminalRouter(config: TerminalRouterConfig): OpenAPIHono 
       return c.json({ error: `VM is not running. Current status: '${vm.status}'` }, 400);
     }
 
-    if (activeConnections.has(id)) {
+    if (hasActiveSerialConnection(id)) {
       return c.json(
         {
           error: "Terminal already connected. Only one connection allowed per VM.",
@@ -184,27 +185,6 @@ export function createTerminalRouter(config: TerminalRouterConfig): OpenAPIHono 
 // Connection bookkeeping
 // ==========================================================================
 
-export function hasActiveConnection(vmId: string): boolean {
-  return activeConnections.has(vmId);
-}
-
-export function getActiveConnectionCount(): number {
-  return activeConnections.size;
-}
-
-export async function closeAllConnections(): Promise<void> {
-  const promises: Promise<void>[] = [];
-  for (const [vmId, console] of activeConnections) {
-    promises.push(
-      console.close().finally(() => {
-        activeConnections.delete(vmId);
-      })
-    );
-  }
-  await Promise.all(promises);
-}
-
-// Used by the WebSocket implementation to enforce exclusivity.
-export function _unsafeGetActiveConnectionsForWsLayer(): Map<string, SerialConsole> {
-  return activeConnections;
-}
+export const hasActiveConnection = hasActiveSerialConnection;
+export const getActiveConnectionCount = getActiveSerialConnectionCount;
+export const closeAllConnections = closeAllSerialConnections;

@@ -9,11 +9,12 @@ import {
   SerialConsoleError,
   type SerialConsole,
 } from "../services/firecracker";
+import { formatOutputData, parseResizeMessage } from "../routes/terminal";
 import {
-  formatOutputData,
-  parseResizeMessage,
-  _unsafeGetActiveConnectionsForWsLayer,
-} from "../routes/terminal";
+  hasActiveSerialConnection,
+  setActiveSerialConnection,
+  clearActiveSerialConnection,
+} from "../services/firecracker/serial-connections";
 import type { Auth } from "../lib/auth";
 
 type TerminalWsConfig = {
@@ -56,7 +57,6 @@ function rejectUpgrade(socket: any, status: number, body: { error: string }): vo
 
 export function attachTerminalWebSocketServer(server: Server, config: TerminalWsConfig): void {
   const wss = new WebSocketServer({ noServer: true });
-  const activeConnections = _unsafeGetActiveConnectionsForWsLayer();
 
   const handleConnection = (ws: WebSocket, vmId: string) => {
     let serialConsole: SerialConsole | null = null;
@@ -64,19 +64,23 @@ export function attachTerminalWebSocketServer(server: Server, config: TerminalWs
 
     const cleanup = async () => {
       if (!serialConsole) return;
-      const current = activeConnections.get(vmId);
-      if (current === serialConsole) activeConnections.delete(vmId);
+      clearActiveSerialConnection(vmId, serialConsole);
       await serialConsole.close().catch(() => {});
       serialConsole = null;
     };
 
     (async () => {
       try {
+        // Race guard: another connection may have claimed the VM between upgrade and handler.
+        if (hasActiveSerialConnection(vmId)) {
+          throw new Error("Terminal already connected. Only one connection allowed per VM.");
+        }
+
         serialConsole = await createSerialConsole({
           vmId,
           pipeDir: config.pipeDir,
         });
-        activeConnections.set(vmId, serialConsole);
+        setActiveSerialConnection(vmId, serialConsole);
 
         // Sync/reset terminal state.
         await serialConsole.write("\x1bc\x1b[2J\x1b[H");
@@ -167,10 +171,14 @@ export function attachTerminalWebSocketServer(server: Server, config: TerminalWs
       }
 
       // Enforce exclusivity.
-      if (activeConnections.has(vmId)) {
+      if (hasActiveSerialConnection(vmId)) {
         // Accept the upgrade so we can send a proper error message
         wss.handleUpgrade(req, socket, head, (ws) => {
-          ws.send(JSON.stringify({ error: "Terminal already connected. Only one connection allowed per VM." }));
+          ws.send(
+            JSON.stringify({
+              error: "Terminal already connected. Only one connection allowed per VM.",
+            })
+          );
           ws.close();
         });
         return;
@@ -201,7 +209,9 @@ export function attachTerminalWebSocketServer(server: Server, config: TerminalWs
     })().catch((err) => {
       // If anything throws during preflight, accept upgrade and send error.
       wss.handleUpgrade(req, socket, head, (ws) => {
-        ws.send(JSON.stringify({ error: err instanceof Error ? err.message : "Internal server error" }));
+        ws.send(
+          JSON.stringify({ error: err instanceof Error ? err.message : "Internal server error" })
+        );
         ws.close();
       });
     });

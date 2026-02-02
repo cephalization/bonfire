@@ -11,6 +11,7 @@ import { randomUUID } from "crypto";
 import { unlinkSync } from "fs";
 import * as schema from "./db/schema";
 import { createApp } from "./index";
+import { createMockBootstrapService, type MockBootstrapService } from "./services/bootstrap";
 import type { FirecrackerProcess } from "./services/firecracker/process";
 import type { NetworkResources } from "./services/network/index";
 import type { OpenAPIHono } from "@hono/zod-openapi";
@@ -463,6 +464,7 @@ export interface TestAppConfig {
   firecracker?: MockFirecrackerService;
   network?: MockNetworkService;
   serialConsole?: MockSerialConsoleService;
+  bootstrapService?: MockBootstrapService;
   skipAuth?: boolean;
   /**
    * Fetch function for proxy requests (can be mocked in tests)
@@ -484,6 +486,7 @@ export interface TestApp {
     firecracker: MockFirecrackerService;
     network: MockNetworkService;
     serialConsole: MockSerialConsoleService;
+    bootstrapService: MockBootstrapService;
   };
 }
 
@@ -521,6 +524,7 @@ export async function createTestApp(config: TestAppConfig = {}): Promise<TestApp
   const firecracker = config.firecracker ?? createMockFirecrackerService();
   const network = config.network ?? createMockNetworkService();
   const serialConsole = config.serialConsole ?? createMockSerialConsoleService();
+  const bootstrapService = config.bootstrapService ?? createMockBootstrapService();
 
   // Create a mock user for testing
   const mockUserId = `test-user-${randomUUID()}`;
@@ -538,6 +542,7 @@ export async function createTestApp(config: TestAppConfig = {}): Promise<TestApp
     configureVMProcessFn: firecracker.configureVMProcess as any,
     startVMProcessFn: firecracker.startVMProcess as any,
     stopVMProcessFn: firecracker.stopVMProcess as any,
+    bootstrapService,
     skipAuth: config.skipAuth ?? true,
     mockUserId,
     fetchFn: config.proxyFetch,
@@ -564,6 +569,7 @@ export async function createTestApp(config: TestAppConfig = {}): Promise<TestApp
       firecracker,
       network,
       serialConsole,
+      bootstrapService,
     },
   };
 }

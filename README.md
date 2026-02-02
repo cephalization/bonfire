@@ -175,6 +175,13 @@ INITIAL_ADMIN_NAME=Admin
 
 Bonfire uses Better Auth for authentication with email/password. On first startup, if `INITIAL_ADMIN_EMAIL` and `INITIAL_ADMIN_PASSWORD` are configured, an admin user will be automatically created.
 
+### Agent Sessions (Bootstrap)
+
+Agent sessions currently rely on a guest bootstrap process to become `ready`.
+
+- Historical approach: SSH-based bootstrap.
+- Planned approach: serial-console bootstrap (no SSH). See `docs/AGENT_SERIAL_BOOTSTRAP.md`.
+
 > **Security Note**: The default credentials (`admin@example.com` / `admin123`) are for local development only. Always change these values in your `.env` file before exposing the service to any network.
 
 - Users can have either `admin` or `member` role

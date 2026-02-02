@@ -134,7 +134,15 @@ export function createApp(appConfig: AppConfig = {}) {
 
     // Apply auth middleware to protected routes (skip in test mode if configured)
     if (!appConfig.skipAuth) {
-      app.use("/api/images/*", authMiddleware);
+      app.use("/api/images/*", async (c, next) => {
+        // Dev DX: allow registering a local agent image without requiring login.
+        // This endpoint only registers paths that must already exist on disk.
+        const url = new URL(c.req.url);
+        if (process.env.NODE_ENV === "development" && url.pathname === "/api/images/local") {
+          return next();
+        }
+        return authMiddleware(c, next);
+      });
       app.use("/api/vms/*", authMiddleware);
       app.use("/api/agent/*", authMiddleware);
     }
@@ -203,7 +211,13 @@ export function createApp(appConfig: AppConfig = {}) {
 
       // Apply auth middleware to protected routes (skip in test mode if configured)
       if (!appConfig.skipAuth) {
-        app.use("/api/images/*", authMiddleware);
+        app.use("/api/images/*", async (c, next) => {
+          const url = new URL(c.req.url);
+          if (process.env.NODE_ENV === "development" && url.pathname === "/api/images/local") {
+            return next();
+          }
+          return authMiddleware(c, next);
+        });
         app.use("/api/vms/*", authMiddleware);
         app.use("/api/agent/*", authMiddleware);
       }

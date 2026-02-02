@@ -62,3 +62,14 @@ export {
   type SerialConsolePaths,
   type SerialConsoleOptions,
 } from "./serial";
+
+// Serial runner (deterministic command execution over ttyS0)
+export {
+  createSerialRunner,
+  SerialRunner,
+  SerialRunnerError,
+  type SerialRunnerCommandResult,
+  type SerialRunnerRunOptions,
+  type CreateSerialRunnerOptions,
+  type SerialRunnerLike,
+} from "./serial-runner";

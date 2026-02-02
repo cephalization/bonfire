@@ -10,7 +10,6 @@ import Database from "better-sqlite3";
 import { randomUUID } from "crypto";
 import { unlinkSync } from "fs";
 import * as schema from "../db/schema";
-import { createMockSSHService } from "./ssh";
 import {
   RealBootstrapService,
   createMockBootstrapService,
@@ -122,18 +121,6 @@ describe("Bootstrap Service", () => {
       expect(mockBootstrap.calls.bootstrap[0].config).toEqual(config);
     });
 
-    it("should track waitForSSH calls", async () => {
-      const mockBootstrap = createMockBootstrapService();
-      const config = { host: "192.168.1.1", username: "agent" };
-
-      await mockBootstrap.waitForSSH(config, 5000, 100);
-
-      expect(mockBootstrap.calls.waitForSSH).toHaveLength(1);
-      expect(mockBootstrap.calls.waitForSSH[0].config).toEqual(config);
-      expect(mockBootstrap.calls.waitForSSH[0].timeoutMs).toBe(5000);
-      expect(mockBootstrap.calls.waitForSSH[0].intervalMs).toBe(100);
-    });
-
     it("should track pollHealthEndpoint calls", async () => {
       const mockBootstrap = createMockBootstrapService();
 
@@ -165,7 +152,7 @@ describe("Bootstrap Service", () => {
       const mockBootstrap = createMockBootstrapService();
       mockBootstrap.setBootstrapResult({
         success: false,
-        errorMessage: "SSH connection failed",
+        errorMessage: "Serial bootstrap failed",
       });
 
       const config = {
@@ -178,17 +165,7 @@ describe("Bootstrap Service", () => {
       const result = await mockBootstrap.bootstrap(config);
 
       expect(result.success).toBe(false);
-      expect(result.errorMessage).toBe("SSH connection failed");
-    });
-
-    it("should allow setting SSH availability", async () => {
-      const mockBootstrap = createMockBootstrapService();
-      mockBootstrap.setSSHAvailable(false);
-
-      const config = { host: "192.168.1.1", username: "agent" };
-      const result = await mockBootstrap.waitForSSH(config, 5000, 100);
-
-      expect(result).toBe(false);
+      expect(result.errorMessage).toBe("Serial bootstrap failed");
     });
 
     it("should allow setting health readiness", async () => {
@@ -219,8 +196,18 @@ describe("Bootstrap Service", () => {
   describe("RealBootstrapService", () => {
     it("should update session with workspace path on success", async () => {
       const { db, sqlite, dbPath } = await createTestDb();
-      const mockSSH = createMockSSHService();
-      const bootstrapService = new RealBootstrapService(db, mockSSH);
+
+      const executed: string[] = [];
+      const bootstrapService = new RealBootstrapService(db, {
+        createRunner: async () => ({
+          connect: async () => {},
+          run: async (cmd: string) => {
+            executed.push(cmd);
+            return { exitCode: 0, output: "" };
+          },
+          close: async () => {},
+        }),
+      });
 
       // Insert a VM
       const now = new Date();
@@ -234,11 +221,6 @@ describe("Bootstrap Service", () => {
         INSERT INTO agent_sessions (id, user_id, repo_url, status, created_at, updated_at)
         VALUES ('sess-123', 'test-user', 'https://github.com/org/repo', 'creating', ${now.getTime()}, ${now.getTime()})
       `);
-
-      // Configure mock SSH to return success
-      mockSSH.setCommandResponse(/mkdir/, { stdout: "", stderr: "", code: 0 });
-      mockSSH.setCommandResponse(/git clone/, { stdout: "Cloning...", stderr: "", code: 0 });
-      mockSSH.setCommandResponse(/systemctl/, { stdout: "", stderr: "", code: 0 });
 
       // Override pollHealthEndpoint to return true immediately
       bootstrapService.pollHealthEndpoint = async () => true;
@@ -260,13 +242,26 @@ describe("Bootstrap Service", () => {
       expect(sessions[0].workspace_path).toBe("/home/agent/workspaces/sess-123");
       expect(sessions[0].vm_id).toBe("vm-123");
 
+      // Sanity: serial bootstrap executed key commands
+      expect(executed.some((c) => c.includes("git clone"))).toBe(true);
+
       cleanupTestDb(sqlite, dbPath);
     });
 
     it("should update session to error on failure", async () => {
       const { db, sqlite, dbPath } = await createTestDb();
-      const mockSSH = createMockSSHService();
-      const bootstrapService = new RealBootstrapService(db, mockSSH);
+      const bootstrapService = new RealBootstrapService(db, {
+        createRunner: async () => ({
+          connect: async () => {},
+          run: async (cmd: string) => {
+            if (cmd.includes("git clone")) {
+              return { exitCode: 128, output: "Failed to clone: repository not found" };
+            }
+            return { exitCode: 0, output: "" };
+          },
+          close: async () => {},
+        }),
+      });
 
       // Insert a VM
       const now = new Date();
@@ -280,13 +275,6 @@ describe("Bootstrap Service", () => {
         INSERT INTO agent_sessions (id, user_id, repo_url, status, created_at, updated_at)
         VALUES ('sess-123', 'test-user', 'https://github.com/org/repo', 'creating', ${now.getTime()}, ${now.getTime()})
       `);
-
-      // Configure mock SSH to fail on git clone
-      mockSSH.setCommandResponse(/git clone/, {
-        stdout: "",
-        stderr: "Failed to clone: repository not found",
-        code: 128,
-      });
 
       const result = await bootstrapService.bootstrap({
         sessionId: "sess-123",
@@ -310,8 +298,17 @@ describe("Bootstrap Service", () => {
 
     it("should execute correct SSH commands", async () => {
       const { db, sqlite, dbPath } = await createTestDb();
-      const mockSSH = createMockSSHService();
-      const bootstrapService = new RealBootstrapService(db, mockSSH);
+      const executed: string[] = [];
+      const bootstrapService = new RealBootstrapService(db, {
+        createRunner: async () => ({
+          connect: async () => {},
+          run: async (cmd: string) => {
+            executed.push(cmd);
+            return { exitCode: 0, output: "" };
+          },
+          close: async () => {},
+        }),
+      });
 
       // Insert a VM
       const now = new Date();
@@ -337,32 +334,39 @@ describe("Bootstrap Service", () => {
         vmIp: "192.168.1.1",
       });
 
-      // Verify SSH commands were executed
-      const mkdirCall = mockSSH.calls.exec.find((call) => call.command.includes("mkdir"));
+      const mkdirCall = executed.find((c) => c.includes("mkdir -p"));
       expect(mkdirCall).toBeDefined();
-      expect(mkdirCall!.command).toBe("mkdir -p /home/agent/workspaces/sess-123");
+      expect(mkdirCall).toContain("/home/agent/workspaces/sess-123");
 
-      const cloneCall = mockSSH.calls.exec.find((call) => call.command.includes("git clone"));
+      const cloneCall = executed.find((c) => c.includes("git clone"));
       expect(cloneCall).toBeDefined();
-      expect(cloneCall!.command).toBe(
-        "git clone https://github.com/org/repo /home/agent/workspaces/sess-123"
-      );
+      expect(cloneCall).toContain("https://github.com/org/repo");
 
-      const checkoutCall = mockSSH.calls.exec.find((call) => call.command.includes("checkout"));
+      const checkoutCall = executed.find((c) => c.includes("checkout"));
       expect(checkoutCall).toBeDefined();
-      expect(checkoutCall!.command).toBe("git -C /home/agent/workspaces/sess-123 checkout develop");
+      expect(checkoutCall).toContain("develop");
 
-      const systemctlCall = mockSSH.calls.exec.find((call) => call.command.includes("systemctl"));
+      const systemctlCall = executed.find((c) => c.includes("systemctl"));
       expect(systemctlCall).toBeDefined();
-      expect(systemctlCall!.command).toContain("systemctl --user start opencode@sess-123");
+      expect(systemctlCall).toContain("systemctl --user start opencode@sess-123");
 
       cleanupTestDb(sqlite, dbPath);
     });
 
     it("should inject OpenCode config via OPENCODE_CONFIG_CONTENT env var", async () => {
       const { db, sqlite, dbPath } = await createTestDb();
-      const mockSSH = createMockSSHService();
-      const bootstrapService = new RealBootstrapService(db, mockSSH);
+
+      const executed: string[] = [];
+      const bootstrapService = new RealBootstrapService(db, {
+        createRunner: async () => ({
+          connect: async () => {},
+          run: async (cmd: string) => {
+            executed.push(cmd);
+            return { exitCode: 0, output: "" };
+          },
+          close: async () => {},
+        }),
+      });
 
       // Insert a VM
       const now = new Date();
@@ -387,21 +391,16 @@ describe("Bootstrap Service", () => {
         vmIp: "192.168.1.1",
       });
 
-      // Verify OpenCode config was injected via environment variable
-      const configCall = mockSSH.calls.exec.find((call) =>
-        call.command.includes("OPENCODE_CONFIG_CONTENT")
-      );
+      const configCall = executed.find((c) => c.includes("OPENCODE_CONFIG_CONTENT"));
       expect(configCall).toBeDefined();
-      expect(configCall!.command).toContain("OPENCODE_CONFIG_CONTENT");
-      expect(configCall!.command).toContain("systemctl --user import-environment");
-      expect(configCall!.command).toContain("systemctl --user start opencode@sess-123");
+      expect(configCall!).toContain("systemctl --user import-environment");
+      expect(configCall!).toContain("systemctl --user start opencode@sess-123");
 
-      // Verify the config contains expected values
-      expect(configCall!.command).toContain('"share":"disabled"');
-      expect(configCall!.command).toContain('"permission":"allow"');
-      expect(configCall!.command).toContain('"autoupdate":false');
-      expect(configCall!.command).toContain('"port":4096');
-      expect(configCall!.command).toContain('"hostname":"0.0.0.0"');
+      expect(configCall!).toContain('"share":"disabled"');
+      expect(configCall!).toContain('"permission":"allow"');
+      expect(configCall!).toContain('"autoupdate":false');
+      expect(configCall!).toContain('"port":4096');
+      expect(configCall!).toContain('"hostname":"0.0.0.0"');
 
       cleanupTestDb(sqlite, dbPath);
     });

@@ -1,23 +1,27 @@
 /**
  * Bootstrap Service
  *
- * Handles the SSH-based VM bootstrap sequence:
- * 1. Wait for VM to be running + SSH available
- * 2. SSH into VM and execute bootstrap commands:
- *    a. Create workspace directory
- *    b. Clone repository
- *    c. Checkout branch if specified
- *    d. Start OpenCode via systemctl with config injection
- * 3. Poll health endpoint until ready
- * 4. Update session status
+ * Handles serial-console bootstrap (no SSH):
+ * 1. Claim the VM serial console (exclusive)
+ * 2. Wait for a shell prompt on ttyS0 (requires autologin)
+ * 3. Configure guest networking
+ * 4. Create workspace + clone repo
+ * 5. Start OpenCode
+ * 6. Poll health endpoint until ready
+ * 7. Update session status
  */
 
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { eq } from "drizzle-orm";
-import type { SSHService, SSHConfig } from "./ssh";
-import { sshService } from "./ssh";
 import * as schema from "../db/schema";
 import { agentSessions } from "../db/schema";
+import { createSerialConsole } from "./firecracker";
+import {
+  clearActiveSerialConnection,
+  hasActiveSerialConnection,
+  setActiveSerialConnection,
+} from "./firecracker/serial-connections";
+import { createSerialRunner, type SerialRunnerLike } from "./firecracker/serial-runner";
 
 /**
  * OpenCode configuration structure
@@ -60,12 +64,11 @@ export interface BootstrapConfig {
   branch?: string | null;
   vmId: string;
   vmIp: string;
-  sshUsername?: string;
-  sshPrivateKey?: string;
   workspaceBasePath?: string;
   opencodePort?: number;
   healthPollIntervalMs?: number;
   healthPollTimeoutMs?: number;
+  pipeDir?: string;
 }
 
 export interface BootstrapResult {
@@ -76,7 +79,6 @@ export interface BootstrapResult {
 
 export interface BootstrapService {
   bootstrap(config: BootstrapConfig): Promise<BootstrapResult>;
-  waitForSSH(config: SSHConfig, timeoutMs?: number, intervalMs?: number): Promise<boolean>;
   pollHealthEndpoint(
     vmIp: string,
     port?: number,
@@ -85,16 +87,20 @@ export interface BootstrapService {
   ): Promise<boolean>;
 }
 
+export interface SerialBootstrapDeps {
+  /** For tests/DI: provide a runner without touching real serial pipes. */
+  createRunner?: (config: { vmId: string; pipeDir?: string }) => Promise<SerialRunnerLike>;
+  /** For tests/DI: override terminal/serial exclusivity check. */
+  isSerialConsoleInUse?: (vmId: string) => boolean;
+}
+
 export class RealBootstrapService implements BootstrapService {
   private db: BetterSQLite3Database<typeof schema>;
-  private sshService: SSHService;
+  private deps: SerialBootstrapDeps;
 
-  constructor(
-    db: BetterSQLite3Database<typeof schema>,
-    sshServiceInstance: SSHService = sshService
-  ) {
+  constructor(db: BetterSQLite3Database<typeof schema>, deps: SerialBootstrapDeps = {}) {
     this.db = db;
-    this.sshService = sshServiceInstance;
+    this.deps = deps;
   }
 
   async bootstrap(config: BootstrapConfig): Promise<BootstrapResult> {
@@ -104,88 +110,111 @@ export class RealBootstrapService implements BootstrapService {
       branch,
       vmId,
       vmIp,
-      sshUsername = "agent",
-      sshPrivateKey,
       workspaceBasePath = "/home/agent/workspaces",
       opencodePort = 4096,
       healthPollIntervalMs = 2000,
       healthPollTimeoutMs = 60000,
+      pipeDir,
     } = config;
 
-    const workspacePath = `${workspaceBasePath}/${sessionId}`;
-    const sshConfig: SSHConfig = {
-      host: vmIp,
-      username: sshUsername,
-      privateKey: sshPrivateKey,
-    };
+    let workspacePath = `${workspaceBasePath}/${sessionId}`;
+
+    if (!isValidIpv4(vmIp)) {
+      throw new Error(`Invalid VM IP address: '${vmIp}'`);
+    }
 
     try {
-      // Update session with VM ID and workspace path
+      // Update session with VM ID and workspace path (status remains 'creating').
       const now = new Date();
       await this.db
         .update(agentSessions)
         .set({
           vmId,
           workspacePath,
+          errorMessage: "Bootstrapping: connecting serial",
           updatedAt: now,
         })
         .where(eq(agentSessions.id, sessionId));
 
-      // Wait for SSH to be available
-      const sshReady = await this.waitForSSH(sshConfig, 120000, 2000);
-      if (!sshReady) {
-        throw new Error("SSH connection timed out");
-      }
-
-      // Connect to VM
-      const conn = await this.sshService.connect(sshConfig);
-
+      const { runner, cleanup } = await this.createRunnerWithCleanup({ vmId, pipeDir });
       try {
-        // 1. Create workspace directory
-        const mkdirResult = await this.sshService.exec(conn, `mkdir -p ${workspacePath}`);
-        if (mkdirResult.code !== 0) {
-          throw new Error(`Failed to create workspace: ${mkdirResult.stderr}`);
-        }
+        await runner.connect();
 
-        // 2. Clone repository
-        const cloneResult = await this.sshService.exec(
-          conn,
-          `git clone ${repoUrl} ${workspacePath}`
+        const isRoot = await isRunningAsRoot(runner);
+
+        await this.updateCreatingMessage(sessionId, "Bootstrapping: configuring network");
+        await execOk(
+          runner,
+          buildNetworkSetupCommand(vmIp),
+          "Failed to configure guest networking"
         );
-        if (cloneResult.code !== 0) {
-          throw new Error(`Failed to clone repository: ${cloneResult.stderr}`);
+
+        await this.updateCreatingMessage(sessionId, "Bootstrapping: preparing workspace");
+
+        const resolved = await ensureWorkspacePath(runner, {
+          preferredPath: workspacePath,
+          sessionId,
+        });
+        if (resolved.workspacePath !== workspacePath) {
+          workspacePath = resolved.workspacePath;
+          await this.db
+            .update(agentSessions)
+            .set({
+              workspacePath,
+              updatedAt: new Date(),
+            })
+            .where(eq(agentSessions.id, sessionId));
         }
 
-        // 3. Checkout branch if specified
+        await this.updateCreatingMessage(sessionId, "Bootstrapping: cloning repo");
+        await ensureGitAvailable(runner, sessionId);
+        await execOk(
+          runner,
+          withTmpHome(`git clone ${shQuote(repoUrl)} ${shQuote(workspacePath)}`, sessionId),
+          "Failed to clone repository (is it private? are credentials configured in the image?)"
+        );
+
         if (branch) {
-          const checkoutResult = await this.sshService.exec(
-            conn,
-            `git -C ${workspacePath} checkout ${branch}`
+          await execOk(
+            runner,
+            withTmpHome(`git -C ${shQuote(workspacePath)} checkout ${shQuote(branch)}`, sessionId),
+            "Failed to checkout branch"
           );
-          if (checkoutResult.code !== 0) {
-            throw new Error(`Failed to checkout branch: ${checkoutResult.stderr}`);
-          }
         }
 
-        // 4. Generate OpenCode config and start via systemctl with env var injection
+        await this.updateCreatingMessage(sessionId, "Bootstrapping: starting OpenCode");
+
         const openCodeConfig = generateOpenCodeConfig(workspacePath);
         const configContent = serializeOpenCodeConfig(openCodeConfig);
 
-        // Set the environment variable and start OpenCode
-        // Using systemd's --user environment with export and systemctl set-environment
-        const startResult = await this.sshService.exec(
-          conn,
-          `export OPENCODE_CONFIG_CONTENT='${configContent}' && systemctl --user import-environment OPENCODE_CONFIG_CONTENT && systemctl --user start opencode@${sessionId}`
-        );
-        if (startResult.code !== 0) {
-          throw new Error(`Failed to start OpenCode: ${startResult.stderr}`);
+        const shouldUseSystemdUser = !isRoot && workspacePath.startsWith("/home/agent/workspaces/");
+        if (shouldUseSystemdUser) {
+          const startCmd =
+            `export OPENCODE_CONFIG_CONTENT=${shQuote(configContent)} ` +
+            `&& export XDG_RUNTIME_DIR=/run/user/1000 ` +
+            `&& systemctl --user import-environment OPENCODE_CONFIG_CONTENT XDG_RUNTIME_DIR ` +
+            `&& systemctl --user start opencode@${sessionId}`;
+
+          const startResult = await runner.run(startCmd);
+          if (startResult.exitCode !== 0) {
+            throw new Error(`Failed to start OpenCode: ${truncate(startResult.output)}`);
+          }
+        } else {
+          const fallbackCmd =
+            `cd ${shQuote(workspacePath)} ` +
+            `&& ${tmpHomePrelude(sessionId)} ` +
+            `export OPENCODE_SERVER_PASSWORD=${shQuote(sessionId)} OPENCODE_CONFIG_CONTENT=${shQuote(configContent)} ` +
+            `&& nohup /home/agent/.opencode/bin/opencode web --port ${opencodePort} --hostname 0.0.0.0 ` +
+            `> ${shQuote(`/tmp/opencode-${sessionId}.log`)} 2>&1 &`;
+
+          await execOk(runner, `bash -lc ${shQuote(fallbackCmd)}`, "Failed to start OpenCode");
         }
       } finally {
-        // Always disconnect
-        await this.sshService.disconnect(conn);
+        await cleanup();
       }
 
       // 5. Poll health endpoint
+      await this.updateCreatingMessage(sessionId, "Bootstrapping: waiting for OpenCode health");
       const healthReady = await this.pollHealthEndpoint(
         vmIp,
         opencodePort,
@@ -202,6 +231,7 @@ export class RealBootstrapService implements BootstrapService {
         .update(agentSessions)
         .set({
           status: "ready",
+          errorMessage: null,
           updatedAt: new Date(),
         })
         .where(eq(agentSessions.id, sessionId));
@@ -228,24 +258,6 @@ export class RealBootstrapService implements BootstrapService {
         errorMessage,
       };
     }
-  }
-
-  async waitForSSH(
-    config: SSHConfig,
-    timeoutMs: number = 120000,
-    intervalMs: number = 2000
-  ): Promise<boolean> {
-    const startTime = Date.now();
-
-    while (Date.now() - startTime < timeoutMs) {
-      const isReady = await this.sshService.testConnection(config, intervalMs);
-      if (isReady) {
-        return true;
-      }
-      await new Promise((resolve) => setTimeout(resolve, intervalMs));
-    }
-
-    return false;
   }
 
   async pollHealthEndpoint(
@@ -275,6 +287,56 @@ export class RealBootstrapService implements BootstrapService {
 
     return false;
   }
+
+  private async updateCreatingMessage(sessionId: string, errorMessage: string): Promise<void> {
+    await this.db
+      .update(agentSessions)
+      .set({
+        // Intentionally stored in errorMessage while status=creating.
+        errorMessage,
+        updatedAt: new Date(),
+      })
+      .where(eq(agentSessions.id, sessionId));
+  }
+
+  private async createRunnerWithCleanup(config: {
+    vmId: string;
+    pipeDir?: string;
+  }): Promise<{ runner: SerialRunnerLike; cleanup: () => Promise<void> }> {
+    if (this.deps.createRunner) {
+      const runner = await this.deps.createRunner(config);
+      return {
+        runner,
+        cleanup: async () => {
+          await runner.close();
+        },
+      };
+    }
+
+    const inUse = this.deps.isSerialConsoleInUse ?? hasActiveSerialConnection;
+    if (inUse(config.vmId)) {
+      throw new Error("VM terminal in use");
+    }
+
+    const serialConsole = await createSerialConsole({
+      vmId: config.vmId,
+      pipeDir: config.pipeDir,
+    });
+    setActiveSerialConnection(config.vmId, serialConsole);
+
+    const runner = await createSerialRunner({
+      vmId: config.vmId,
+      serialConsole,
+    });
+
+    return {
+      runner,
+      cleanup: async () => {
+        clearActiveSerialConnection(config.vmId, serialConsole);
+        await runner.close().catch(() => {});
+      },
+    };
+  }
 }
 
 /**
@@ -283,7 +345,6 @@ export class RealBootstrapService implements BootstrapService {
 export interface MockBootstrapService extends BootstrapService {
   calls: {
     bootstrap: Array<{ config: BootstrapConfig }>;
-    waitForSSH: Array<{ config: SSHConfig; timeoutMs: number; intervalMs: number }>;
     pollHealthEndpoint: Array<{
       vmIp: string;
       port: number;
@@ -293,14 +354,12 @@ export interface MockBootstrapService extends BootstrapService {
   };
   clearCalls(): void;
   setBootstrapResult(result: BootstrapResult): void;
-  setSSHAvailable(available: boolean): void;
   setHealthReady(ready: boolean): void;
 }
 
 export function createMockBootstrapService(): MockBootstrapService {
   const calls = {
     bootstrap: [] as Array<{ config: BootstrapConfig }>,
-    waitForSSH: [] as Array<{ config: SSHConfig; timeoutMs: number; intervalMs: number }>,
     pollHealthEndpoint: [] as Array<{
       vmIp: string;
       port: number;
@@ -310,22 +369,12 @@ export function createMockBootstrapService(): MockBootstrapService {
   };
 
   let bootstrapResult: BootstrapResult = { success: true, workspacePath: "/mock/workspace" };
-  let sshAvailable = true;
   let healthReady = true;
 
   const service: MockBootstrapService = {
     async bootstrap(config: BootstrapConfig): Promise<BootstrapResult> {
       calls.bootstrap.push({ config });
       return bootstrapResult;
-    },
-
-    async waitForSSH(
-      config: SSHConfig,
-      timeoutMs: number = 120000,
-      intervalMs: number = 2000
-    ): Promise<boolean> {
-      calls.waitForSSH.push({ config, timeoutMs, intervalMs });
-      return sshAvailable;
     },
 
     async pollHealthEndpoint(
@@ -344,16 +393,11 @@ export function createMockBootstrapService(): MockBootstrapService {
 
     clearCalls() {
       calls.bootstrap.length = 0;
-      calls.waitForSSH.length = 0;
       calls.pollHealthEndpoint.length = 0;
     },
 
     setBootstrapResult(result: BootstrapResult) {
       bootstrapResult = result;
-    },
-
-    setSSHAvailable(available: boolean) {
-      sshAvailable = available;
     },
 
     setHealthReady(ready: boolean) {
@@ -362,4 +406,162 @@ export function createMockBootstrapService(): MockBootstrapService {
   };
 
   return service;
+}
+
+async function execOk(runner: SerialRunnerLike, command: string, message: string): Promise<void> {
+  const result = await runner.run(command);
+  if (result.exitCode !== 0) {
+    throw new Error(`${message}: ${truncate(result.output)}`);
+  }
+}
+
+async function isRunningAsRoot(runner: SerialRunnerLike): Promise<boolean> {
+  const result = await runner.run("id -u");
+  if (result.exitCode !== 0) return false;
+  return result.output.trim().split(/\s+/)[0] === "0";
+}
+
+function asAgentCommand(command: string, opts: { isRoot: boolean }): string {
+  const wrapped = `bash -lc ${shQuote(command)}`;
+  if (!opts.isRoot) return wrapped;
+
+  // We might be autologged in as root (or an image without sudo). Ensure workspace
+  // and OpenCode run as the 'agent' user.
+  const runner =
+    "if command -v runuser >/dev/null 2>&1; then " +
+    `runuser -u agent -- ${wrapped}; ` +
+    "elif command -v su >/dev/null 2>&1; then " +
+    `su - agent -c ${shQuote(command)}; ` +
+    "else echo 'Neither runuser nor su is available to switch to agent user' >&2; exit 127; fi";
+
+  return `bash -lc ${shQuote(runner)}`;
+}
+
+async function ensureWorkspacePath(
+  runner: SerialRunnerLike,
+  opts: { preferredPath: string; sessionId: string }
+): Promise<{ workspacePath: string }> {
+  const preferred = await runner.run(`mkdir -p ${shQuote(opts.preferredPath)}`);
+  if (preferred.exitCode === 0) return { workspacePath: opts.preferredPath };
+
+  if (/read-only file system/i.test(preferred.output)) {
+    const fallbackPath = `/tmp/bonfire-workspaces/${opts.sessionId}`;
+    const fallback = await runner.run(`mkdir -p ${shQuote(fallbackPath)}`);
+    if (fallback.exitCode !== 0) {
+      throw new Error(
+        `Failed to create workspace (preferred path is read-only; fallback also failed): ${truncate(
+          fallback.output
+        )}`
+      );
+    }
+    return { workspacePath: fallbackPath };
+  }
+
+  throw new Error(`Failed to create workspace: ${truncate(preferred.output)}`);
+}
+
+async function ensureGitAvailable(runner: SerialRunnerLike, sessionId: string): Promise<void> {
+  const check = await runner.run("command -v git >/dev/null 2>&1");
+  if (check.exitCode === 0) return;
+
+  // Best-effort install. This requires a writable root filesystem.
+  const script =
+    "set -euo pipefail; " +
+    "if command -v git >/dev/null 2>&1; then exit 0; fi; " +
+    "if command -v apt-get >/dev/null 2>&1; then " +
+    "  export DEBIAN_FRONTEND=noninteractive; " +
+    "  apt-get update -y; " +
+    "  apt-get install -y git ca-certificates; " +
+    "  exit 0; " +
+    "fi; " +
+    "echo 'git is not installed and no supported package manager was found' >&2; " +
+    "exit 127";
+
+  const result = await runner.run(`bash -lc ${shQuote(script)}`, {
+    timeoutMs: 180000,
+  });
+
+  if (result.exitCode !== 0) {
+    throw new Error(
+      `git is not available in the VM (install failed): ${truncate(result.output)}. ` +
+        `Rebuild the agent image with git preinstalled or use a writable rootfs.`
+    );
+  }
+
+  // Ensure it actually exists after install.
+  const verify = await runner.run("command -v git >/dev/null 2>&1");
+  if (verify.exitCode !== 0) {
+    throw new Error(
+      `git is not available in the VM after install attempt. Rebuild the agent image with git preinstalled.`
+    );
+  }
+
+  // If the VM is root and has no writable /root, ensure git won't try to write there later.
+  await runner.run(withTmpHome("true", sessionId));
+}
+
+function tmpHomePrelude(sessionId: string): string {
+  const base = `/tmp/bonfire-home/${sessionId}`;
+  return (
+    `export HOME=${shQuote(base)} ` +
+    `XDG_CONFIG_HOME=${shQuote(`${base}/.config`)} ` +
+    `XDG_CACHE_HOME=${shQuote(`${base}/.cache`)} ` +
+    `XDG_STATE_HOME=${shQuote(`${base}/.state`)} ` +
+    `XDG_DATA_HOME=${shQuote(`${base}/.local/share`)} ` +
+    `&& mkdir -p ${shQuote(base)} ${shQuote(`${base}/.config`)} ${shQuote(`${base}/.cache`)} ` +
+    `${shQuote(`${base}/.state`)} ${shQuote(`${base}/.local/share`)}`
+  );
+}
+
+function withTmpHome(command: string, sessionId: string): string {
+  return `bash -lc ${shQuote(`${tmpHomePrelude(sessionId)} && ${command}`)}`;
+}
+
+function truncate(text: string, max: number = 2000): string {
+  const trimmed = text.trim();
+  if (trimmed.length <= max) return trimmed;
+  return `${trimmed.slice(0, max)}…`;
+}
+
+function shQuote(value: string): string {
+  return `'${value.replace(/'/g, `'"'"'`)}'`;
+}
+
+function isValidIpv4(ip: string): boolean {
+  const m = ip.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (!m) return false;
+  const parts = m.slice(1).map((p) => Number.parseInt(p, 10));
+  return parts.every((n) => Number.isFinite(n) && n >= 0 && n <= 255);
+}
+
+function buildNetworkSetupCommand(vmIp: string): string {
+  // Firecracker boot args do not configure guest networking.
+  // Do it from serial to make SSH/health checks reachable.
+  const script =
+    "set -euo pipefail; " +
+    'IFACE="$(ls -1 /sys/class/net | grep -v lo | head -n 1)"; ' +
+    '[ -n "$IFACE" ]; ' +
+    'SUDO=""; ' +
+    'if [ "$(id -u)" -ne 0 ]; then ' +
+    '  if command -v sudo >/dev/null 2>&1; then SUDO="sudo"; ' +
+    "  else echo 'sudo not found (need passwordless sudo or root autologin on ttyS0)' >&2; exit 127; fi; " +
+    "fi; " +
+    '$SUDO ip link set dev "$IFACE" up; ' +
+    `$SUDO ip addr add ${vmIp}/24 dev \"$IFACE\" || true; ` +
+    "$SUDO ip route replace default via 10.0.100.1; " +
+    // DNS: prefer systemd-resolved tooling because /etc/resolv.conf may be read-only.
+    "if command -v resolvectl >/dev/null 2>&1; then " +
+    '  $SUDO resolvectl dns "$IFACE" 1.1.1.1 8.8.8.8; ' +
+    "  $SUDO resolvectl domain \"$IFACE\" '~.' || true; " +
+    "elif command -v systemd-resolve >/dev/null 2>&1; then " +
+    '  $SUDO systemd-resolve --interface="$IFACE" --set-dns=1.1.1.1 --set-dns=8.8.8.8; ' +
+    "else " +
+    '  if [ -w /etc/resolv.conf ]; then echo "nameserver 1.1.1.1" | $SUDO tee /etc/resolv.conf >/dev/null; ' +
+    "  else echo '/etc/resolv.conf is not writable; DNS may be unavailable' >&2; fi; " +
+    "fi; " +
+    // Validate L2/L3 and (best-effort) DNS.
+    "ping -c 1 -W 1 10.0.100.1; " +
+    "if command -v getent >/dev/null 2>&1; then getent hosts github.com >/dev/null 2>&1 || true; fi";
+
+  return `bash -lc ${shQuote(script)}`;
 }
