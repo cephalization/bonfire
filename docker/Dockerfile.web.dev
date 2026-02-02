@@ -1,0 +1,32 @@
+# syntax=docker/dockerfile:1.7
+
+FROM node:24-bookworm
+
+WORKDIR /app
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+ENV NODE_ENV=development
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json tsconfig.json ./
+COPY packages/api/package.json packages/api/package.json
+COPY packages/web/package.json packages/web/package.json
+COPY packages/sdk/package.json packages/sdk/package.json
+COPY packages/cli/package.json packages/cli/package.json
+
+RUN corepack enable \
+  && corepack prepare pnpm@10.0.0 --activate \
+  && pnpm config set store-dir /pnpm/store
+
+RUN pnpm install --frozen-lockfile
+
+COPY . .
+
+EXPOSE 5173
+
+CMD ["pnpm", "-C", "packages/web", "run", "dev", "--", "--host", "0.0.0.0", "--clearScreen", "false"]

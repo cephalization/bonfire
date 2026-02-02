@@ -1,32 +1,44 @@
-# Bonfire Web Development Service
-FROM node:24-bookworm
+# syntax=docker/dockerfile:1.7
 
-WORKDIR /app
+FROM node:24-bookworm AS pruner
 
-# Avoid interactive Corepack download prompts in containers
+WORKDIR /repo
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 
-# Install curl for health checks
-RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+RUN corepack enable \
+  && corepack prepare pnpm@10.0.0 --activate
 
-# Copy workspace manifests
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json turbo.json ./
-COPY packages/web/package.json packages/web/package.json
+COPY . .
 
-# Install dependencies (workspace-aware)
+RUN pnpm dlx turbo@2.8.0 prune @bonfire/web --docker
+
+
+FROM node:24-bookworm AS builder
+
+WORKDIR /app
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+
 RUN corepack enable \
   && corepack prepare pnpm@10.0.0 --activate \
-  && pnpm install --frozen-lockfile
+  && pnpm config set store-dir /pnpm/store
 
-# Copy source code
-COPY . ./
+COPY --from=pruner /repo/out/json/ ./
+COPY --from=pruner /repo/out/pnpm-lock.yaml ./pnpm-lock.yaml
+COPY --from=pruner /repo/out/pnpm-workspace.yaml ./pnpm-workspace.yaml
 
-# Expose Vite dev server port
-EXPOSE 5173
+RUN pnpm install --frozen-lockfile
 
-# Health check
-HEALTHCHECK --interval=10s --timeout=5s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:5173 || exit 1
+COPY --from=pruner /repo/out/full/ ./
+COPY --from=pruner /repo/tsconfig.json ./tsconfig.json
 
-# Start Vite dev server
-CMD ["pnpm", "run", "dev", "--", "--host", "--clearScreen", "false"]
+RUN pnpm --filter @bonfire/web build
+
+
+FROM nginx:alpine AS runtime
+
+COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=builder /app/packages/web/dist/ /usr/share/nginx/html/
+
+EXPOSE 80

@@ -375,6 +375,20 @@ export function createAgentSessionsRouter(config: AgentSessionsRouterConfig): Op
   const { db } = config;
   const bootstrapService = config.bootstrapService ?? new RealBootstrapService(db);
 
+  async function waitForVmIpAddress(
+    vmId: string,
+    timeoutMs: number = 60000,
+    intervalMs: number = 2000
+  ): Promise<string | null> {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const [vm] = await db.select().from(vms).where(eq(vms.id, vmId));
+      if (vm?.ipAddress) return vm.ipAddress;
+      await new Promise((r) => setTimeout(r, intervalMs));
+    }
+    return null;
+  }
+
   // Helper to serialize session for JSON response
   function serializeSession(session: typeof schema.agentSessions.$inferSelect) {
     return {
@@ -457,23 +471,45 @@ export function createAgentSessionsRouter(config: AgentSessionsRouterConfig): Op
 
       // If a VM ID was provided, trigger bootstrap asynchronously
       if (vmId) {
-        // Get VM details
-        const [vm] = await db.select().from(vms).where(eq(vms.id, vmId));
+        // Trigger bootstrap in the background.
+        // VM IP assignment can lag behind "running" status, so we poll briefly.
+        (async () => {
+          const [vm] = await db.select().from(vms).where(eq(vms.id, vmId));
+          if (!vm) {
+            await db
+              .update(agentSessions)
+              .set({
+                status: "error",
+                errorMessage: "Associated VM not found",
+                updatedAt: new Date(),
+              })
+              .where(eq(agentSessions.id, sessionId));
+            return;
+          }
 
-        if (vm && vm.ipAddress) {
-          // Trigger bootstrap in the background
-          bootstrapService
-            .bootstrap({
-              sessionId,
-              repoUrl,
-              branch,
-              vmId,
-              vmIp: vm.ipAddress,
-            })
-            .catch((error) => {
-              console.error(`Bootstrap failed for session ${sessionId}:`, error);
-            });
-        }
+          const vmIp = vm.ipAddress ?? (await waitForVmIpAddress(vmId));
+          if (!vmIp) {
+            await db
+              .update(agentSessions)
+              .set({
+                status: "error",
+                errorMessage: "VM has no IP address (timed out waiting for assignment)",
+                updatedAt: new Date(),
+              })
+              .where(eq(agentSessions.id, sessionId));
+            return;
+          }
+
+          await bootstrapService.bootstrap({
+            sessionId,
+            repoUrl,
+            branch,
+            vmId,
+            vmIp,
+          });
+        })().catch((error) => {
+          console.error(`Bootstrap failed for session ${sessionId}:`, error);
+        });
       }
 
       return c.json(serializeSession(newSession), 201);

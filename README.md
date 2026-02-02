@@ -41,10 +41,24 @@ git clone https://github.com/cephalization/bonfire.git
 cd bonfire
 ```
 
-2. Build and run with Docker Compose:
+2. Build and run the development stack with Docker Compose:
 
 ```bash
-docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml up
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml up -d --remove-orphans
+```
+
+If you already have Node + pnpm locally, you can also run:
+
+```bash
+pnpm run dev:docker
+```
+
+Optional (recommended): create a repo-root `.env` to persist your auth settings for Docker Compose:
+
+```env
+BETTER_AUTH_SECRET=<generate-a-secure-random-string>
+# In dev, Better Auth runs on the API origin
+BETTER_AUTH_URL=http://localhost:3000
 ```
 
 3. Open http://localhost:5173 in your browser
@@ -59,6 +73,19 @@ This starts both API and web servers with:
 - Source code mounted as volumes for live editing
 - KVM device access for VM management
 - Ports 3000 (API) and 5173 (Web UI) exposed
+
+### Production Compose
+
+For a production-like setup (static web served by nginx with `/api` reverse-proxied to the API):
+
+```bash
+BETTER_AUTH_SECRET="change-me" \
+BETTER_AUTH_URL="https://your-hostname" \
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml up
+```
+
+- Web UI: http://localhost
+- API: http://localhost:3000
 
 ### Alternative: Bare Metal Installation
 
@@ -125,11 +152,14 @@ bonfire/
 
 ### Environment Variables
 
-The setup script creates a `.env` file in `packages/api` with sensible defaults.
+For Docker Compose, put environment variables in a repo-root `.env` file (Docker Compose reads it automatically).
+
+For bare metal (running `packages/api` directly), you can also put them in `packages/api/.env`.
+
 Review and update the values as needed:
 
 ```env
-DB_PATH=/var/lib/bonfire/bonfire.db
+DATABASE_URL=/var/lib/bonfire/bonfire.db
 BETTER_AUTH_SECRET=<generate-a-secure-random-string>
 BETTER_AUTH_URL=http://localhost:3000
 PORT=3000

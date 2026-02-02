@@ -7,7 +7,7 @@ set -e
 # Install dependencies if node_modules is missing (common with Docker volume mounts)
 if [ ! -d "/app/node_modules" ]; then
   echo "📦 Installing dependencies (pnpm)..."
-  (cd /app && corepack enable && pnpm install)
+  (cd /app && corepack enable && pnpm install --frozen-lockfile)
 fi
 
 # Initialize network (creates bridge, enables IP forwarding, sets up NAT)

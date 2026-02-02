@@ -56,7 +56,7 @@ docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml up 
 docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml logs -f api
 docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml logs -f web
 
-# Restart a service (REQUIRED after backend code changes)
+# Restart a service (only needed if the process gets stuck)
 docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml restart api
 
 # Stop services
@@ -66,7 +66,7 @@ docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml dow
 docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml ps
 ```
 
-**Important**: The API server requires restart after code changes. The web server has hot reload via Vite.
+**Important**: Both the API and web servers hot reload in the dev compose setup.
 
 ### Local Development (Alternative)
 
@@ -264,7 +264,7 @@ Key files:
 
 **Problem**: Code changes in `packages/api/` not reflected.
 
-**Solution**: Restart the API container:
+**Solution**: Restart the API container (rare):
 
 ```bash
 docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml restart api

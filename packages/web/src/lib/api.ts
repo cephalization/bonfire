@@ -6,8 +6,9 @@
  */
 
 // Base configuration
-// In development, use empty string for relative URLs to leverage Vite dev server proxy
-// In production, VITE_API_URL should be set to the full API URL
+// In development, use empty string for relative URLs to leverage the Vite dev proxy.
+// In production, prefer same-origin via a reverse proxy (web serves UI and proxies `/api`).
+// If you deploy API separately, set VITE_API_URL to the full API URL.
 const DEFAULT_BASE_URL = import.meta.env.VITE_API_URL || "";
 
 // WebSocket base URL for terminal connections

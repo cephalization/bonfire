@@ -1,0 +1,113 @@
+# syntax=docker/dockerfile:1.7
+
+FROM node:24-bookworm AS pruner
+
+WORKDIR /repo
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+
+RUN corepack enable \
+  && corepack prepare pnpm@10.0.0 --activate
+
+COPY . .
+
+# Generate a minimal monorepo for the API workspace.
+RUN pnpm dlx turbo@2.8.0 prune @bonfire/api --docker
+
+
+FROM node:24-bookworm AS builder
+
+WORKDIR /app
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+
+RUN corepack enable \
+  && corepack prepare pnpm@10.0.0 --activate \
+  && pnpm config set store-dir /pnpm/store
+
+# Install deps (cacheable)
+COPY --from=pruner /repo/out/json/ ./
+COPY --from=pruner /repo/out/pnpm-lock.yaml ./pnpm-lock.yaml
+COPY --from=pruner /repo/out/pnpm-workspace.yaml ./pnpm-workspace.yaml
+
+RUN pnpm install --frozen-lockfile
+
+# Build API
+COPY --from=pruner /repo/out/full/ ./
+COPY --from=pruner /repo/tsconfig.json ./tsconfig.json
+
+RUN pnpm --filter @bonfire/api build
+
+
+FROM node:24-bookworm AS prod-deps
+
+WORKDIR /app
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+ENV NODE_ENV=production
+
+RUN corepack enable \
+  && corepack prepare pnpm@10.0.0 --activate \
+  && pnpm config set store-dir /pnpm/store
+
+COPY --from=pruner /repo/out/json/ ./
+COPY --from=pruner /repo/out/pnpm-lock.yaml ./pnpm-lock.yaml
+COPY --from=pruner /repo/out/pnpm-workspace.yaml ./pnpm-workspace.yaml
+
+# Install production deps with scripts enabled so native deps (better-sqlite3) build.
+# Root prepare script is guarded to avoid husky failures.
+RUN pnpm install --prod --frozen-lockfile
+
+
+FROM node:24-bookworm-slim AS runtime
+
+WORKDIR /app
+ENV NODE_ENV=production
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash \
+    ca-certificates \
+    curl \
+    jq \
+    iproute2 \
+    iptables \
+    procps \
+    tini \
+  && rm -rf /var/lib/apt/lists/*
+
+# Install Firecracker (latest by default).
+ARG FIRECRACKER_VERSION=latest
+RUN set -eu; \
+  arch="$(dpkg --print-architecture)"; \
+  case "$arch" in \
+    amd64) arch_tag="x86_64" ;; \
+    arm64) arch_tag="aarch64" ;; \
+    *) echo "Unsupported architecture: $arch" >&2; exit 1 ;; \
+  esac; \
+  release_url="https://github.com/firecracker-microvm/firecracker/releases"; \
+  if [ "$FIRECRACKER_VERSION" = "latest" ]; then \
+    version="$(curl -fsSLI -o /dev/null -w '%{url_effective}' "${release_url}/latest" | sed 's#.*/tag/v##')"; \
+  else \
+    version="$FIRECRACKER_VERSION"; \
+  fi; \
+  curl -fsSL "${release_url}/download/v${version}/firecracker-v${version}-${arch_tag}.tgz" | tar -xz -C /tmp; \
+  cp "/tmp/release-v${version}-${arch_tag}/firecracker-v${version}-${arch_tag}" /usr/local/bin/firecracker; \
+  chmod +x /usr/local/bin/firecracker; \
+  rm -rf "/tmp/release-v${version}-${arch_tag}"; \
+  /usr/local/bin/firecracker --version || true
+
+COPY --from=prod-deps /app/node_modules /app/node_modules
+COPY --from=prod-deps /app/packages /app/packages
+
+COPY --from=builder /app/packages/api/dist /app/packages/api/dist
+COPY --from=builder /app/packages/api/scripts /app/packages/api/scripts
+
+RUN chmod +x /app/packages/api/scripts/init-network.sh || true
+
+COPY docker/api-entrypoint.sh /app/docker/api-entrypoint.sh
+RUN chmod +x /app/docker/api-entrypoint.sh
+
+EXPOSE 3000
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["/app/docker/api-entrypoint.sh"]

@@ -110,11 +110,35 @@ export function runMigrations(dbPath: string = config.dbPath): void {
       );
     `);
 
+    // Application: agent sessions table
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS "agent_sessions" (
+        "id" TEXT PRIMARY KEY NOT NULL,
+        "user_id" TEXT NOT NULL,
+        "title" TEXT,
+        "repo_url" TEXT NOT NULL,
+        "branch" TEXT,
+        "vm_id" TEXT,
+        "workspace_path" TEXT,
+        "status" TEXT DEFAULT 'creating' NOT NULL,
+        "error_message" TEXT,
+        "created_at" INTEGER NOT NULL,
+        "updated_at" INTEGER NOT NULL,
+        FOREIGN KEY ("user_id") REFERENCES "user"("id") ON DELETE CASCADE,
+        FOREIGN KEY ("vm_id") REFERENCES "vms"("id")
+      );
+    `);
+
     // Create indexes for better performance
     db.exec(`CREATE INDEX IF NOT EXISTS idx_session_user_id ON "session"("user_id");`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_account_user_id ON "account"("user_id");`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_vms_status ON "vms"("status");`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_vms_image_id ON "vms"("image_id");`);
+    db.exec(
+      `CREATE INDEX IF NOT EXISTS idx_agent_sessions_user_id ON "agent_sessions"("user_id");`
+    );
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_agent_sessions_status ON "agent_sessions"("status");`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_agent_sessions_vm_id ON "agent_sessions"("vm_id");`);
 
     console.log("✅ Database migrations complete");
   } finally {

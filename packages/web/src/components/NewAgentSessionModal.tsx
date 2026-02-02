@@ -78,12 +78,13 @@ function NewAgentSessionForm({
       setIsFetchingVMs(true);
       try {
         const data = await listVMs();
-        // Only show running VMs
+        // Only show running VMs.
+        // Note: IP assignment can lag behind "running"; we disable those until ready.
         const runningVMs = data.filter((vm) => vm.status === "running");
         setVms(runningVMs);
-        if (runningVMs.length > 0) {
-          setVmId(runningVMs[0].id);
-        }
+        const firstReady = runningVMs.find((vm) => Boolean(vm.ipAddress));
+        const defaultVm = firstReady ?? runningVMs[0];
+        if (defaultVm) setVmId(defaultVm.id);
       } catch (err) {
         console.error("Failed to fetch VMs:", err);
       } finally {
@@ -104,6 +105,12 @@ function NewAgentSessionForm({
 
     if (!vmId) {
       setError("Please select a VM");
+      return;
+    }
+
+    const selectedVm = vms.find((vm) => vm.id === vmId);
+    if (selectedVm && !selectedVm.ipAddress) {
+      setError("Selected VM has no IP address yet. Wait a moment and try again.");
       return;
     }
 
@@ -195,7 +202,7 @@ function NewAgentSessionForm({
             </SelectTrigger>
             <SelectContent>
               {vms.map((vm) => (
-                <SelectItem key={vm.id} value={vm.id}>
+                <SelectItem key={vm.id} value={vm.id} disabled={!vm.ipAddress}>
                   {vm.name} ({vm.ipAddress || "no IP"})
                 </SelectItem>
               ))}
@@ -230,7 +237,12 @@ function NewAgentSessionForm({
         </Button>
         <Button
           type="submit"
-          disabled={isLoading || !repoUrl.trim() || !vmId}
+          disabled={
+            isLoading ||
+            !repoUrl.trim() ||
+            !vmId ||
+            Boolean(vms.find((vm) => vm.id === vmId && !vm.ipAddress))
+          }
           className="min-h-[44px] w-full sm:w-auto"
           data-testid="create-session-submit"
         >
