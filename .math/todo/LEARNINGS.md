@@ -264,3 +264,25 @@ Use this knowledge to avoid repeating mistakes and build on what works.
 - **Build verification**: Always run `pnpm run build` and `pnpm -r test` after major deletions to catch TypeScript errors and ensure tests still pass.
 
 - **Lines removed**: ~1,500+ lines including routes, services, tests, and related infrastructure.
+
+## w8a8vk3f - Phase 6: SSH Key Injection
+
+- **SSH key injection timing**: Keys must be injected after the rootfs copy is created but BEFORE the Firecracker process spawns. This is the only window where the rootfs is not in use by a running VM.
+
+- **Rootfs mounting strategy**: Use a loopback mount with `mount -o loop` to temporarily mount the ext4 rootfs. Always unmount (with lazy fallback `-l`) and cleanup the mount point in a `finally` block to avoid leaving mounts behind on errors.
+
+- **Proper SSH directory permissions**: SSH is strict about permissions. The `.ssh` directory must be 700 (rwx------) and `authorized_keys` must be 600 (rw-------). The chown to uid 1000 (agent user) may fail in containers - that's okay as the build-time ownership should be correct.
+
+- **Ed25519 key generation**: Use `ssh-keygen -t ed25519` for modern, secure keys. Generate in a temp directory, read the files, then cleanup. The `-N ""` flag creates keys without passphrases for automated use.
+
+- **Test mode detection**: Check both `process.env.VITEST` and `process.env.NODE_ENV === "test"` to skip actual filesystem operations in tests. Return mock paths and data instead.
+
+- **CLI SSH transition**: Replace WebSocket terminal with native SSH client (`ssh` command). Use `stdio: "inherit"` to pass through terminal interaction directly. This is simpler and more reliable than WebSocket proxying.
+
+- **SSH command options for automation**: Use `-o StrictHostKeyChecking=no` and `-o UserKnownHostsFile=/dev/null` to avoid interactive host key acceptance. This is safe for ephemeral VMs that are recreated frequently.
+
+- **Key storage location**: Store VM-specific SSH keys in `/var/lib/bonfire/keys/vm-{vmId}` with matching `.pub` file. The CLI looks for keys in `~/.bonfire/keys/` or via `BONFIRE_SSH_KEY` env var.
+
+- **Mocking external commands in tests**: When testing modules that use `execFile` or `spawn`, mock the entire module with `vi.mock()` at the top of the test file (before imports). The mock factory runs before the module is imported.
+
+- **Interface abstraction**: Define a clean `SSHKeyService` interface with methods like `generateKeyPair()`, `injectKeys()`, `hasKeys()`, etc. This allows both real and mock implementations for testing.

@@ -26,6 +26,7 @@ import {
   type FirecrackerProcess,
 } from "../services/firecracker/process";
 import type { VMConfiguration } from "../services/firecracker/socket-client";
+import { injectSSHKeys } from "../services/ssh-keys";
 
 const execFileAsync = promisify(execFile);
 
@@ -709,10 +710,17 @@ export function createVMsRouter(config: VMsRouterConfig): OpenAPIHono {
           imageRootfsPath: image.rootfsPath,
         });
 
-        // 2. Spawn Firecracker process
+        // 2. Inject SSH keys into the rootfs before boot
+        // This allows SSH access to the VM as the 'agent' user
+        await injectSSHKeys({
+          rootfsPath,
+          vmId: id,
+        });
+
+        // 4. Spawn Firecracker process
         firecrackerProcess = await spawnFirecrackerFn({ vmId: id });
 
-        // 3. Configure the VM
+        // 5. Configure the VM
         const vmConfig: VMConfiguration = {
           machineConfig: {
             vcpu_count: vm.vcpus,
@@ -741,7 +749,7 @@ export function createVMsRouter(config: VMsRouterConfig): OpenAPIHono {
 
         await configureVMProcessFn(firecrackerProcess.socketPath, vmConfig);
 
-        // 4. Start the VM
+        // 6. Start the VM
         await startVMProcessFn(firecrackerProcess.socketPath);
       } catch (error) {
         // Cleanup network resources on failure
@@ -749,7 +757,7 @@ export function createVMsRouter(config: VMsRouterConfig): OpenAPIHono {
         throw error;
       }
 
-      // 5. Update DB with running status and runtime info
+      // 7. Update DB with running status and runtime info
       const now = new Date();
       const updatedVM = {
         ...vm,

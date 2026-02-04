@@ -402,83 +402,72 @@ export async function handleVMSSH(
     throw new Error("VM has no IP address assigned");
   }
 
-  console.log(pc.gray(`Connecting to ${vm.name} (${vm.ipAddress})...`));
-  console.log(pc.gray("Press Ctrl+C to exit"));
+  // Import spawn from child_process for native SSH
+  const { spawn } = await import("child_process");
+  const { homedir } = await import("os");
+  const { join } = await import("path");
+  const { stat } = await import("fs/promises");
+
+  // Default SSH key path - keys are stored in /var/lib/bonfire/keys on the server
+  // But for CLI, we need to get the key from the API or use a local key
+  // For now, use a default path that can be overridden by environment variable
+  const defaultKeyPath = join(homedir(), ".bonfire", "keys", `vm-${vm.id}`);
+  const sshKeyPath = process.env.BONFIRE_SSH_KEY || defaultKeyPath;
+
+  // Check if key exists
+  try {
+    await stat(sshKeyPath);
+  } catch {
+    // If key doesn't exist locally, we'll try to connect without a specific key
+    // This assumes the user has added their key to the VM via other means
+    console.log(pc.yellow(`Warning: SSH key not found at ${sshKeyPath}`));
+    console.log(pc.gray("Attempting connection without specific key..."));
+  }
+
+  console.log(pc.gray(`Connecting to ${vm.name} (${vm.ipAddress}) as agent...`));
+  console.log(pc.gray("Press Ctrl+D or type 'exit' to disconnect"));
   console.log();
 
-  // Connect to WebSocket terminal
-  const wsUrl = new URL(`/api/vms/${encodeURIComponent(identifier)}/terminal`, baseUrl);
-  wsUrl.protocol = wsUrl.protocol === "https:" ? "wss:" : "ws:";
+  // Spawn native SSH process
+  const sshArgs = [
+    "-o",
+    "StrictHostKeyChecking=no",
+    "-o",
+    "UserKnownHostsFile=/dev/null",
+    "-o",
+    "LogLevel=ERROR",
+    "-o",
+    "ConnectTimeout=10",
+  ];
 
-  const ws = new WebSocket(wsUrl.toString());
+  // Add identity file if it exists
+  try {
+    await stat(sshKeyPath);
+    sshArgs.push("-i", sshKeyPath);
+  } catch {
+    // Key doesn't exist, continue without -i flag
+  }
+
+  sshArgs.push(`agent@${vm.ipAddress}`);
+
+  const sshProcess = spawn("ssh", sshArgs, {
+    stdio: "inherit",
+  });
 
   return new Promise((resolve, reject) => {
-    let isReady = false;
-
-    ws.onopen = () => {
-      // Terminal connected, wait for ready message
-    };
-
-    ws.onmessage = (event) => {
-      const data = event.data.toString();
-
-      // Check for ready/error message from server
-      if (!isReady) {
-        try {
-          const msg = JSON.parse(data);
-          if (msg.ready) {
-            isReady = true;
-            // Enable raw mode only after receiving ready message
-            process.stdin.setRawMode(true);
-            process.stdin.resume();
-            process.stdin.setEncoding("utf8");
-
-            // Send a newline to trigger the shell prompt
-            ws.send("\n");
-
-            process.stdin.on("data", (inputData: Buffer) => {
-              const str = inputData.toString();
-
-              // Handle Ctrl+C to exit
-              if (str === "\u0003") {
-                ws.close();
-                process.stdin.setRawMode(false);
-                process.stdin.pause();
-                return;
-              }
-
-              if (ws.readyState === WebSocket.OPEN) {
-                ws.send(inputData);
-              }
-            });
-            return;
-          }
-          if (msg.error) {
-            reject(new Error(msg.error));
-            return;
-          }
-        } catch {
-          // Not JSON, treat as terminal output
-        }
+    sshProcess.on("close", (code) => {
+      if (code === 0) {
+        console.log();
+        console.log(pc.gray("Connection closed"));
+        resolve();
+      } else {
+        reject(new Error(`SSH exited with code ${code}`));
       }
+    });
 
-      // Write terminal output to stdout
-      process.stdout.write(data);
-    };
-
-    ws.onerror = (error) => {
-      reject(new Error("WebSocket connection failed"));
-    };
-
-    ws.onclose = () => {
-      if (isReady) {
-        process.stdin.setRawMode(false);
-        process.stdin.pause();
-      }
-      console.log();
-      console.log(pc.gray("Connection closed"));
-      resolve();
-    };
+    sshProcess.on("error", (error) => {
+      reject(new Error(`Failed to start SSH: ${error.message}`));
+    });
   });
 }
 
