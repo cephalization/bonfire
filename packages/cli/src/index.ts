@@ -54,7 +54,7 @@ function showVersion(): void {
 
 function normalizeConfigKey(key: string): keyof Config | null {
   if (key === "api-url") return "apiUrl";
-  if (key === "token") return "token";
+  if (key === "api-key") return "apiKey";
   return null;
 }
 
@@ -67,14 +67,14 @@ async function handleConfigCommand(args: string[]): Promise<void> {
 
     if (!rawKey || !value) {
       console.error(pc.red("Usage: bonfire config set <key> <value>"));
-      console.error(pc.gray("Keys: api-url, token"));
+      console.error(pc.gray("Keys: api-url, api-key"));
       process.exit(1);
     }
 
     const key = normalizeConfigKey(rawKey);
     if (!key) {
       console.error(pc.red(`Unknown config key: ${rawKey}`));
-      console.error(pc.gray("Valid keys: api-url, token"));
+      console.error(pc.gray("Valid keys: api-url, api-key"));
       process.exit(1);
     }
 
@@ -87,7 +87,7 @@ async function handleConfigCommand(args: string[]): Promise<void> {
       const key = normalizeConfigKey(rawKey);
       if (!key) {
         console.error(pc.red(`Unknown config key: ${rawKey}`));
-        console.error(pc.gray("Valid keys: api-url, token"));
+        console.error(pc.gray("Valid keys: api-url, api-key"));
         process.exit(1);
       }
       const value = await getConfigValue(key);
@@ -95,7 +95,7 @@ async function handleConfigCommand(args: string[]): Promise<void> {
     } else {
       const config = await loadConfig();
       console.log(`api-url: ${config.apiUrl}`);
-      console.log(`token: ${config.token || "(not set)"}`);
+      console.log(`api-key: ${config.apiKey || "(not set)"}`);
     }
   } else {
     console.error(pc.red("Usage: bonfire config <set|get> [args...]"));

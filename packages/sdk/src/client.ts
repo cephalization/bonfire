@@ -9,19 +9,16 @@ import type { HealthResponse, VM, CreateVMRequest, Image, SuccessResponse } from
 
 export interface ClientConfig {
   baseUrl?: string;
-  token?: string; // Bearer token (optional)
-  cookie?: string; // Cookie header value (optional)
+  apiKey?: string; // API key for authentication (X-API-Key header)
 }
 
 export class BonfireClient {
   private baseUrl: string;
-  private token?: string;
-  private cookie?: string;
+  private apiKey?: string;
 
   constructor(config: ClientConfig = {}) {
     this.baseUrl = config.baseUrl || "http://localhost:3000";
-    this.token = config.token;
-    this.cookie = config.cookie;
+    this.apiKey = config.apiKey;
   }
 
   private async request<T>(
@@ -41,12 +38,8 @@ export class BonfireClient {
       "Content-Type": "application/json",
     };
 
-    if (this.token) {
-      headers["Authorization"] = `Bearer ${this.token}`;
-    }
-
-    if (this.cookie) {
-      headers["Cookie"] = this.cookie;
+    if (this.apiKey) {
+      headers["X-API-Key"] = this.apiKey;
     }
 
     const response = await fetch(url.toString(), {
@@ -154,16 +147,15 @@ export class BonfireClient {
   /**
    * Create a WebSocket connection for terminal access to a VM
    * Returns a WebSocket instance connected to the VM's terminal
+   * Note: API key must be passed differently for WebSocket connections
    */
   createTerminalWebSocket(id: string): WebSocket {
     const wsUrl = new URL(`/api/vms/${id}/terminal`, this.baseUrl);
     // Convert http(s) to ws(s)
     wsUrl.protocol = wsUrl.protocol === "https:" ? "wss:" : "ws:";
-    // Pass auth cookie as query parameter since WebSocket connections
-    // cannot set custom headers in the browser
-    if (this.cookie) {
-      wsUrl.searchParams.set("cookie", this.cookie);
-    }
+    // Note: WebSocket connections in browsers cannot set custom headers.
+    // The API key should be configured via other means (e.g., query param)
+    // for browser-based WebSocket connections.
     return new WebSocket(wsUrl.toString());
   }
 }

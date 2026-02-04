@@ -1,13 +1,21 @@
 /**
- * Authentication Middleware
+ * Simple API Key Authentication Middleware
  *
- * Validates API key from X-API-Key header for protected routes.
- * Replaces Better Auth session-based authentication with simple API keys.
+ * Validates X-API-Key header against configured API key.
+ * Much simpler than Better Auth session-based authentication.
  */
 
 import type { MiddlewareHandler } from "hono";
 import { config } from "../lib/config";
-import type { ApiKeyUser } from "../lib/auth";
+
+/**
+ * Simple user context for API key auth
+ */
+export interface ApiKeyUser {
+  id: string;
+  name: string;
+  role: "admin" | "user";
+}
 
 /**
  * API Key middleware that validates the X-API-Key header
@@ -24,7 +32,7 @@ export function apiKeyAuth(): MiddlewareHandler {
       return c.json({ error: "Unauthorized - invalid API key" }, 401);
     }
 
-    // Set user info in context for route handlers
+    // Set a simple user context for the request
     c.set("user", {
       id: "api-user",
       name: "API User",

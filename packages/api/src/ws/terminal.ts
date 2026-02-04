@@ -4,11 +4,10 @@ import { eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type * as schema from "../db/schema";
 import { vms } from "../db/schema";
-import type { Auth } from "../lib/auth";
+import { config as appConfig } from "../lib/config";
 
 type TerminalWsConfig = {
   db: BetterSQLite3Database<typeof schema>;
-  auth: Auth;
   pipeDir?: string;
 };
 
@@ -31,7 +30,7 @@ function headersFromNodeRequest(req: IncomingMessage): Headers {
   return headers;
 }
 
-export function attachTerminalWebSocketServer(server: Server, config: TerminalWsConfig): void {
+export function attachTerminalWebSocketServer(server: Server, wsConfig: TerminalWsConfig): void {
   const wss = new WebSocketServer({ noServer: true });
 
   const handleConnection = (ws: WebSocket, vmId: string) => {
@@ -50,23 +49,21 @@ export function attachTerminalWebSocketServer(server: Server, config: TerminalWs
       const vmId = extractVmIdFromPath(url.pathname);
       if (!vmId) return; // Not ours
 
-      // Authenticate WS handshake.
+      // Authenticate WS handshake using API key
       const headers = headersFromNodeRequest(req);
-      const cookieFromQuery = url.searchParams.get("cookie");
-      if (cookieFromQuery) headers.set("cookie", cookieFromQuery);
+      const apiKey = headers.get("X-API-Key");
 
-      const session = await config.auth.api.getSession({ headers });
-      if (!session) {
+      if (!apiKey || apiKey !== appConfig.apiKey) {
         // Accept the upgrade so we can send a proper error message
         wss.handleUpgrade(req, socket, head, (ws) => {
-          ws.send(JSON.stringify({ error: "Unauthorized - valid session required" }));
+          ws.send(JSON.stringify({ error: "Unauthorized - valid API key required" }));
           ws.close();
         });
         return;
       }
 
       // Validate VM state.
-      const [vm] = await config.db.select().from(vms).where(eq(vms.id, vmId));
+      const [vm] = await wsConfig.db.select().from(vms).where(eq(vms.id, vmId));
       if (!vm) {
         // Accept the upgrade so we can send a proper error message
         wss.handleUpgrade(req, socket, head, (ws) => {

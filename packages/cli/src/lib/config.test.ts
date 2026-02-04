@@ -49,13 +49,13 @@ describe("config", () => {
       const config = await loadConfig();
 
       expect(config.apiUrl).toBe(DEFAULT_CONFIG.apiUrl);
-      expect(config.token).toBeUndefined();
+      expect(config.apiKey).toBeUndefined();
     });
 
     it("should load config from file", async () => {
       const customConfig: Config = {
         apiUrl: "http://example.com:8080",
-        token: "my-token",
+        apiKey: "my-api-key",
       };
 
       // Create a module-level mock would be complex, let's test differently
@@ -67,17 +67,17 @@ describe("config", () => {
       const content = await readFile(configPath, "utf-8");
       const parsed = JSON.parse(content);
       expect(parsed.apiUrl).toBe(customConfig.apiUrl);
-      expect(parsed.token).toBe(customConfig.token);
+      expect(parsed.apiKey).toBe(customConfig.apiKey);
     });
 
     it("should merge partial config with defaults", async () => {
-      const partialConfig = { token: "partial-token" };
+      const partialConfig = { apiKey: "partial-api-key" };
       const configPath = join(tempDir, "config.json");
       await writeFile(configPath, JSON.stringify(partialConfig));
 
       const content = await readFile(configPath, "utf-8");
       const parsed = JSON.parse(content);
-      expect(parsed.token).toBe("partial-token");
+      expect(parsed.apiKey).toBe("partial-api-key");
     });
   });
 
@@ -85,7 +85,7 @@ describe("config", () => {
     it("should create config directory if it does not exist", async () => {
       const config: Config = {
         apiUrl: "http://localhost:3000",
-        token: "test-token",
+        apiKey: "test-api-key",
       };
 
       const configPath = join(tempDir, "config.json");
@@ -94,13 +94,13 @@ describe("config", () => {
       const content = await readFile(configPath, "utf-8");
       const parsed = JSON.parse(content);
       expect(parsed.apiUrl).toBe(config.apiUrl);
-      expect(parsed.token).toBe(config.token);
+      expect(parsed.apiKey).toBe(config.apiKey);
     });
 
     it("should write config to file", async () => {
       const config: Config = {
         apiUrl: "http://api.example.com",
-        token: "secret-token",
+        apiKey: "secret-api-key",
       };
 
       const configPath = join(tempDir, "config.json");
@@ -108,7 +108,7 @@ describe("config", () => {
 
       const content = await readFile(configPath, "utf-8");
       expect(content).toContain("http://api.example.com");
-      expect(content).toContain("secret-token");
+      expect(content).toContain("secret-api-key");
     });
   });
 
@@ -128,47 +128,47 @@ describe("config", () => {
       expect(parsed.apiUrl).toBe("http://new-api.com:8080");
     });
 
-    it("should set token value", async () => {
+    it("should set apiKey value", async () => {
       const configPath = join(tempDir, "config.json");
       const initialConfig: Config = { apiUrl: "http://localhost:3000" };
       await writeFile(configPath, JSON.stringify(initialConfig, null, 2));
 
       const config = JSON.parse(await readFile(configPath, "utf-8"));
-      config.token = "new-token";
+      config.apiKey = "new-api-key";
       await writeFile(configPath, JSON.stringify(config, null, 2));
 
       const content = await readFile(configPath, "utf-8");
       const parsed = JSON.parse(content);
-      expect(parsed.token).toBe("new-token");
+      expect(parsed.apiKey).toBe("new-api-key");
     });
   });
 
   describe("getConfigValue", () => {
     it("should return apiUrl value", async () => {
       const configPath = join(tempDir, "config.json");
-      const testConfig: Config = { apiUrl: "http://test.com", token: "abc123" };
+      const testConfig: Config = { apiUrl: "http://test.com", apiKey: "abc123" };
       await writeFile(configPath, JSON.stringify(testConfig, null, 2));
 
       const config = JSON.parse(await readFile(configPath, "utf-8"));
       expect(config.apiUrl).toBe("http://test.com");
     });
 
-    it("should return token value", async () => {
+    it("should return apiKey value", async () => {
       const configPath = join(tempDir, "config.json");
-      const testConfig: Config = { apiUrl: "http://test.com", token: "abc123" };
+      const testConfig: Config = { apiUrl: "http://test.com", apiKey: "abc123" };
       await writeFile(configPath, JSON.stringify(testConfig, null, 2));
 
       const config = JSON.parse(await readFile(configPath, "utf-8"));
-      expect(config.token).toBe("abc123");
+      expect(config.apiKey).toBe("abc123");
     });
 
-    it("should return undefined for unset token", async () => {
+    it("should return undefined for unset apiKey", async () => {
       const configPath = join(tempDir, "config.json");
       const testConfig: Config = { apiUrl: "http://test.com" };
       await writeFile(configPath, JSON.stringify(testConfig, null, 2));
 
       const config = JSON.parse(await readFile(configPath, "utf-8"));
-      expect(config.token).toBeUndefined();
+      expect(config.apiKey).toBeUndefined();
     });
   });
 });

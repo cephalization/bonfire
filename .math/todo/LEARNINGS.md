@@ -286,3 +286,28 @@ Use this knowledge to avoid repeating mistakes and build on what works.
 - **Mocking external commands in tests**: When testing modules that use `execFile` or `spawn`, mock the entire module with `vi.mock()` at the top of the test file (before imports). The mock factory runs before the module is imported.
 
 - **Interface abstraction**: Define a clean `SSHKeyService` interface with methods like `generateKeyPair()`, `injectKeys()`, `hasKeys()`, etc. This allows both real and mock implementations for testing.
+
+## xrhugo8c - Phase 1: Simplify Authentication
+
+- **Better Auth removal**: Replacing Better Auth with simple API key auth required updates across multiple packages - API middleware, SDK client, CLI config, and Web UI auth client.
+
+- **API Key middleware pattern**: Created simple middleware that checks `X-API-Key` header against a configured key in `BONFIRE_API_KEY` env var. Much simpler than session-based auth.
+
+- **Test utilities update**: Removed Better Auth user table creation from test-utils.ts. Tests now use `skipAuth` flag to bypass authentication entirely in test mode.
+
+- **Environment variables changed**:
+  - Removed: `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `INITIAL_ADMIN_EMAIL`, `INITIAL_ADMIN_PASSWORD`, `INITIAL_ADMIN_NAME`
+  - Added: `BONFIRE_API_KEY` (default: "dev-api-key-change-in-production")
+  - Changed: `BETTER_AUTH_URL` → `BONFIRE_URL`
+
+- **CLI configuration**: Changed from storing `token` to storing `apiKey`. The login command now prompts for API key instead of email/password.
+
+- **Web UI backwards compatibility**: Created stub auth client that provides the same interface as Better Auth (`signIn.email`, `signOut`, `useSession`) but uses API keys internally. This allows existing components to work without modification.
+
+- **Database schema simplification**: Removed Better Auth tables (`user`, `session`, `account`, `verification`) from test migrations. The actual database will be cleaned up in a separate migration.
+
+- **Files deleted**:
+  - `packages/api/src/lib/auth-cli.ts` - No longer needed for Better Auth CLI
+
+- **Files created**:
+  - `packages/api/src/middleware/api-key.ts` - New API key middleware (later consolidated into auth.ts)
