@@ -152,7 +152,7 @@ describe("Bootstrap Service", () => {
       const mockBootstrap = createMockBootstrapService();
       mockBootstrap.setBootstrapResult({
         success: false,
-        errorMessage: "Serial bootstrap failed",
+        errorMessage: "Bootstrap failed",
       });
 
       const config = {
@@ -165,7 +165,7 @@ describe("Bootstrap Service", () => {
       const result = await mockBootstrap.bootstrap(config);
 
       expect(result.success).toBe(false);
-      expect(result.errorMessage).toBe("Serial bootstrap failed");
+      expect(result.errorMessage).toBe("Bootstrap failed");
     });
 
     it("should allow setting health readiness", async () => {
@@ -194,83 +194,10 @@ describe("Bootstrap Service", () => {
   });
 
   describe("RealBootstrapService", () => {
-    it("should update session with workspace path on success", async () => {
+    it("should return error when bootstrap is unavailable", async () => {
       const { db, sqlite, dbPath } = await createTestDb();
 
-      const executed: string[] = [];
-      const bootstrapService = new RealBootstrapService(db, {
-        createRunner: async () => ({
-          connect: async () => {},
-          run: async (cmd: string) => {
-            executed.push(cmd);
-            return { exitCode: 0, output: "" };
-          },
-          close: async () => {},
-        }),
-      });
-
-      // Insert a VM
-      const now = new Date();
-      sqlite.exec(`
-        INSERT INTO vms (id, name, status, ip_address, pid, socket_path, created_at, updated_at)
-        VALUES (
-          'vm-123',
-          'test-vm',
-          'running',
-          '192.168.1.1',
-          ${process.pid},
-          '/tmp/mock-firecracker.sock',
-          ${now.getTime()},
-          ${now.getTime()}
-        )
-      `);
-
-      // Insert a session
-      sqlite.exec(`
-        INSERT INTO agent_sessions (id, user_id, repo_url, status, created_at, updated_at)
-        VALUES ('sess-123', 'test-user', 'https://github.com/org/repo', 'creating', ${now.getTime()}, ${now.getTime()})
-      `);
-
-      // Override pollHealthEndpoint to return true immediately
-      bootstrapService.pollHealthEndpoint = async () => true;
-
-      const result = await bootstrapService.bootstrap({
-        sessionId: "sess-123",
-        repoUrl: "https://github.com/org/repo",
-        vmId: "vm-123",
-        vmIp: "192.168.1.1",
-      });
-
-      expect(result.success).toBe(true);
-      expect(result.workspacePath).toBe("/home/agent/workspaces/sess-123");
-
-      // Verify session was updated
-      const sessions = sqlite
-        .prepare("SELECT * FROM agent_sessions WHERE id = 'sess-123'")
-        .all() as { workspace_path: string; vm_id: string }[];
-      expect(sessions[0].workspace_path).toBe("/home/agent/workspaces/sess-123");
-      expect(sessions[0].vm_id).toBe("vm-123");
-
-      // Sanity: serial bootstrap executed key commands
-      expect(executed.some((c) => c.includes("git clone"))).toBe(true);
-
-      cleanupTestDb(sqlite, dbPath);
-    });
-
-    it("should update session to error on failure", async () => {
-      const { db, sqlite, dbPath } = await createTestDb();
-      const bootstrapService = new RealBootstrapService(db, {
-        createRunner: async () => ({
-          connect: async () => {},
-          run: async (cmd: string) => {
-            if (cmd.includes("git clone")) {
-              return { exitCode: 128, output: "Failed to clone: repository not found" };
-            }
-            return { exitCode: 0, output: "" };
-          },
-          close: async () => {},
-        }),
-      });
+      const bootstrapService = new RealBootstrapService(db);
 
       // Insert a VM
       const now = new Date();
@@ -302,107 +229,30 @@ describe("Bootstrap Service", () => {
       });
 
       expect(result.success).toBe(false);
-      expect(result.errorMessage).toContain("Failed to clone repository");
+      expect(result.errorMessage).toContain("Bootstrap temporarily unavailable");
 
       // Verify session was updated to error
       const sessions = sqlite
         .prepare("SELECT * FROM agent_sessions WHERE id = 'sess-123'")
         .all() as { status: string; error_message: string }[];
       expect(sessions[0].status).toBe("error");
-      expect(sessions[0].error_message).toContain("Failed to clone repository");
+      expect(sessions[0].error_message).toContain("Bootstrap temporarily unavailable");
 
       cleanupTestDb(sqlite, dbPath);
     });
 
-    it("should execute correct SSH commands", async () => {
+    it("should update session to error when VM is not running", async () => {
       const { db, sqlite, dbPath } = await createTestDb();
-      const executed: string[] = [];
-      const bootstrapService = new RealBootstrapService(db, {
-        createRunner: async () => ({
-          connect: async () => {},
-          run: async (cmd: string) => {
-            executed.push(cmd);
-            return { exitCode: 0, output: "" };
-          },
-          close: async () => {},
-        }),
-      });
+      const bootstrapService = new RealBootstrapService(db);
 
-      // Insert a VM
+      // Insert a VM that is not running
       const now = new Date();
       sqlite.exec(`
         INSERT INTO vms (id, name, status, ip_address, pid, socket_path, created_at, updated_at)
         VALUES (
           'vm-123',
           'test-vm',
-          'running',
-          '192.168.1.1',
-          ${process.pid},
-          '/tmp/mock-firecracker.sock',
-          ${now.getTime()},
-          ${now.getTime()}
-        )
-      `);
-
-      // Insert a session with branch
-      sqlite.exec(`
-        INSERT INTO agent_sessions (id, user_id, repo_url, branch, status, created_at, updated_at)
-        VALUES ('sess-123', 'test-user', 'https://github.com/org/repo', 'develop', 'creating', ${now.getTime()}, ${now.getTime()})
-      `);
-
-      // Override pollHealthEndpoint
-      bootstrapService.pollHealthEndpoint = async () => true;
-
-      await bootstrapService.bootstrap({
-        sessionId: "sess-123",
-        repoUrl: "https://github.com/org/repo",
-        branch: "develop",
-        vmId: "vm-123",
-        vmIp: "192.168.1.1",
-      });
-
-      const mkdirCall = executed.find((c) => c.includes("mkdir -p"));
-      expect(mkdirCall).toBeDefined();
-      expect(mkdirCall).toContain("/home/agent/workspaces/sess-123");
-
-      const cloneCall = executed.find((c) => c.includes("git clone"));
-      expect(cloneCall).toBeDefined();
-      expect(cloneCall).toContain("https://github.com/org/repo");
-
-      const checkoutCall = executed.find((c) => c.includes("checkout"));
-      expect(checkoutCall).toBeDefined();
-      expect(checkoutCall).toContain("develop");
-
-      const systemctlCall = executed.find((c) => c.includes("systemctl"));
-      expect(systemctlCall).toBeDefined();
-      expect(systemctlCall).toContain("systemctl --user start opencode@sess-123");
-
-      cleanupTestDb(sqlite, dbPath);
-    });
-
-    it("should inject OpenCode config via OPENCODE_CONFIG_CONTENT env var", async () => {
-      const { db, sqlite, dbPath } = await createTestDb();
-
-      const executed: string[] = [];
-      const bootstrapService = new RealBootstrapService(db, {
-        createRunner: async () => ({
-          connect: async () => {},
-          run: async (cmd: string) => {
-            executed.push(cmd);
-            return { exitCode: 0, output: "" };
-          },
-          close: async () => {},
-        }),
-      });
-
-      // Insert a VM
-      const now = new Date();
-      sqlite.exec(`
-        INSERT INTO vms (id, name, status, ip_address, pid, socket_path, created_at, updated_at)
-        VALUES (
-          'vm-123',
-          'test-vm',
-          'running',
+          'stopped',
           '192.168.1.1',
           ${process.pid},
           '/tmp/mock-firecracker.sock',
@@ -417,26 +267,21 @@ describe("Bootstrap Service", () => {
         VALUES ('sess-123', 'test-user', 'https://github.com/org/repo', 'creating', ${now.getTime()}, ${now.getTime()})
       `);
 
-      // Override pollHealthEndpoint
-      bootstrapService.pollHealthEndpoint = async () => true;
-
-      await bootstrapService.bootstrap({
+      const result = await bootstrapService.bootstrap({
         sessionId: "sess-123",
         repoUrl: "https://github.com/org/repo",
         vmId: "vm-123",
         vmIp: "192.168.1.1",
       });
 
-      const configCall = executed.find((c) => c.includes("OPENCODE_CONFIG_CONTENT"));
-      expect(configCall).toBeDefined();
-      expect(configCall!).toContain("systemctl --user import-environment");
-      expect(configCall!).toContain("systemctl --user start opencode@sess-123");
+      expect(result.success).toBe(false);
+      expect(result.errorMessage).toContain("VM is not running");
 
-      expect(configCall!).toContain('"share":"disabled"');
-      expect(configCall!).toContain('"permission":"allow"');
-      expect(configCall!).toContain('"autoupdate":false');
-      expect(configCall!).toContain('"port":4096');
-      expect(configCall!).toContain('"hostname":"0.0.0.0"');
+      // Verify session was updated to error
+      const sessions = sqlite
+        .prepare("SELECT * FROM agent_sessions WHERE id = 'sess-123'")
+        .all() as { status: string; error_message: string }[];
+      expect(sessions[0].status).toBe("error");
 
       cleanupTestDb(sqlite, dbPath);
     });

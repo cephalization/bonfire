@@ -1,20 +1,9 @@
 import type { IncomingMessage, Server } from "http";
-import { WebSocketServer, type WebSocket, type RawData } from "ws";
+import { WebSocketServer, type WebSocket } from "ws";
 import { eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type * as schema from "../db/schema";
 import { vms } from "../db/schema";
-import {
-  createSerialConsole,
-  SerialConsoleError,
-  type SerialConsole,
-} from "../services/firecracker";
-import { formatOutputData, parseResizeMessage } from "../routes/terminal";
-import {
-  hasActiveSerialConnection,
-  setActiveSerialConnection,
-  clearActiveSerialConnection,
-} from "../services/firecracker/serial-connections";
 import type { Auth } from "../lib/auth";
 
 type TerminalWsConfig = {
@@ -42,111 +31,17 @@ function headersFromNodeRequest(req: IncomingMessage): Headers {
   return headers;
 }
 
-function rejectUpgrade(socket: any, status: number, body: { error: string }): void {
-  const payload = JSON.stringify(body);
-  socket.write(
-    `HTTP/1.1 ${status} \r\n` +
-      "Content-Type: application/json\r\n" +
-      `Content-Length: ${Buffer.byteLength(payload)}\r\n` +
-      "Connection: close\r\n" +
-      "\r\n" +
-      payload
-  );
-  socket.destroy();
-}
-
 export function attachTerminalWebSocketServer(server: Server, config: TerminalWsConfig): void {
   const wss = new WebSocketServer({ noServer: true });
 
   const handleConnection = (ws: WebSocket, vmId: string) => {
-    let serialConsole: SerialConsole | null = null;
-    let isReady = false;
-
-    const cleanup = async () => {
-      if (!serialConsole) return;
-      clearActiveSerialConnection(vmId, serialConsole);
-      await serialConsole.close().catch(() => {});
-      serialConsole = null;
-    };
-
-    (async () => {
-      try {
-        // Race guard: another connection may have claimed the VM between upgrade and handler.
-        if (hasActiveSerialConnection(vmId)) {
-          throw new Error("Terminal already connected. Only one connection allowed per VM.");
-        }
-
-        serialConsole = await createSerialConsole({
-          vmId,
-          pipeDir: config.pipeDir,
-        });
-        setActiveSerialConnection(vmId, serialConsole);
-
-        // Sync/reset terminal state.
-        await serialConsole.write("\x1bc\x1b[2J\x1b[H");
-        await new Promise((r) => setTimeout(r, 200));
-        await serialConsole.write("\n");
-
-        serialConsole.onData((data) => {
-          if (!isReady) return;
-          if (ws.readyState === ws.OPEN) {
-            ws.send(formatOutputData(data));
-          }
-        });
-
-        await new Promise((r) => setTimeout(r, 100));
-        ws.send(JSON.stringify({ ready: true, vmId }));
-        isReady = true;
-      } catch (error) {
-        let errorMessage = "Failed to connect to VM serial console";
-        if (error instanceof SerialConsoleError) {
-          errorMessage = error.message;
-        } else if (error instanceof Error) {
-          errorMessage = error.message;
-        }
-        if (ws.readyState === ws.OPEN) {
-          ws.send(JSON.stringify({ error: errorMessage }));
-        }
-        ws.close();
-        await cleanup();
-      }
-    })();
-
-    ws.on("message", async (raw: RawData) => {
-      if (!serialConsole) return;
-
-      try {
-        if (typeof raw === "string") {
-          const resize = parseResizeMessage(raw);
-          if (resize) return; // ignore
-          await serialConsole.write(raw);
-          return;
-        }
-
-        if (Buffer.isBuffer(raw)) {
-          await serialConsole.write(new Uint8Array(raw));
-          return;
-        }
-
-        if (raw instanceof ArrayBuffer) {
-          await serialConsole.write(new Uint8Array(raw));
-          return;
-        }
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : "Failed to process message";
-        if (ws.readyState === ws.OPEN) {
-          ws.send(JSON.stringify({ error: msg }));
-        }
-      }
-    });
-
-    ws.on("close", () => {
-      cleanup();
-    });
-
-    ws.on("error", () => {
-      cleanup();
-    });
+    // Terminal access is currently unavailable - serial console removed
+    ws.send(
+      JSON.stringify({
+        error: "Terminal access is currently unavailable",
+      })
+    );
+    ws.close();
   };
 
   server.on("upgrade", (req, socket: any, head) => {
@@ -165,20 +60,6 @@ export function attachTerminalWebSocketServer(server: Server, config: TerminalWs
         // Accept the upgrade so we can send a proper error message
         wss.handleUpgrade(req, socket, head, (ws) => {
           ws.send(JSON.stringify({ error: "Unauthorized - valid session required" }));
-          ws.close();
-        });
-        return;
-      }
-
-      // Enforce exclusivity.
-      if (hasActiveSerialConnection(vmId)) {
-        // Accept the upgrade so we can send a proper error message
-        wss.handleUpgrade(req, socket, head, (ws) => {
-          ws.send(
-            JSON.stringify({
-              error: "Terminal already connected. Only one connection allowed per VM.",
-            })
-          );
           ws.close();
         });
         return;

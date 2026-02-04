@@ -187,3 +187,32 @@ Use this knowledge to avoid repeating mistakes and build on what works.
   - User-scoped session access (users can only access their own sessions)
   - HTML base href injection to prevent asset path issues
   - Hop-by-hop header stripping in proxy responses
+
+## 2fvxakhr - Phase 2: Remove Serial Console
+
+- **Finding all serial console references**: Use `grep` with multiple patterns to find all imports and usages of the serial console modules: `grep -r "from.*serial\|import.*serial" packages/api/src --include="*.ts"`. This catches imports from both the index.ts barrel file and direct imports from specific serial files.
+
+- **Files that need updating when removing a major feature**:
+  1. The actual service files (serial.ts, serial-runner.ts, serial-connections.ts)
+  2. Test files for those services
+  3. The barrel export file (firecracker/index.ts)
+  4. Any files importing from the removed modules (process.ts, bootstrap.ts, terminal.ts, ws/terminal.ts)
+  5. Test utility files that mock the removed services (test-utils.ts)
+  6. Test files that test the removed functionality (terminal.test.ts, process.test.ts, bootstrap.test.ts)
+  7. Watchdog or background services (vm-watchdog.ts)
+
+- **TypeScript will catch missing exports**: Running `pnpm run typecheck` quickly identifies any files still importing from removed modules. The build will fail with "No matching export" errors pointing to exact line numbers.
+
+- **Simplifying the FirecrackerProcess interface**: When removing pipe support, update the interface to remove `stdinPipePath` and `stdoutPipePath` fields. This affects:
+  - The interface definition in process.ts
+  - Mock implementations in test-utils.ts
+  - Any destructuring that expects these fields
+
+- **Graceful degradation for removed features**: Instead of completely breaking terminal and bootstrap functionality, return clear error messages indicating the feature is temporarily unavailable. This maintains API compatibility while signaling the feature removal.
+
+- **Test updates when removing features**: Tests that relied on the removed functionality need to be updated to:
+  - Test the new error behavior (bootstrap returns "temporarily unavailable")
+  - Remove tests for removed functionality (serial console connection tests)
+  - Update type tests to match new interfaces (FirecrackerProcess without pipe paths)
+
+- **Serial console removal affects bootstrap**: The bootstrap service relied entirely on serial runner for VM configuration. When removing serial support, bootstrap becomes a no-op that returns an error. Future phases will need to implement an alternative bootstrap mechanism (likely via SSH).
