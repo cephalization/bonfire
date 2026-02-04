@@ -30,8 +30,8 @@ ${pc.bold("USAGE")}
   bonfire <command> [options]
 
 ${pc.bold("COMMANDS")}
-  vm          Manage VMs (create, list, start, stop, rm, exec, ssh)
-  image       Manage images (pull, list, rm)
+  vm          Manage VMs (create, list, start, stop, rm, ssh)
+  image       Manage images (list, rm)
   config      Manage configuration (set, get)
   login       Authenticate with Bonfire server
 
@@ -44,6 +44,7 @@ ${pc.bold("GLOBAL OPTIONS")}
 ${pc.bold("EXAMPLES")}
   bonfire config set api-url http://localhost:3000
   bonfire vm list
+  bonfire vm ssh my-vm
   bonfire login
 `);
 }

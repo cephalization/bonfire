@@ -120,6 +120,14 @@ export class BonfireClient {
     return this.request<VM>("POST", `/api/vms/${id}/stop`);
   }
 
+  /**
+   * Get SSH private key for a VM
+   * Returns the SSH private key for connecting to a running VM
+   */
+  async getVMSSHKey(id: string): Promise<{ privateKey: string; username: string }> {
+    return this.request<{ privateKey: string; username: string }>("GET", `/api/vms/${id}/ssh-key`);
+  }
+
   // ============================================================================
   // Images
   // ============================================================================

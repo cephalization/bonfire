@@ -344,3 +344,17 @@ Use this knowledge to avoid repeating mistakes and build on what works.
 - **Stub endpoints for removed features**: When features are removed but API endpoints must remain for compatibility, return clear error messages explaining the feature is unavailable. This is better than 404 errors that might confuse users.
 
 - **Lines of code reduction**: The refactor removed ~8,000 lines of code (from ~13,000 to ~5,000) while maintaining core VM management functionality. This significantly improves maintainability.
+
+## zvzhewng - Phase 5: Update CLI
+
+- **Removing deprecated CLI commands**: When an API endpoint is removed, update the CLI to either remove the corresponding command or provide a helpful error message. For the `exec` command, we kept it in the dispatch but return an error with migration instructions.
+
+- **SSH key download workflow**: Instead of expecting users to manually manage SSH keys, the CLI can download them automatically from the API. The flow is: 1) User runs `bonfire vm ssh <vm>`, 2) CLI downloads the private key from `/api/vms/:id/ssh-key`, 3) CLI saves key to `~/.bonfire/keys/vm-{id}`, 4) CLI connects via SSH using the key.
+
+- **API endpoint for sensitive data**: When adding an endpoint that returns sensitive data like SSH private keys, ensure proper authentication is in place. The existing API key middleware handles this automatically.
+
+- **CLI backward compatibility**: For removed commands, provide clear error messages explaining what replaced them. Example: "Error: 'exec' command has been removed. Use SSH instead: ..."
+
+- **Test updates for removed features**: When removing CLI commands, also remove the corresponding unit tests. We removed 7 tests related to the `parseExecArgs` function and `exec` command testing.
+
+- **Help text maintenance**: Keep CLI help text updated when commands are removed. The help text mentioned both `exec` and `pull` commands which were removed in earlier phases.

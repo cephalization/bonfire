@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { parseVMCreateArgs, parseExecArgs } from "./vm.js";
+import { parseVMCreateArgs } from "./vm.js";
 
 describe("parseVMCreateArgs", () => {
   it("parses name only", () => {
@@ -68,66 +68,5 @@ describe("parseVMCreateArgs", () => {
     expect(result.vcpus).toBe(1);
     expect(result.memory).toBe(512);
     expect(result.image).toBe("alpine");
-  });
-});
-
-describe("parseExecArgs", () => {
-  it("parses simple command", () => {
-    const result = parseExecArgs(["my-vm", "--", "ls"]);
-    expect(result.vmIdentifier).toBe("my-vm");
-    expect(result.command).toBe("ls");
-    expect(result.args).toEqual([]);
-  });
-
-  it("parses command with arguments", () => {
-    const result = parseExecArgs(["my-vm", "--", "ls", "-la", "/home"]);
-    expect(result.vmIdentifier).toBe("my-vm");
-    expect(result.command).toBe("ls");
-    expect(result.args).toEqual(["-la", "/home"]);
-  });
-
-  it("parses command with VM ID", () => {
-    const result = parseExecArgs(["vm-123-abc", "--", "echo", "hello"]);
-    expect(result.vmIdentifier).toBe("vm-123-abc");
-    expect(result.command).toBe("echo");
-    expect(result.args).toEqual(["hello"]);
-  });
-
-  it("throws when VM identifier is missing", () => {
-    expect(() => parseExecArgs([])).toThrow("VM name or ID is required");
-  });
-
-  it("throws when -- separator is missing", () => {
-    expect(() => parseExecArgs(["my-vm", "ls"])).toThrow(
-      "Command required. Usage: bonfire vm exec <name|id> -- <command> [args...]"
-    );
-  });
-
-  it("throws when command is missing after --", () => {
-    expect(() => parseExecArgs(["my-vm", "--"])).toThrow(
-      "Command required. Usage: bonfire vm exec <name|id> -- <command> [args...]"
-    );
-  });
-
-  it("handles complex commands with many args", () => {
-    const result = parseExecArgs([
-      "my-vm",
-      "--",
-      "curl",
-      "-X",
-      "POST",
-      "-H",
-      "Content-Type: application/json",
-      "https://api.example.com/data",
-    ]);
-    expect(result.vmIdentifier).toBe("my-vm");
-    expect(result.command).toBe("curl");
-    expect(result.args).toEqual([
-      "-X",
-      "POST",
-      "-H",
-      "Content-Type: application/json",
-      "https://api.example.com/data",
-    ]);
   });
 });
