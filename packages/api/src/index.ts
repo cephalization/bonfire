@@ -14,10 +14,6 @@ import * as schema from "./db/schema";
 import { createImagesRouter } from "./routes/images";
 import { createVMsRouter } from "./routes/vms";
 import { createTerminalRouter } from "./routes/terminal";
-import { createAgentSessionsRouter } from "./routes/agent-sessions";
-import { createOpencodeProxyRouter } from "./routes/opencode-proxy";
-import type { BootstrapService } from "./services/bootstrap";
-import { RealBootstrapService } from "./services/bootstrap";
 import { NetworkService } from "./services/network";
 import type {
   spawnFirecracker,
@@ -30,7 +26,6 @@ import { seedInitialAdmin } from "./db/seed";
 import { serve } from "@hono/node-server";
 import { fileURLToPath } from "url";
 import { attachTerminalWebSocketServer } from "./ws/terminal";
-import { startAgentSessionWatchdog } from "./services/agent-session-watchdog";
 import { startVmWatchdog } from "./services/vm-watchdog";
 
 export const API_VERSION = config.apiVersion;
@@ -88,17 +83,12 @@ const healthRoute = createRoute({
 export interface AppConfig {
   db?: BetterSQLite3Database<typeof schema>;
   networkService?: NetworkService;
-  bootstrapService?: BootstrapService;
   spawnFirecrackerFn?: typeof spawnFirecracker;
   configureVMProcessFn?: typeof configureVMProcess;
   startVMProcessFn?: typeof startVMProcess;
   stopVMProcessFn?: typeof stopVMProcess;
   skipAuth?: boolean;
   mockUserId?: string;
-  /** Fetch function for proxy requests (can be mocked in tests) */
-  fetchFn?: typeof fetch;
-  /** OpenCode basic auth credentials */
-  opencodeCredentials?: string;
 }
 
 export function createApp(appConfig: AppConfig = {}) {
@@ -143,21 +133,6 @@ export function createApp(appConfig: AppConfig = {}) {
         return authMiddleware(c, next);
       });
       app.use("/api/vms/*", authMiddleware);
-      app.use("/api/agent/*", authMiddleware);
-    }
-
-    // Add mock user middleware when mockUserId is provided (for testing)
-    if (appConfig.mockUserId && appConfig.db) {
-      const db = appConfig.db;
-      app.use("/api/agent/*", async (c, next) => {
-        const mockUser = await db.query.user.findFirst({
-          where: (user, { eq }) => eq(user.id, appConfig.mockUserId!),
-        });
-        if (mockUser) {
-          (c as any).set("user", mockUser);
-        }
-        await next();
-      });
     }
 
     const imagesRouter = createImagesRouter({
@@ -174,22 +149,10 @@ export function createApp(appConfig: AppConfig = {}) {
     const terminalRouter = createTerminalRouter({
       db: appConfig.db,
     });
-    const bootstrapService = appConfig.bootstrapService ?? new RealBootstrapService(appConfig.db);
-    const agentSessionsRouter = createAgentSessionsRouter({
-      db: appConfig.db,
-      bootstrapService,
-    });
-    const opencodeProxyRouter = createOpencodeProxyRouter({
-      db: appConfig.db,
-      fetchFn: appConfig.fetchFn,
-      opencodeCredentials: appConfig.opencodeCredentials,
-    });
 
     app.route("/api", imagesRouter);
     app.route("/api", vmsRouter);
     app.route("/api", terminalRouter);
-    app.route("/api", agentSessionsRouter);
-    app.route("/api", opencodeProxyRouter);
   } else if (process.env.DATABASE_URL || typeof window === "undefined") {
     // Try to create default database connection in production/server context
     try {
@@ -216,7 +179,6 @@ export function createApp(appConfig: AppConfig = {}) {
           return authMiddleware(c, next);
         });
         app.use("/api/vms/*", authMiddleware);
-        app.use("/api/agent/*", authMiddleware);
       }
 
       const imagesRouter = createImagesRouter({ db });
@@ -229,19 +191,10 @@ export function createApp(appConfig: AppConfig = {}) {
         stopVMProcessFn: appConfig.stopVMProcessFn,
       });
       const terminalRouter = createTerminalRouter({ db });
-      const bootstrapService = new RealBootstrapService(db);
-      const agentSessionsRouter = createAgentSessionsRouter({ db, bootstrapService });
-      const opencodeProxyRouter = createOpencodeProxyRouter({
-        db,
-        fetchFn: appConfig.fetchFn,
-        opencodeCredentials: appConfig.opencodeCredentials,
-      });
 
       app.route("/api", imagesRouter);
       app.route("/api", vmsRouter);
       app.route("/api", terminalRouter);
-      app.route("/api", agentSessionsRouter);
-      app.route("/api", opencodeProxyRouter);
     } catch {
       // Database not available, skip mounting routes
       // This allows the app to work in test environments without a database
@@ -280,24 +233,7 @@ if (process.argv[1] && process.argv[1] === fileURLToPath(import.meta.url)) {
     auth,
   });
 
-  // Dev-friendly safety net: bootstrapping runs in-process, so a restart can
-  // strand sessions in "creating" forever. The watchdog turns stale ones into
-  // actionable errors so users can retry.
-  startAgentSessionWatchdog({
-    db,
-    intervalMs: 15_000,
-    thresholds:
-      process.env.NODE_ENV === "development"
-        ? {
-            byMessage: {
-              // Connecting serial should be fast; tighten for faster feedback in dev.
-              "Bootstrapping: connecting serial": 45_000,
-            },
-          }
-        : undefined,
-  });
-
-  // Similar to agent sessions: in dev, hot-reload can restart the API process.
+  // Dev-friendly safety net: in dev, hot-reload can restart the API process.
   // Without reconciliation, VMs can be left "running" in the DB even though
   // their Firecracker child process died.
   startVmWatchdog({

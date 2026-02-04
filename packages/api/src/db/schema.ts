@@ -86,30 +86,8 @@ export const images = sqliteTable("images", {
   pulledAt: integer("pulled_at", { mode: "timestamp" }).notNull(),
 });
 
-export const agentSessions = sqliteTable("agent_sessions", {
-  id: text("id").primaryKey(),
-  userId: text("user_id")
-    .notNull()
-    .references(() => user.id),
-  title: text("title"),
-  repoUrl: text("repo_url").notNull(),
-  branch: text("branch"),
-  vmId: text("vm_id").references(() => vms.id, { onDelete: "set null" }),
-  workspacePath: text("workspace_path"),
-  status: text("status", {
-    enum: ["creating", "ready", "error", "archived"],
-  })
-    .notNull()
-    .default("creating"),
-  errorMessage: text("error_message"),
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
-  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
-});
-
 // Export types for convenience
 export type VM = typeof vms.$inferSelect;
 export type NewVM = typeof vms.$inferInsert;
 export type Image = typeof images.$inferSelect;
 export type NewImage = typeof images.$inferInsert;
-export type AgentSession = typeof agentSessions.$inferSelect;
-export type NewAgentSession = typeof agentSessions.$inferInsert;
