@@ -7,8 +7,10 @@
  * - start: Start a VM
  * - stop: Stop a VM
  * - rm: Remove a VM
- * - exec: Execute a command in a VM
- * - ssh: Open interactive shell in a VM
+ * - ssh: Open interactive SSH shell in a VM
+ *
+ * NOTE: The 'exec' command has been removed. Use 'ssh' instead:
+ *   bonfire vm ssh <name|id> -- <command>
  */
 
 import { spinner, confirm, isCancel, cancel, outro } from "@clack/prompts";
@@ -33,12 +35,6 @@ export interface CreateVMRequest {
   vcpus?: number;
   memoryMib?: number;
   imageId?: string;
-}
-
-export interface ExecResponse {
-  stdout: string;
-  stderr: string;
-  exitCode: number;
 }
 
 // Argument parsing helpers
@@ -83,34 +79,6 @@ export function parseVMCreateArgs(args: string[]): {
   }
 
   return options;
-}
-
-export function parseExecArgs(args: string[]): {
-  vmIdentifier: string;
-  command: string;
-  args: string[];
-} {
-  if (args.length === 0) {
-    throw new Error("VM name or ID is required");
-  }
-
-  const vmIdentifier = args[0];
-  const separatorIndex = args.indexOf("--");
-
-  if (separatorIndex === -1 || separatorIndex === args.length - 1) {
-    throw new Error("Command required. Usage: bonfire vm exec <name|id> -- <command> [args...]");
-  }
-
-  const commandParts = args.slice(separatorIndex + 1);
-  if (commandParts.length === 0) {
-    throw new Error("Command required after --");
-  }
-
-  return {
-    vmIdentifier,
-    command: commandParts[0],
-    args: commandParts.slice(1),
-  };
 }
 
 // API client functions
@@ -336,43 +304,6 @@ export async function handleVMRemove(
   }
 }
 
-export async function handleVMExec(
-  client: BonfireClient,
-  baseUrl: string,
-  args: string[]
-): Promise<number> {
-  const execOptions = parseExecArgs(args);
-
-  const s = spinner();
-  s.start(`Executing command in VM ${execOptions.vmIdentifier}...`);
-
-  try {
-    const result = await apiRequest<ExecResponse>(
-      baseUrl,
-      "POST",
-      `/api/vms/${encodeURIComponent(execOptions.vmIdentifier)}/exec`,
-      {
-        command: execOptions.command,
-        args: execOptions.args,
-      }
-    );
-
-    s.stop(pc.green("Command executed"));
-
-    if (result.stdout) {
-      process.stdout.write(result.stdout);
-    }
-    if (result.stderr) {
-      process.stderr.write(result.stderr);
-    }
-
-    return result.exitCode;
-  } catch (error) {
-    s.stop(pc.red("Failed to execute command"));
-    throw error;
-  }
-}
-
 export async function handleVMSSH(
   client: BonfireClient,
   baseUrl: string,
@@ -402,26 +333,53 @@ export async function handleVMSSH(
     throw new Error("VM has no IP address assigned");
   }
 
-  // Import spawn from child_process for native SSH
+  // Import required modules
   const { spawn } = await import("child_process");
   const { homedir } = await import("os");
   const { join } = await import("path");
-  const { stat } = await import("fs/promises");
+  const { stat, mkdir, writeFile } = await import("fs/promises");
+  const { chmod } = await import("fs/promises");
 
-  // Default SSH key path - keys are stored in /var/lib/bonfire/keys on the server
-  // But for CLI, we need to get the key from the API or use a local key
-  // For now, use a default path that can be overridden by environment variable
-  const defaultKeyPath = join(homedir(), ".bonfire", "keys", `vm-${vm.id}`);
-  const sshKeyPath = process.env.BONFIRE_SSH_KEY || defaultKeyPath;
+  // Setup SSH key path
+  const keysDir = join(homedir(), ".bonfire", "keys");
+  const sshKeyPath = process.env.BONFIRE_SSH_KEY || join(keysDir, `vm-${vm.id}`);
 
-  // Check if key exists
+  // Check if key exists locally
+  let keyExists = false;
   try {
     await stat(sshKeyPath);
+    keyExists = true;
   } catch {
-    // If key doesn't exist locally, we'll try to connect without a specific key
-    // This assumes the user has added their key to the VM via other means
-    console.log(pc.yellow(`Warning: SSH key not found at ${sshKeyPath}`));
-    console.log(pc.gray("Attempting connection without specific key..."));
+    keyExists = false;
+  }
+
+  // Download key from API if not present locally
+  if (!keyExists) {
+    const s = spinner();
+    s.start("Downloading SSH key...");
+
+    try {
+      const keyData = await apiRequest<{ privateKey: string; username: string }>(
+        baseUrl,
+        "GET",
+        `/api/vms/${encodeURIComponent(vm.id)}/ssh-key`
+      );
+
+      // Ensure keys directory exists
+      await mkdir(keysDir, { recursive: true });
+
+      // Write private key with restricted permissions
+      await writeFile(sshKeyPath, keyData.privateKey, { mode: 0o600 });
+      await chmod(sshKeyPath, 0o600);
+
+      s.stop(pc.green("✓ SSH key downloaded"));
+    } catch (error) {
+      s.stop(pc.red("Failed to download SSH key"));
+      throw new Error(
+        `Failed to download SSH key: ${error instanceof Error ? error.message : String(error)}. ` +
+          "Make sure the VM has been started at least once."
+      );
+    }
   }
 
   console.log(pc.gray(`Connecting to ${vm.name} (${vm.ipAddress}) as agent...`));
@@ -438,17 +396,10 @@ export async function handleVMSSH(
     "LogLevel=ERROR",
     "-o",
     "ConnectTimeout=10",
+    "-i",
+    sshKeyPath,
+    "agent@" + vm.ipAddress,
   ];
-
-  // Add identity file if it exists
-  try {
-    await stat(sshKeyPath);
-    sshArgs.push("-i", sshKeyPath);
-  } catch {
-    // Key doesn't exist, continue without -i flag
-  }
-
-  sshArgs.push(`agent@${vm.ipAddress}`);
 
   const sshProcess = spawn("ssh", sshArgs, {
     stdio: "inherit",
@@ -480,7 +431,7 @@ export async function handleVMCommand(
   const subcommand = args[0];
 
   if (!subcommand) {
-    console.error(pc.red("Usage: bonfire vm <create|list|start|stop|rm|exec|ssh> [args...]"));
+    console.error(pc.red("Usage: bonfire vm <create|list|start|stop|rm|ssh> [args...]"));
     return 1;
   }
 
@@ -503,16 +454,18 @@ export async function handleVMCommand(
       case "rm":
         await handleVMRemove(client, baseUrl, subcommandArgs);
         return 0;
-      case "exec": {
-        const exitCode = await handleVMExec(client, baseUrl, subcommandArgs);
-        return exitCode;
-      }
+      case "exec":
+        console.error(pc.red("Error: 'exec' command has been removed."));
+        console.log(pc.gray("Use SSH instead:"));
+        console.log(pc.gray("  Interactive: bonfire vm ssh <name|id>"));
+        console.log(pc.gray("  Command:     ssh -i <key> agent@<ip> <command>"));
+        return 1;
       case "ssh":
         await handleVMSSH(client, baseUrl, subcommandArgs);
         return 0;
       default:
         console.error(pc.red(`Unknown vm subcommand: ${subcommand}`));
-        console.error(pc.gray("Valid subcommands: create, list, start, stop, rm, exec, ssh"));
+        console.error(pc.gray("Valid subcommands: create, list, start, stop, rm, ssh"));
         return 1;
     }
   } catch (error) {

@@ -144,6 +144,22 @@ export async function loadSSHPublicKey(
 }
 
 /**
+ * Load SSH private key for a VM
+ */
+export async function loadPrivateKey(
+  vmId: string,
+  keysDir: string = DEFAULTS.keysDir
+): Promise<string | null> {
+  const paths = getVMKeyPaths(vmId, keysDir);
+
+  try {
+    return await readFile(paths.privateKeyPath, "utf-8");
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Check if SSH keys exist for a VM
  */
 export async function hasSSHKeys(

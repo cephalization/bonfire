@@ -496,6 +496,57 @@ const stopVMRoute = createRoute({
 // NOTE: execVMRoute, healthVMRoute, uploadVMRoute, and downloadVMRoute have been
 // deprecated in favor of serial console communication via /api/vms/:id/terminal
 
+// SSH Key download route
+const getVMSSHKeyRoute = createRoute({
+  method: "get",
+  path: "/vms/{id}/ssh-key",
+  tags: ["VMs"],
+  summary: "Get VM SSH private key",
+  description:
+    "Returns the SSH private key for connecting to a VM. Key is generated during VM start.",
+  request: {
+    params: z.object({
+      id: z.string().openapi({
+        example: "vm-abc123",
+        description: "VM ID",
+      }),
+    }),
+  },
+  responses: {
+    200: {
+      description: "SSH private key",
+      content: {
+        "application/json": {
+          schema: z.object({
+            privateKey: z.string().openapi({
+              description: "SSH private key content",
+            }),
+            username: z.string().openapi({
+              description: "Username to use for SSH connection",
+            }),
+          }),
+        },
+      },
+    },
+    404: {
+      description: "VM not found or SSH key not available",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+    500: {
+      description: "Internal server error",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+  },
+});
+
 // ============================================================================
 // Router Factory
 // ============================================================================
@@ -852,6 +903,40 @@ export function createVMsRouter(config: VMsRouterConfig): OpenAPIHono {
     } catch (error) {
       console.error("Failed to stop VM:", error);
       const message = error instanceof Error ? error.message : "Failed to stop VM";
+      return c.json({ error: message }, 500);
+    }
+  });
+
+  // GET /api/vms/:id/ssh-key - Get SSH private key for VM
+  app.openapi(getVMSSHKeyRoute, async (c) => {
+    try {
+      const id = c.req.param("id");
+
+      // Check if VM exists
+      const [vm] = await db.select().from(vms).where(eq(vms.id, id));
+
+      if (!vm) {
+        return c.json({ error: "VM not found" }, 404);
+      }
+
+      // Load SSH private key
+      const { loadPrivateKey } = await import("../services/ssh-keys.js");
+      const privateKey = await loadPrivateKey(id);
+
+      if (!privateKey) {
+        return c.json({ error: "SSH key not found. Start the VM first to generate keys." }, 404);
+      }
+
+      return c.json(
+        {
+          privateKey,
+          username: "agent",
+        },
+        200
+      );
+    } catch (error) {
+      console.error("Failed to get SSH key:", error);
+      const message = error instanceof Error ? error.message : "Failed to get SSH key";
       return c.json({ error: message }, 500);
     }
   });
