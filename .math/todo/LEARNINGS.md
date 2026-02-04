@@ -358,3 +358,19 @@ Use this knowledge to avoid repeating mistakes and build on what works.
 - **Test updates for removed features**: When removing CLI commands, also remove the corresponding unit tests. We removed 7 tests related to the `parseExecArgs` function and `exec` command testing.
 
 - **Help text maintenance**: Keep CLI help text updated when commands are removed. The help text mentioned both `exec` and `pull` commands which were removed in earlier phases.
+
+## cs6opp1d - Bonfire Architecture Refactor
+
+- **Parent task coordination**: This refactor spanned 7 phases as subtasks. Each phase was implemented as a separate task (2fvxakhr, ckhuffml, lmse9cyd, w8a8vk3f, xrhugo8c, ypwrhvbq, zvzhewng). All subtasks completed before marking parent complete.
+
+- **Total code reduction**: ~8,000 lines removed (from ~13,000 to ~5,000) through removal of: Better Auth integration, serial console service, agent sessions, OCI registry pulling, WebSocket terminal infrastructure.
+
+- **Architecture simplification wins**:
+  - Auth: Replaced complex session-based auth with simple API key middleware
+  - Console: Replaced WebSocket serial console with native SSH access
+  - Images: Replaced OCI registry pulling with local file registration
+  - VM lifecycle: Removed agent-based bootstrap in favor of SSH key injection at startup
+
+- **Test coverage maintained**: All 299 tests passing after refactor. Key to success was updating test utilities (test-utils.ts) and mocks alongside each feature removal.
+
+- **Documentation created**: REFACTOR_SUMMARY.md and MIGRATION_GUIDE.md capture all changes for users upgrading from pre-refactor versions.
