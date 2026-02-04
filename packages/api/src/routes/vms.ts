@@ -65,13 +65,13 @@ async function ensureVmRootfsCopy(options: {
   // The agent rootfs ext4 produced by our build script is sparse.
   try {
     await execFileAsync("cp", ["--sparse=always", "--reflink=auto", imageRootfsPath, destPath]);
-  } catch (err) {
+  } catch (_err) {
     // Fallback for environments without those flags.
     try {
       await execFileAsync("cp", [imageRootfsPath, destPath]);
     } catch (err2) {
       const message = err2 instanceof Error ? err2.message : String(err2);
-      throw new Error(`Failed to prepare writable rootfs copy: ${message}`);
+      throw new Error(`Failed to prepare writable rootfs copy: ${message}`, { cause: err2 });
     }
   }
 

@@ -4,9 +4,8 @@
  * Handles spawning, configuring, and lifecycle management of Firecracker processes.
  */
 
-import { spawn, type ChildProcess } from "child_process";
+import { spawn } from "child_process";
 import { mkdir, unlink, open as fsOpen, readFile } from "fs/promises";
-import { dirname } from "path";
 import {
   configureVM,
   startInstance,

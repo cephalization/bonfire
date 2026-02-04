@@ -16,20 +16,23 @@
         "caughtErrorsIgnorePattern": "^_"
       }
     ],
-    "no-console": "warn",
-    "typescript/no-explicit-any": "warn",
+    "no-console": "off",
+    "typescript/no-explicit-any": "off",
     "react/jsx-key": "error",
     "react/no-children-prop": "error",
     "react/react-in-jsx-scope": "off",
     "import/no-cycle": "error",
     "import/no-self-import": "error",
+    "import/no-unassigned-import": "off",
     "promise/no-return-wrap": "error",
     "jest/no-standalone-expect": "off",
     "jest/expect-expect": "off",
     "jest/no-disabled-tests": "warn",
     "jest/require-to-throw-message": "off",
     "jest/no-conditional-expect": "off",
-    "no-useless-catch": "warn"
+    "no-useless-catch": "warn",
+    "no-await-in-loop": "off",
+    "no-control-regex": "off"
   },
   "ignorePatterns": ["**/dist/**", "**/node_modules/**", "**/*.d.ts", "**/coverage/**"]
 }

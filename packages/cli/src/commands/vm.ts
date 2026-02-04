@@ -13,7 +13,7 @@
  *   bonfire vm ssh <name|id> -- <command>
  */
 
-import { spinner, confirm, isCancel, cancel, outro } from "@clack/prompts";
+import { spinner, confirm, isCancel, cancel } from "@clack/prompts";
 import pc from "picocolors";
 import type { BonfireClient } from "@bonfire/sdk";
 
@@ -145,59 +145,54 @@ export async function handleVMCreate(
 }
 
 export async function handleVMList(client: BonfireClient, baseUrl: string): Promise<void> {
-  try {
-    const vms = await apiRequest<VM[]>(baseUrl, "GET", "/api/vms");
+  const vms = await apiRequest<VM[]>(baseUrl, "GET", "/api/vms");
 
-    if (vms.length === 0) {
-      console.log(pc.gray("No VMs found."));
-      return;
-    }
+  if (vms.length === 0) {
+    console.log(pc.gray("No VMs found."));
+    return;
+  }
 
-    // Calculate column widths
-    const idWidth = Math.max(4, ...vms.map((v) => v.id.length));
-    const nameWidth = Math.max(8, ...vms.map((v) => v.name.length));
-    const statusWidth = 8;
-    const ipWidth = 12;
-    const vcpusWidth = 5;
-    const memoryWidth = 6;
+  // Calculate column widths
+  const idWidth = Math.max(4, ...vms.map((v) => v.id.length));
+  const nameWidth = Math.max(8, ...vms.map((v) => v.name.length));
+  const statusWidth = 8;
+  const ipWidth = 12;
+  const vcpusWidth = 5;
 
-    // Print header
-    const header = [
-      "ID".padEnd(idWidth),
-      "Name".padEnd(nameWidth),
-      "Status".padEnd(statusWidth),
-      "IP".padEnd(ipWidth),
-      "vCPUs".padEnd(vcpusWidth),
-      "Memory",
+  // Print header
+  const header = [
+    "ID".padEnd(idWidth),
+    "Name".padEnd(nameWidth),
+    "Status".padEnd(statusWidth),
+    "IP".padEnd(ipWidth),
+    "vCPUs".padEnd(vcpusWidth),
+    "Memory",
+  ].join("  ");
+
+  console.log(pc.bold(header));
+  console.log(pc.gray("-".repeat(header.length)));
+
+  // Print rows
+  for (const vm of vms) {
+    const statusColor =
+      vm.status === "running"
+        ? pc.green
+        : vm.status === "stopped"
+          ? pc.gray
+          : vm.status === "error"
+            ? pc.red
+            : pc.yellow;
+
+    const row = [
+      vm.id.padEnd(idWidth),
+      vm.name.padEnd(nameWidth),
+      statusColor(vm.status.padEnd(statusWidth)),
+      (vm.ipAddress || "-").padEnd(ipWidth),
+      String(vm.vcpus).padEnd(vcpusWidth),
+      `${vm.memoryMib} MiB`,
     ].join("  ");
 
-    console.log(pc.bold(header));
-    console.log(pc.gray("-".repeat(header.length)));
-
-    // Print rows
-    for (const vm of vms) {
-      const statusColor =
-        vm.status === "running"
-          ? pc.green
-          : vm.status === "stopped"
-            ? pc.gray
-            : vm.status === "error"
-              ? pc.red
-              : pc.yellow;
-
-      const row = [
-        vm.id.padEnd(idWidth),
-        vm.name.padEnd(nameWidth),
-        statusColor(vm.status.padEnd(statusWidth)),
-        (vm.ipAddress || "-").padEnd(ipWidth),
-        String(vm.vcpus).padEnd(vcpusWidth),
-        `${vm.memoryMib} MiB`,
-      ].join("  ");
-
-      console.log(row);
-    }
-  } catch (error) {
-    throw error;
+    console.log(row);
   }
 }
 
@@ -275,7 +270,7 @@ export async function handleVMRemove(
   try {
     vm = await apiRequest<VM>(baseUrl, "GET", `/api/vms/${encodeURIComponent(identifier)}`);
   } catch (error) {
-    throw new Error(`VM not found: ${identifier}`);
+    throw new Error(`VM not found: ${identifier}`, { cause: error });
   }
 
   const shouldDelete = await confirm({
@@ -320,7 +315,7 @@ export async function handleVMSSH(
   try {
     vm = await apiRequest<VM>(baseUrl, "GET", `/api/vms/${encodeURIComponent(identifier)}`);
   } catch (error) {
-    throw new Error(`VM not found: ${identifier}`);
+    throw new Error(`VM not found: ${identifier}`, { cause: error });
   }
 
   if (vm.status !== "running") {
@@ -377,7 +372,8 @@ export async function handleVMSSH(
       s.stop(pc.red("Failed to download SSH key"));
       throw new Error(
         `Failed to download SSH key: ${error instanceof Error ? error.message : String(error)}. ` +
-          "Make sure the VM has been started at least once."
+          "Make sure the VM has been started at least once.",
+        { cause: error }
       );
     }
   }

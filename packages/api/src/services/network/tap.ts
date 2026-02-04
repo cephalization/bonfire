@@ -82,15 +82,18 @@ export async function createTap(vmId: string): Promise<TapDevice> {
     if (error instanceof Error) {
       if (error.message.includes("Operation not permitted")) {
         throw new Error(
-          `Permission denied: Cannot create TAP device. Requires root or NET_ADMIN capability.`
+          `Permission denied: Cannot create TAP device. Requires root or NET_ADMIN capability.`,
+          { cause: error }
         );
       }
       if (error.message.includes("No such device")) {
-        throw new Error(`Bridge '${getBridgeName()}' does not exist. Run setup.sh first.`);
+        throw new Error(`Bridge '${getBridgeName()}' does not exist. Run setup.sh first.`, {
+          cause: error,
+        });
       }
-      throw new Error(`Failed to create TAP device: ${error.message}`);
+      throw new Error(`Failed to create TAP device: ${error.message}`, { cause: error });
     }
-    throw new Error("Failed to create TAP device: Unknown error");
+    throw new Error("Failed to create TAP device: Unknown error", { cause: error });
   }
 }
 
@@ -122,15 +125,16 @@ export async function deleteTap(tapName: string): Promise<void> {
     if (error instanceof Error) {
       if (error.message.includes("Operation not permitted")) {
         throw new Error(
-          `Permission denied: Cannot delete TAP device. Requires root or NET_ADMIN capability.`
+          `Permission denied: Cannot delete TAP device. Requires root or NET_ADMIN capability.`,
+          { cause: error }
         );
       }
       if (error.message.includes("No such device")) {
         // Device doesn't exist - this is fine, consider it deleted
         return;
       }
-      throw new Error(`Failed to delete TAP device: ${error.message}`);
+      throw new Error(`Failed to delete TAP device: ${error.message}`, { cause: error });
     }
-    throw new Error("Failed to delete TAP device: Unknown error");
+    throw new Error("Failed to delete TAP device: Unknown error", { cause: error });
   }
 }

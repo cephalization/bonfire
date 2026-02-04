@@ -6,7 +6,6 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -97,6 +96,8 @@ function CreateVMForm({
         setImages(data);
 
         // Prefer a locally-registered agent-ready image if present.
+        // Note: imageId check is intentional - only set default on initial load
+        // eslint-disable-next-line react-hooks/exhaustive-deps
         if (!imageId) {
           const preferred = data.find((img) => img.reference === "local:agent-ready");
           if (preferred) setImageId(preferred.id);
@@ -109,6 +110,7 @@ function CreateVMForm({
     };
 
     fetchImages();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleRegisterLocalAgentImage = async () => {
