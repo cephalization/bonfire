@@ -1,10 +1,13 @@
 /**
- * Images API Routes
+ * Images API Routes (Simplified)
  *
- * REST endpoints for image management:
+ * REST endpoints for local image management:
  * - GET /api/images - List all cached images
- * - POST /api/images/pull - Pull image from registry
  * - DELETE /api/images/:id - Delete cached image
+ * - POST /api/images/local - Register a local image by paths
+ *
+ * NOTE: OCI registry pulling and quickstart downloads have been removed
+ * in favor of simple local file path registration.
  */
 
 import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
@@ -12,13 +15,16 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { eq } from "drizzle-orm";
 import { createHash } from "crypto";
 import { stat, access } from "fs/promises";
-import { isAbsolute, resolve, join, dirname, basename } from "path";
+import { isAbsolute, resolve, join, dirname } from "path";
 import { fileURLToPath } from "url";
 import * as schema from "../db/schema";
 import { images, vms } from "../db/schema";
-import { RegistryService } from "../services/registry";
-import { QuickStartService } from "../services/quickstart";
-import { IMAGES_DIR } from "../services/registry";
+
+// ============================================================================
+// Configuration
+// ============================================================================
+
+const IMAGES_DIR = process.env.IMAGES_DIR || "/var/lib/bonfire/images";
 
 // ============================================================================
 // OpenAPI Schemas
@@ -31,15 +37,15 @@ const ImageSchema = z
       description: "Unique image ID (SHA256 of reference)",
     }),
     reference: z.string().openapi({
-      example: "ghcr.io/openfaasltd/slicer-systemd:5.10.240-x86_64-latest",
+      example: "local:agent-ready",
       description: "Full image reference",
     }),
     kernelPath: z.string().openapi({
-      example: "/var/lib/bonfire/images/abc123/kernel",
+      example: "/var/lib/bonfire/images/agent-kernel",
       description: "Path to kernel file",
     }),
     rootfsPath: z.string().openapi({
-      example: "/var/lib/bonfire/images/abc123/rootfs",
+      example: "/var/lib/bonfire/images/agent-rootfs.ext4",
       description: "Path to rootfs file",
     }),
     sizeBytes: z.number().nullable().openapi({
@@ -48,19 +54,10 @@ const ImageSchema = z
     }),
     pulledAt: z.string().datetime().openapi({
       example: "2024-01-15T10:30:00Z",
-      description: "When the image was pulled",
+      description: "When the image was registered",
     }),
   })
   .openapi("Image");
-
-const PullImageRequestSchema = z
-  .object({
-    reference: z.string().optional().openapi({
-      example: "ghcr.io/openfaasltd/slicer-systemd:5.10.240-x86_64-latest",
-      description: "Image reference to pull",
-    }),
-  })
-  .openapi("PullImageRequest");
 
 const RegisterLocalImageRequestSchema = z
   .object({
@@ -106,7 +103,7 @@ const listImagesRoute = createRoute({
   path: "/images",
   tags: ["Images"],
   summary: "List cached images",
-  description: "Returns all cached images from the database",
+  description: "Returns all registered images from the database",
   responses: {
     200: {
       description: "List of images",
@@ -127,55 +124,12 @@ const listImagesRoute = createRoute({
   },
 });
 
-const pullImageRoute = createRoute({
-  method: "post",
-  path: "/images/pull",
-  tags: ["Images"],
-  summary: "Pull image from registry",
-  description: "Pulls an OCI image from a registry and caches it locally",
-  request: {
-    body: {
-      content: {
-        "application/json": {
-          schema: PullImageRequestSchema,
-        },
-      },
-    },
-  },
-  responses: {
-    201: {
-      description: "Image pulled successfully",
-      content: {
-        "application/json": {
-          schema: ImageSchema,
-        },
-      },
-    },
-    400: {
-      description: "Invalid request",
-      content: {
-        "application/json": {
-          schema: ErrorResponseSchema,
-        },
-      },
-    },
-    500: {
-      description: "Failed to pull image",
-      content: {
-        "application/json": {
-          schema: ErrorResponseSchema,
-        },
-      },
-    },
-  },
-});
-
 const deleteImageRoute = createRoute({
   method: "delete",
   path: "/images/{id}",
   tags: ["Images"],
   summary: "Delete cached image",
-  description: "Removes a cached image from disk and database. Cannot delete if VMs are using it.",
+  description: "Removes a cached image from database. Cannot delete if VMs are using it.",
   request: {
     params: z.object({
       id: z.string().openapi({
@@ -211,32 +165,6 @@ const deleteImageRoute = createRoute({
     },
     500: {
       description: "Internal server error",
-      content: {
-        "application/json": {
-          schema: ErrorResponseSchema,
-        },
-      },
-    },
-  },
-});
-
-const quickStartRoute = createRoute({
-  method: "post",
-  path: "/images/quickstart",
-  tags: ["Images"],
-  summary: "Download quick start image",
-  description: "Downloads Firecracker's public test images from S3 for quick evaluation",
-  responses: {
-    201: {
-      description: "Quick start image downloaded successfully",
-      content: {
-        "application/json": {
-          schema: ImageSchema,
-        },
-      },
-    },
-    500: {
-      description: "Failed to download quick start image",
       content: {
         "application/json": {
           schema: ErrorResponseSchema,
@@ -296,27 +224,11 @@ const registerLocalImageRoute = createRoute({
 
 export interface ImagesRouterConfig {
   db: BetterSQLite3Database<typeof schema>;
-  registryService?: RegistryService;
-  quickStartService?: QuickStartService;
 }
 
 export function createImagesRouter(config: ImagesRouterConfig): OpenAPIHono {
   const app = new OpenAPIHono();
   const { db } = config;
-
-  // Create registry service if not provided
-  const registryService =
-    config.registryService ??
-    new RegistryService({
-      db,
-    });
-
-  // Create quickstart service if not provided
-  const quickStartService =
-    config.quickStartService ??
-    new QuickStartService({
-      db,
-    });
 
   // GET /api/images - List all cached images
   app.openapi(listImagesRoute, async (c) => {
@@ -333,33 +245,6 @@ export function createImagesRouter(config: ImagesRouterConfig): OpenAPIHono {
     } catch (error) {
       console.error("Failed to list images:", error);
       return c.json({ error: "Failed to list images" }, 500);
-    }
-  });
-
-  // POST /api/images/pull - Pull image from registry
-  app.openapi(pullImageRoute, async (c) => {
-    try {
-      const body = await c.req.json();
-      const { reference } = body;
-
-      if (!reference || typeof reference !== "string") {
-        return c.json({ error: "Reference is required" }, 400);
-      }
-
-      const image = await registryService.pullImage(reference);
-
-      // Convert Date to ISO string for JSON
-      return c.json(
-        {
-          ...image,
-          pulledAt: image.pulledAt.toISOString(),
-        },
-        201
-      );
-    } catch (error) {
-      console.error("Failed to pull image:", error);
-      const message = error instanceof Error ? error.message : "Failed to pull image";
-      return c.json({ error: message }, 500);
     }
   });
 
@@ -387,34 +272,13 @@ export function createImagesRouter(config: ImagesRouterConfig): OpenAPIHono {
         );
       }
 
-      // Delete the image
-      await registryService.deleteImage(id);
+      // Delete the image from database
+      await db.delete(images).where(eq(images.id, id));
 
       return c.json({ success: true }, 200);
     } catch (error) {
       console.error("Failed to delete image:", error);
       const message = error instanceof Error ? error.message : "Failed to delete image";
-      return c.json({ error: message }, 500);
-    }
-  });
-
-  // POST /api/images/quickstart - Download quick start image
-  app.openapi(quickStartRoute, async (c) => {
-    try {
-      const image = await quickStartService.downloadQuickStartImage();
-
-      // Convert Date to ISO string for JSON
-      return c.json(
-        {
-          ...image,
-          pulledAt: image.pulledAt.toISOString(),
-        },
-        201
-      );
-    } catch (error) {
-      console.error("Failed to download quick start image:", error);
-      const message =
-        error instanceof Error ? error.message : "Failed to download quick start image";
       return c.json({ error: message }, 500);
     }
   });
@@ -592,4 +456,9 @@ async function exists(path: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+// Helper function for basename
+function basename(path: string): string {
+  return path.split("/").pop() || path;
 }

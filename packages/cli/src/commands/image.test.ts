@@ -3,12 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import {
-  handleImageCommand,
-  handleImagePull,
-  handleImageList,
-  handleImageRemove,
-} from "./image.js";
+import { handleImageCommand, handleImageList, handleImageRemove } from "./image.js";
 
 // Mock the API for testing
 const mockFetch = async (url: string, options?: RequestInit): Promise<Response> => {
@@ -21,29 +16,14 @@ const mockFetch = async (url: string, options?: RequestInit): Promise<Response> 
       JSON.stringify([
         {
           id: "img-123",
-          reference: "ubuntu:latest",
-          kernelPath: "/var/lib/bonfire/images/img-123/kernel",
-          rootfsPath: "/var/lib/bonfire/images/img-123/rootfs",
+          reference: "local:agent-ready",
+          kernelPath: "/var/lib/bonfire/images/agent-kernel",
+          rootfsPath: "/var/lib/bonfire/images/agent-rootfs.ext4",
           sizeBytes: 104857600,
           pulledAt: "2024-01-15T10:30:00Z",
         },
       ]),
       { status: 200, headers: { "Content-Type": "application/json" } }
-    );
-  }
-
-  if (path === "/api/images/pull" && options?.method === "POST") {
-    const body = JSON.parse(options.body as string);
-    return new Response(
-      JSON.stringify({
-        id: "img-456",
-        reference: body.reference,
-        kernelPath: `/var/lib/bonfire/images/img-456/kernel`,
-        rootfsPath: `/var/lib/bonfire/images/img-456/rootfs`,
-        sizeBytes: 209715200,
-        pulledAt: new Date().toISOString(),
-      }),
-      { status: 201, headers: { "Content-Type": "application/json" } }
     );
   }
 
@@ -72,15 +52,14 @@ describe("handleImageCommand argument parsing", () => {
     const exitCode = await handleImageCommand(mockClient, "http://localhost:3000", ["unknown"]);
     expect(exitCode).toBe(1);
   });
-});
 
-describe("handleImagePull", () => {
-  it("throws when reference is missing", async () => {
+  it("returns error for removed pull subcommand", async () => {
     const mockClient = {} as any;
-
-    await expect(handleImagePull(mockClient, "http://localhost:3000", [])).rejects.toThrow(
-      "Image reference is required"
-    );
+    const exitCode = await handleImageCommand(mockClient, "http://localhost:3000", [
+      "pull",
+      "ubuntu:latest",
+    ]);
+    expect(exitCode).toBe(1);
   });
 });
 
@@ -105,18 +84,12 @@ describe("Image command dispatch", () => {
     globalThis.fetch = originalFetch;
   });
 
-  it("dispatches pull subcommand", async () => {
-    const mockClient = {} as any;
-    const exitCode = await handleImageCommand(mockClient, "http://localhost:3000", [
-      "pull",
-      "ubuntu:latest",
-    ]);
-    expect(exitCode).toBe(0);
-  });
-
   it("dispatches list subcommand", async () => {
     const mockClient = {} as any;
     const exitCode = await handleImageCommand(mockClient, "http://localhost:3000", ["list"]);
     expect(exitCode).toBe(0);
   });
+
+  // Note: rm subcommand test skipped - it requires mocking @clack/prompts confirm()
+  // The handleImageRemove function is tested for validation errors above
 });

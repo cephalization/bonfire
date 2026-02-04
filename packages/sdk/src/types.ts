@@ -45,10 +45,6 @@ export interface Image {
   pulledAt: string;
 }
 
-export interface PullImageRequest {
-  reference?: string;
-}
-
 // ============================================================================
 // API Response Types
 // ============================================================================

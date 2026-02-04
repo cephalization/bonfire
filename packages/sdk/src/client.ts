@@ -5,14 +5,7 @@
  * Do not edit manually.
  */
 
-import type {
-  HealthResponse,
-  VM,
-  CreateVMRequest,
-  Image,
-  PullImageRequest,
-  SuccessResponse,
-} from "./types";
+import type { HealthResponse, VM, CreateVMRequest, Image, SuccessResponse } from "./types";
 
 export interface ClientConfig {
   baseUrl?: string;
@@ -139,24 +132,16 @@ export class BonfireClient {
   // ============================================================================
 
   /**
-   * List all cached images
-   * Returns all cached images from the database
+   * List all registered images
+   * Returns all images from the database
    */
   async listImages(): Promise<Image[]> {
     return this.request<Image[]>("GET", "/api/images");
   }
 
   /**
-   * Pull image from registry
-   * Pulls an OCI image from a registry and caches it locally
-   */
-  async pullImage(request: PullImageRequest): Promise<Image> {
-    return this.request<Image>("POST", "/api/images/pull", { body: request });
-  }
-
-  /**
    * Delete cached image
-   * Removes a cached image from disk and database
+   * Removes a cached image from database
    */
   async deleteImage(id: string): Promise<SuccessResponse> {
     return this.request<SuccessResponse>("DELETE", `/api/images/${id}`);
