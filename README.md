@@ -134,6 +134,177 @@ pnpm run dev  # runs both API and web servers in parallel via mprocs
 The mprocs TUI will show both processes. Use arrow keys to switch between them,
 and press `q` to quit all processes.
 
+## System Impact
+
+Understanding what Bonfire does to your system helps you make informed decisions about deployment and cleanup.
+
+### System Changes Overview
+
+When you run Bonfire (especially on bare metal), it makes several types of system modifications:
+
+#### Network Configuration
+
+**Bridge Interface**: Creates a Linux bridge (`bonfire0` by default) that persists until manually removed
+
+- Acts as the gateway for all VMs (10.0.100.1)
+- Visible in `ip link` and `bridge link` outputs
+- Provides the network backbone for VM communication
+
+**TAP Devices**: Creates virtual network interfaces for each running VM
+
+- Naming pattern: `tap-bf-{first-8-chars-of-vm-id}`
+- Automatically cleaned up when VMs stop
+- Requires elevated privileges (root or CAP_NET_ADMIN)
+
+**IP Tables Rules**: Adds NAT rules for internet access
+
+- One rule in `nat/POSTROUTING` chain for the VM subnet
+- Enables VMs to reach the internet through the host
+- Persists until removed or system reboots
+
+**IP Forwarding**: Enables kernel-level packet forwarding
+
+- Required for NAT to function
+- May create `/etc/sysctl.d/99-bonfire.conf` for persistence
+- Affects the entire system, not just Bonfire
+
+#### File System Modifications
+
+**Data Directories**: Creates the following persistent directories:
+
+| Directory                 | Purpose                          | Typical Size                 |
+| ------------------------- | -------------------------------- | ---------------------------- |
+| `/var/lib/bonfire`        | Main data directory              | ~10 MB (database + metadata) |
+| `/var/lib/bonfire/images` | Base VM images (kernel + rootfs) | ~4 GB per image              |
+| `/var/lib/bonfire/vms`    | Per-VM runtime files             | Up to 4 GB per VM            |
+| `/var/lib/bonfire/keys`   | SSH key storage                  | ~1 KB per VM                 |
+| `~/.bonfire` (CLI)        | User configuration               | ~1 KB                        |
+| `~/.bonfire/keys` (CLI)   | Downloaded SSH keys              | ~1 KB per VM                 |
+
+**Per-VM Files**: Each VM creates:
+
+- Writable rootfs copy (`{vmId}.rootfs.ext4`) - sparse file, up to 4 GB
+- Firecracker socket (`{vmId}.sock`)
+- Stderr log file (`{vmId}.firecracker.stderr.log`)
+- SSH key pair (`vm-{vmId}` and `vm-{vmId}.pub`)
+
+**Temporary Files**:
+
+- Mount points for SSH key injection (`/tmp/bonfire-mount-{vmId}`)
+- Temporary SSH key generation directories
+- Test databases (during development/testing)
+
+#### Process Management
+
+**External Processes Spawned**:
+
+- **Firecracker**: One process per running VM (the actual microVM)
+- **ip commands**: For TAP device and bridge management
+- **ssh-keygen**: For VM SSH key generation
+- **mount/umount**: For rootfs modification during SSH key injection
+- **cp**: For creating writable rootfs copies (with sparse file support)
+- **SSH client**: When using `bonfire vm ssh` command
+
+**Resource Requirements**:
+
+| Resource | Per VM                              | Host Requirements            |
+| -------- | ----------------------------------- | ---------------------------- |
+| Memory   | 128 MiB - 64 GiB (default: 512 MiB) | +~30 MB Firecracker overhead |
+| vCPUs    | 1-32 (default: 1)                   | Shared with host             |
+| Disk     | Up to 4 GB per VM                   | Plus base images             |
+| Network  | 1 IP from 10.0.100.0/24             | Bridge + TAP overhead        |
+
+**Maximum Capacity**: Up to 253 concurrent VMs (limited by IP pool size)
+
+#### Privilege Requirements
+
+**Required Capabilities**:
+
+- `CAP_NET_ADMIN` - Network interface management (TAP devices, bridges, iptables)
+- `CAP_SYS_ADMIN` - Mount operations, system administration
+- `/dev/kvm` access - Hardware virtualization
+
+**Root Access Needed For**:
+
+- Initial setup (bridge creation, iptables rules, sysctl changes)
+- TAP device creation and management
+- Mounting loop devices for rootfs modification
+- Installing Firecracker binary to `/usr/local/bin`
+
+### Cleanup Procedures
+
+#### Full System Cleanup (Bare Metal)
+
+If you want to completely remove Bonfire's system changes:
+
+```bash
+# 1. Stop all VMs
+pkill -f firecracker
+
+# 2. Remove all TAP devices
+for tap in $(ip link show | grep -oE 'tap-bf-[a-z0-9]+' | sort -u); do
+    ip link delete "$tap" 2>/dev/null || true
+done
+
+# 3. Remove bridge
+ip link delete bonfire0 2>/dev/null || true
+
+# 4. Remove NAT rule
+iptables -t nat -D POSTROUTING -s 10.0.100.0/24 ! -o bonfire0 -j MASQUERADE
+
+# 5. Disable IP forwarding
+sysctl -w net.ipv4.ip_forward=0
+rm -f /etc/sysctl.d/99-bonfire.conf
+
+# 6. Remove data directories (WARNING: destroys all VM data)
+rm -rf /var/lib/bonfire
+rm -rf ~/.bonfire
+
+# 7. Remove Firecracker binary
+rm -f /usr/local/bin/firecracker
+```
+
+#### Docker Cleanup
+
+Much simpler - just remove the containers and volumes:
+
+```bash
+# Stop and remove containers
+docker compose -f docker/docker-compose.yml down
+
+# Remove volumes (destroys all data)
+docker volume rm bonfire_bonfire-data
+```
+
+### Bare Metal vs Docker: Impact Comparison
+
+| Aspect                 | Bare Metal                      | Docker                              |
+| ---------------------- | ------------------------------- | ----------------------------------- |
+| **Network Changes**    | Direct on host                  | Inside container namespace          |
+| **Cleanup**            | Manual steps required           | Simple container/volume removal     |
+| **Bridge Persistence** | Persists until manually removed | Removed with container              |
+| **IPT Persistence**    | Persists until manually removed | Removed with container              |
+| **Privileges**         | Root required                   | Can use capabilities                |
+| **Isolation**          | Minimal                         | Better process/filesystem isolation |
+| **Performance**        | Native                          | Minimal overhead                    |
+| **Complexity**         | Higher                          | Lower                               |
+
+### Recommendation
+
+**Use Docker for development workstations** where you want:
+
+- Easy cleanup and no persistent system changes
+- Protection against accidentally leaving bridges/TAP devices
+- Isolation from your main network stack
+- Simple "reset" capability
+
+**Use bare metal for dedicated VM hosts** where:
+
+- Performance is critical
+- You're already managing the infrastructure
+- You want VMs to persist across container restarts
+- You accept the manual cleanup responsibility
+
 ## Development Setup
 
 ### Monorepo Structure
