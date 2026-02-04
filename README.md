@@ -25,7 +25,7 @@ A self-hosted platform for ephemeral Firecracker microVMs, optimized for remote 
 
 ## Quick Start (Docker - Recommended)
 
-Docker is the recommended way to run Bonfire as it provides isolation and a consistent environment.
+Get from zero to a running VM in under 5 minutes with Docker.
 
 ### Prerequisites
 
@@ -34,45 +34,80 @@ Docker is the recommended way to run Bonfire as it provides isolation and a cons
 
 ### Installation
 
-1. Clone the repository:
+1. **Clone and start**:
 
 ```bash
 git clone https://github.com/cephalization/bonfire.git
 cd bonfire
-```
-
-2. Build and run the development stack with Docker Compose:
-
-```bash
 docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml up -d --remove-orphans
 ```
 
-If you already have Node + pnpm locally, you can also run:
+2. **Build the VM image** (one-time setup):
 
 ```bash
-pnpm run dev:docker
+# This creates the kernel and rootfs needed to run VMs
+./scripts/build-agent-image-docker.sh
 ```
 
-Optional (recommended): create a repo-root `.env` to persist your auth settings for Docker Compose:
+Creates:
 
-```env
-BETTER_AUTH_SECRET=<generate-a-secure-random-string>
-# In dev, Better Auth runs on the API origin
-BETTER_AUTH_URL=http://localhost:3000
+- `images/agent-kernel` (~10 MB)
+- `images/agent-rootfs.ext4` (~4 GB sparse file)
+
+3. **Register the image** with Bonfire:
+
+```bash
+# Copy images into the container's volume
+docker cp images/agent-kernel bonfire-api-1:/var/lib/bonfire/images/
+docker cp images/agent-rootfs.ext4 bonfire-api-1:/var/lib/bonfire/images/
+
+# Register via API
+curl -X POST http://localhost:3000/api/images/local \
+  -H "Content-Type: application/json" \
+  -d '{
+    "reference": "local:agent-ready",
+    "kernelPath": "/var/lib/bonfire/images/agent-kernel",
+    "rootfsPath": "/var/lib/bonfire/images/agent-rootfs.ext4"
+  }'
 ```
 
-3. Open http://localhost:5173 in your browser
+4. **Open the Web UI** at http://localhost:5173
 
-4. Log in with the default admin credentials:
+5. **Log in** with default credentials:
    - Email: `admin@example.com`
    - Password: `admin123`
 
-This starts both API and web servers with:
+6. **Create your first VM**:
+   - Click "New VM"
+   - Name: `my-first-vm`
+   - Image: Select `local:agent-ready`
+   - Click "Create"
 
-- Hot reload for both API and web code
-- Source code mounted as volumes for live editing
-- KVM device access for VM management
-- Ports 3000 (API) and 5173 (Web UI) exposed
+7. **Start and connect**:
+   - Click the play button to start the VM
+   - Wait for status to show "running" with an IP address
+   - Click "SSH" to open a terminal session
+
+That's it! You're now connected to your Firecracker microVM.
+
+### Alternative: Using the CLI
+
+After building and registering the image:
+
+```bash
+# Install CLI locally
+npm install -g @bonfire/cli
+
+# Login (if needed)
+bonfire login
+
+# Create and start a VM
+bonfire vm create my-first-vm --image=local:agent-ready
+bonfire vm start my-first-vm
+
+# Connect via SSH
+bonfire vm ssh my-first-vm
+```
 
 ### Production Compose
 
@@ -99,40 +134,51 @@ docker compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml up
 
 **Steps:**
 
-1. Clone the repository:
+1. **Clone and setup**:
 
 ```bash
 git clone https://github.com/cephalization/bonfire.git
 cd bonfire
+corepack enable && pnpm install
 ```
 
-2. Install dependencies:
+2. **System setup** (installs Firecracker, configures bridge/NAT):
 
 ```bash
-corepack enable
-pnpm install
+sudo ./scripts/setup.sh
 ```
 
-3. Run the host setup script (requires root - installs Firecracker, configures networking):
+3. **Build the VM image**:
 
 ```bash
-sudo ./scripts/setup.sh  # installs Firecracker, sets up VM bridge/NAT, creates .env
+./scripts/build-agent-image-docker.sh
 ```
 
-4. Start the development servers:
+4. **Start servers**:
 
 ```bash
-pnpm run dev  # runs both API and web servers in parallel via mprocs
+pnpm run dev
 ```
 
-5. Open http://localhost:5173 in your browser
+5. **Register the image** (in another terminal):
 
-6. Log in with the admin credentials (configured in `.env`):
-   - Email: `admin@example.com` (or your INITIAL_ADMIN_EMAIL)
-   - Password: `admin123` (or your INITIAL_ADMIN_PASSWORD)
+```bash
+curl -X POST http://localhost:3000/api/images/local \
+  -H "Content-Type: application/json" \
+  -d '{
+    "reference": "local:agent-ready",
+    "kernelPath": "/var/lib/bonfire/images/agent-kernel",
+    "rootfsPath": "/var/lib/bonfire/images/agent-rootfs.ext4"
+  }'
+```
 
-The mprocs TUI will show both processes. Use arrow keys to switch between them,
-and press `q` to quit all processes.
+6. **Open Web UI** at http://localhost:5173
+
+7. **Log in** and create your first VM:
+   - Email: `admin@example.com` (from `.env`)
+   - Password: `admin123` (from `.env`)
+   - Click "New VM", select the `local:agent-ready` image
+   - Start and connect!
 
 ## System Impact
 
