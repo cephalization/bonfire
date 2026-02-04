@@ -16,12 +16,12 @@ The agent-ready VM image is a Firecracker-compatible rootfs that includes:
 
 ## Files
 
-| File | Description |
-|------|-------------|
-| `Dockerfile.agent` | Docker build definition for the agent environment |
-| `scripts/build-agent-image.sh` | Build script using sudo mount (traditional) |
-| `scripts/build-agent-image-docker.sh` | Build script using Docker (no sudo required) |
-| `scripts/verify-agent-image.sh` | Verification script using sudo mount |
+| File                                   | Description                                         |
+| -------------------------------------- | --------------------------------------------------- |
+| `Dockerfile.agent`                     | Docker build definition for the agent environment   |
+| `scripts/build-agent-image.sh`         | Build script using sudo mount (traditional)         |
+| `scripts/build-agent-image-docker.sh`  | Build script using Docker (no sudo required)        |
+| `scripts/verify-agent-image.sh`        | Verification script using sudo mount                |
 | `scripts/verify-agent-image-docker.sh` | Verification script using Docker (no sudo required) |
 
 ## Quick Start
@@ -49,6 +49,7 @@ sudo ./scripts/build-agent-image.sh /path/to/output
 ```
 
 This will create:
+
 - `images/agent-kernel` - Firecracker kernel (downloaded from CI)
 - `images/agent-rootfs.ext4` - ext4 rootfs image (2GB)
 
@@ -113,6 +114,7 @@ rm -rf images/
 ### User Setup
 
 The `agent` user is configured with:
+
 - **UID**: 1000
 - **Home**: `/home/agent`
 - **Shell**: `/bin/bash`
@@ -123,12 +125,14 @@ The `agent` user is configured with:
 ### Installed Software
 
 **Node.js & pnpm**:
+
 ```bash
 node --version    # v22.x.x
 pnpm --version    # Latest
 ```
 
 **OpenCode**:
+
 ```bash
 # Installed at
 /home/agent/.local/bin/opencode
@@ -140,11 +144,13 @@ opencode --version
 ### systemd Service Template
 
 The OpenCode service template is installed at:
+
 ```
 /home/agent/.config/systemd/user/opencode@.service
 ```
 
 Usage:
+
 ```bash
 # Start OpenCode for a specific session
 systemctl --user start opencode@<session-id>
@@ -157,6 +163,7 @@ systemctl --user status opencode@<session-id>
 ```
 
 Service configuration:
+
 - **Port**: 4096 (hardcoded for MVP)
 - **Bind**: 0.0.0.0 (all interfaces)
 - **Working Directory**: `/home/agent/workspaces/%i`
@@ -170,12 +177,14 @@ Service configuration:
 For the MVP, SSH keys are baked into the image:
 
 1. Generate a keypair:
+
 ```bash
 ssh-keygen -t ed25519 -f bonfire-agent-key -N ""
 ```
 
 2. Add public key to image (before building):
-Modify `docker/Dockerfile.agent` to add:
+   Modify `docker/Dockerfile.agent` to add:
+
 ```dockerfile
 COPY bonfire-agent-key.pub /home/agent/.ssh/authorized_keys
 RUN chown agent:agent /home/agent/.ssh/authorized_keys \
@@ -187,6 +196,7 @@ RUN chown agent:agent /home/agent/.ssh/authorized_keys \
 ### Security Considerations
 
 ⚠️ **MVP Warning**: Using baked keys means all VMs share the same SSH keypair. This is acceptable for:
+
 - Single-tenant deployments
 - Ephemeral VMs
 - Development environments
@@ -250,17 +260,20 @@ curl -X POST http://localhost:3000/api/agent/sessions \
 ### Manual Testing (Requires KVM)
 
 1. **Start Firecracker VM**:
+
 ```bash
 # Use Bonfire API or manual Firecracker invocation
 # See Firecracker docs for manual testing
 ```
 
 2. **Test SSH**:
+
 ```bash
 ssh -i bonfire-agent-key agent@<vm-ip>
 ```
 
 3. **Test OpenCode**:
+
 ```bash
 # Inside VM
 opencode --version
@@ -273,6 +286,7 @@ curl http://localhost:4096/global/health
 ### Build Issues
 
 **Docker daemon not running**:
+
 ```bash
 sudo systemctl start docker
 # Or add user to docker group
@@ -280,6 +294,7 @@ sudo usermod -aG docker $USER
 ```
 
 **Out of disk space**:
+
 ```bash
 # Clean up Docker
 docker system prune -a
@@ -289,6 +304,7 @@ rm -rf images/
 ```
 
 **Permission denied mounting image**:
+
 ```bash
 # Run with sudo
 sudo ./scripts/build-agent-image.sh
@@ -297,16 +313,19 @@ sudo ./scripts/build-agent-image.sh
 ### Runtime Issues
 
 **SSH connection refused**:
+
 - Verify SSH service is running: `service ssh status`
 - Check firewall rules: `iptables -L`
 - Verify authorized_keys file exists and has correct permissions
 
 **OpenCode not found**:
+
 - Check installation: `ls -la /home/agent/.local/bin/`
 - Verify PATH: `echo $PATH`
 - Reinstall: `curl -fsSL https://opencode.ai/install | bash`
 
 **systemd user service fails**:
+
 - Check logs: `journalctl --user -u opencode@<session-id>`
 - Verify config: `cat /home/agent/.config/systemd/user/opencode@.service`
 - Test manually: `opencode web --port 4096 --hostname 0.0.0.0`
@@ -350,23 +369,23 @@ name: Build Agent Image
 on:
   push:
     paths:
-      - 'docker/Dockerfile.agent'
-      - 'scripts/build-agent-image.sh'
+      - "docker/Dockerfile.agent"
+      - "scripts/build-agent-image.sh"
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      
+
       - name: Build Image
         run: |
           sudo ./scripts/build-agent-image.sh
-      
+
       - name: Verify Image
         run: |
           sudo ./scripts/verify-agent-image.sh
-      
+
       - name: Upload Artifact
         uses: actions/upload-artifact@v3
         with:

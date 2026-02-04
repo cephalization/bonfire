@@ -41,19 +41,19 @@ Add DB tables (Drizzle SQLite) to persist sessions (minimal MVP fields):
 
 ### `agent_sessions` table
 
-| Column | Type | Notes |
-|--------|------|-------|
-| `id` | text (pk) | nanoid |
-| `userId` | text (fk -> user.id) | owner |
-| `title` | text | nullable; auto-populated from first prompt later |
-| `repoUrl` | text | required |
-| `branch` | text | nullable |
-| `vmId` | text (fk -> vms.id) | the backing VM |
-| `workspacePath` | text | e.g. `/home/agent/workspaces/<id>` |
-| `status` | text | enum: `creating` / `ready` / `error` / `archived` |
-| `errorMessage` | text | nullable; set when status=error |
-| `createdAt` | integer | timestamp |
-| `updatedAt` | integer | timestamp |
+| Column          | Type                 | Notes                                             |
+| --------------- | -------------------- | ------------------------------------------------- |
+| `id`            | text (pk)            | nanoid                                            |
+| `userId`        | text (fk -> user.id) | owner                                             |
+| `title`         | text                 | nullable; auto-populated from first prompt later  |
+| `repoUrl`       | text                 | required                                          |
+| `branch`        | text                 | nullable                                          |
+| `vmId`          | text (fk -> vms.id)  | the backing VM                                    |
+| `workspacePath` | text                 | e.g. `/home/agent/workspaces/<id>`                |
+| `status`        | text                 | enum: `creating` / `ready` / `error` / `archived` |
+| `errorMessage`  | text                 | nullable; set when status=error                   |
+| `createdAt`     | integer              | timestamp                                         |
+| `updatedAt`     | integer              | timestamp                                         |
 
 ### Design decisions
 
@@ -65,13 +65,13 @@ Add DB tables (Drizzle SQLite) to persist sessions (minimal MVP fields):
 
 ### Agent Session CRUD
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/agent/sessions` | List user's sessions |
-| `POST` | `/api/agent/sessions` | Create session (provisions VM, clones repo) |
-| `GET` | `/api/agent/sessions/:id` | Get session details |
+| Method | Path                              | Description                                           |
+| ------ | --------------------------------- | ----------------------------------------------------- |
+| `GET`  | `/api/agent/sessions`             | List user's sessions                                  |
+| `POST` | `/api/agent/sessions`             | Create session (provisions VM, clones repo)           |
+| `GET`  | `/api/agent/sessions/:id`         | Get session details                                   |
 | `POST` | `/api/agent/sessions/:id/archive` | Archive session (stops OpenCode, optionally stops VM) |
-| `POST` | `/api/agent/sessions/:id/retry` | Retry bootstrap on `error` status |
+| `POST` | `/api/agent/sessions/:id/retry`   | Retry bootstrap on `error` status                     |
 
 #### POST /api/agent/sessions request body
 
@@ -86,11 +86,12 @@ Add DB tables (Drizzle SQLite) to persist sessions (minimal MVP fields):
 
 ### OpenCode proxy
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `ANY` | `/api/agent/sessions/:id/opencode/*` | Proxies to `http://<vmIp>:4096/*` |
+| Method | Path                                 | Description                       |
+| ------ | ------------------------------------ | --------------------------------- |
+| `ANY`  | `/api/agent/sessions/:id/opencode/*` | Proxies to `http://<vmIp>:4096/*` |
 
 Requirements:
+
 - Bonfire auth required
 - Session must belong to user (or user is admin)
 - Supports HTTP, SSE streaming (`/event`, `/global/event`)
@@ -114,11 +115,11 @@ This is lighter than running a separate top-level route.
 
 Bonfire needs to execute commands inside the VM. Options:
 
-| Method | Pros | Cons |
-|--------|------|------|
-| **Baked key in image** | Simple | Less secure; same key for all VMs |
-| **Firecracker MMDS** | Per-VM keys; no image rebuild | Requires MMDS setup |
-| **Cloud-init** | Standard approach | Requires cloud-init in image |
+| Method                 | Pros                          | Cons                              |
+| ---------------------- | ----------------------------- | --------------------------------- |
+| **Baked key in image** | Simple                        | Less secure; same key for all VMs |
+| **Firecracker MMDS**   | Per-VM keys; no image rebuild | Requires MMDS setup               |
+| **Cloud-init**         | Standard approach             | Requires cloud-init in image      |
 
 **Recommendation for MVP**: Bake a known SSH keypair into the agent-ready image. Store the private key in Bonfire's config. This is acceptable because VMs are single-tenant and ephemeral.
 
@@ -173,6 +174,7 @@ WantedBy=default.target
 ```
 
 This allows Bonfire to run:
+
 ```bash
 systemctl --user start opencode@<sessionId>
 systemctl --user stop opencode@<sessionId>
@@ -204,6 +206,7 @@ Bonfire API should:
 3. **Background (optional post-MVP)**: Periodic health poll, auto-restart on failure.
 
 Recovery endpoint `POST /api/agent/sessions/:id/retry`:
+
 - Only available when `status=error`
 - Re-runs bootstrap sequence from step 3
 
@@ -212,6 +215,7 @@ Recovery endpoint `POST /api/agent/sessions/:id/retry`:
 ### OpenCode authentication
 
 OpenCode server supports HTTP basic auth via environment variables:
+
 - `OPENCODE_SERVER_PASSWORD` - required password
 - `OPENCODE_SERVER_USERNAME` - optional, defaults to `opencode`
 
@@ -220,6 +224,7 @@ OpenCode server supports HTTP basic auth via environment variables:
 ### LLM provider credentials
 
 OpenCode reads provider API keys from:
+
 1. Environment variables (e.g., `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`)
 2. `~/.local/share/opencode/auth.json` (via `/connect` command)
 
@@ -228,6 +233,7 @@ OpenCode reads provider API keys from:
 Option A (simpler): User configures provider via OpenCode's `/connect` command in the web UI. Credentials persist in VM at `~/.local/share/opencode/auth.json`.
 
 Option B (Bonfire-managed): Bonfire stores encrypted provider keys per-user. Injects them as environment variables when starting OpenCode. Requires:
+
 - New `user_secrets` table in Bonfire DB
 - Encryption at rest (use `better-auth` encryption or libsodium)
 - UI for users to add/manage provider keys
@@ -251,6 +257,7 @@ Inject config via `OPENCODE_CONFIG_CONTENT` environment variable:
 ```
 
 Key settings:
+
 - `share: "disabled"` - prevent conversation uploads to opencode.ai
 - `permission: "allow"` - allow all tool operations (MVP; harden post-MVP)
 - `autoupdate: false` - prevent auto-updates in production VMs
@@ -327,10 +334,12 @@ Add "Agent" item to main navigation (after "VMs" or "Dashboard").
 ```
 
 Pros:
+
 - Fastest path to working UI
 - OpenCode handles all its own state
 
 Cons:
+
 - Limited styling integration
 - Iframe security restrictions
 
@@ -341,34 +350,34 @@ Cons:
 ### Hono proxy route
 
 ```typescript
-app.all('/api/agent/sessions/:id/opencode/*', async (c) => {
-  const session = await getSession(c.req.param('id'));
-  if (!session || session.userId !== c.get('user').id) {
-    return c.json({ error: 'Not found' }, 404);
+app.all("/api/agent/sessions/:id/opencode/*", async (c) => {
+  const session = await getSession(c.req.param("id"));
+  if (!session || session.userId !== c.get("user").id) {
+    return c.json({ error: "Not found" }, 404);
   }
-  if (session.status !== 'ready') {
-    return c.json({ error: 'Session not ready' }, 503);
+  if (session.status !== "ready") {
+    return c.json({ error: "Session not ready" }, 503);
   }
 
   const vmIp = await getVmIp(session.vmId);
-  const targetPath = c.req.path.replace(`/api/agent/sessions/${session.id}/opencode`, '');
-  const targetUrl = `http://${vmIp}:4096${targetPath || '/'}`;
+  const targetPath = c.req.path.replace(`/api/agent/sessions/${session.id}/opencode`, "");
+  const targetUrl = `http://${vmIp}:4096${targetPath || "/"}`;
 
   // Proxy request with streaming support
   const response = await fetch(targetUrl, {
     method: c.req.method,
     headers: {
       ...filterHeaders(c.req.raw.headers),
-      'Authorization': `Basic ${btoa(`opencode:${session.id}`)}`,
+      Authorization: `Basic ${btoa(`opencode:${session.id}`)}`,
     },
     body: c.req.raw.body,
   });
 
   // Handle HTML responses - inject base href
-  if (response.headers.get('content-type')?.includes('text/html')) {
+  if (response.headers.get("content-type")?.includes("text/html")) {
     const html = await response.text();
     const baseHref = `/api/agent/sessions/${session.id}/opencode/`;
-    const modifiedHtml = html.replace('<head>', `<head><base href="${baseHref}">`);
+    const modifiedHtml = html.replace("<head>", `<head><base href="${baseHref}">`);
     return c.html(modifiedHtml, response.status);
   }
 
@@ -383,10 +392,12 @@ app.all('/api/agent/sessions/:id/opencode/*', async (c) => {
 ### SSE support
 
 OpenCode uses SSE for real-time updates:
+
 - `/event` - session events
 - `/global/event` - global events
 
 Ensure proxy:
+
 - Sets `Content-Type: text/event-stream`
 - Disables response buffering
 - Keeps connection alive
@@ -394,10 +405,12 @@ Ensure proxy:
 ### Headers to filter
 
 Strip hop-by-hop headers:
+
 - `connection`, `keep-alive`, `proxy-authenticate`, `proxy-authorization`
 - `te`, `trailer`, `transfer-encoding`, `upgrade`
 
 Add/override:
+
 - `host` - set to VM IP
 - `authorization` - inject basic auth
 
@@ -412,6 +425,7 @@ Add/override:
 ### Testing without real VMs
 
 Create mock mode for agent session bootstrap:
+
 - Skip VM provisioning
 - Return mock session with status=ready
 - Proxy to a local OpenCode instance
