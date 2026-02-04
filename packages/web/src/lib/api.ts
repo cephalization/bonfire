@@ -6,10 +6,18 @@
  */
 
 // Base configuration
-// In development, use empty string for relative URLs to leverage the Vite dev proxy.
-// In production, prefer same-origin via a reverse proxy (web serves UI and proxies `/api`).
-// If you deploy API separately, set VITE_API_URL to the full API URL.
-const DEFAULT_BASE_URL = import.meta.env.VITE_API_URL || "";
+// In development without VITE_API_URL, use window.location.origin for same-origin requests
+// In production, VITE_API_URL should be set to the full API URL
+function getDefaultBaseUrl(): string {
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+  // Use current origin for same-origin API requests (works with any hostname)
+  if (typeof window !== "undefined") {
+    return window.location.origin;
+  }
+  return ""; // Fallback for SSR/build time (relative URLs)
+}
 
 // WebSocket base URL for terminal connections
 // In development, prefer same-origin so Vite can proxy `/api` WebSockets.
@@ -148,7 +156,7 @@ async function apiFetch<T>(
   options: RequestInit = {},
   config: APIClientConfig = {}
 ): Promise<T> {
-  const baseUrl = config.baseUrl || DEFAULT_BASE_URL;
+  const baseUrl = config.baseUrl || getDefaultBaseUrl();
   const url = `${baseUrl}${endpoint}`;
 
   // Build headers with auth
