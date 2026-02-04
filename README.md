@@ -25,7 +25,7 @@ A self-hosted platform for ephemeral Firecracker microVMs, optimized for remote 
 
 ## Quick Start (Docker - Recommended)
 
-Get from zero to a running VM in under 5 minutes with Docker.
+Get from zero to a running VM in under 5 minutes with Docker and the CLI.
 
 ### Prerequisites
 
@@ -54,14 +54,25 @@ Creates:
 - `images/agent-kernel` (~10 MB)
 - `images/agent-rootfs.ext4` (~4 GB sparse file)
 
-3. **Register the image** with Bonfire:
+3. **Copy images into the container**:
 
 ```bash
-# Copy images into the container's volume
 docker cp images/agent-kernel bonfire-api-1:/var/lib/bonfire/images/
 docker cp images/agent-rootfs.ext4 bonfire-api-1:/var/lib/bonfire/images/
+```
 
-# Register via API
+4. **Install the CLI**:
+
+```bash
+npm install -g @bonfire/cli
+
+# Or use npx (no install)
+npx @bonfire/cli
+```
+
+5. **Register the image** with Bonfire:
+
+```bash
 curl -X POST http://localhost:3000/api/images/local \
   -H "Content-Type: application/json" \
   -d '{
@@ -71,43 +82,39 @@ curl -X POST http://localhost:3000/api/images/local \
   }'
 ```
 
-4. **Open the Web UI** at http://localhost:5173
-
-5. **Log in** with default credentials:
-   - Email: `admin@example.com`
-   - Password: `admin123`
-
-6. **Create your first VM**:
-   - Click "New VM"
-   - Name: `my-first-vm`
-   - Image: Select `local:agent-ready`
-   - Click "Create"
-
-7. **Start and connect**:
-   - Click the play button to start the VM
-   - Wait for status to show "running" with an IP address
-   - Click "SSH" to open a terminal session
-
-That's it! You're now connected to your Firecracker microVM.
-
-### Alternative: Using the CLI
-
-After building and registering the image:
+6. **Login** (uses default credentials):
 
 ```bash
-# Install CLI locally
-npm install -g @bonfire/cli
-
-# Login (if needed)
 bonfire login
+# API URL: http://localhost:3000
+# API Key: admin123
+```
 
-# Create and start a VM
+7. **Create and connect to your first VM**:
+
+```bash
+# Create a VM
 bonfire vm create my-first-vm --image=local:agent-ready
+
+# Start it
 bonfire vm start my-first-vm
 
-# Connect via SSH
+# Connect via SSH (automatically downloads keys)
 bonfire vm ssh my-first-vm
 ```
+
+That's it! You're now connected to your Firecracker microVM via SSH.
+
+### Alternative: Using the Web UI
+
+If you prefer a graphical interface:
+
+1. Open http://localhost:5173 in your browser
+2. Log in with default credentials:
+   - Email: `admin@example.com`
+   - Password: `admin123`
+3. Click "New VM", select `local:agent-ready` image
+4. Start the VM and click "SSH" to connect
 
 ### Production Compose
 
@@ -172,13 +179,24 @@ curl -X POST http://localhost:3000/api/images/local \
   }'
 ```
 
-6. **Open Web UI** at http://localhost:5173
+6. **Install CLI and login**:
 
-7. **Log in** and create your first VM:
-   - Email: `admin@example.com` (from `.env`)
-   - Password: `admin123` (from `.env`)
-   - Click "New VM", select the `local:agent-ready` image
-   - Start and connect!
+```bash
+npm install -g @bonfire/cli
+bonfire login
+# API URL: http://localhost:3000
+# API Key: admin123 (from .env)
+```
+
+7. **Create and connect to your first VM**:
+
+```bash
+bonfire vm create my-first-vm --image=local:agent-ready
+bonfire vm start my-first-vm
+bonfire vm ssh my-first-vm
+```
+
+Or use the Web UI at http://localhost:5173
 
 ## System Impact
 
