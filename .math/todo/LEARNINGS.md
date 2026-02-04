@@ -216,3 +216,29 @@ Use this knowledge to avoid repeating mistakes and build on what works.
   - Update type tests to match new interfaces (FirecrackerProcess without pipe paths)
 
 - **Serial console removal affects bootstrap**: The bootstrap service relied entirely on serial runner for VM configuration. When removing serial support, bootstrap becomes a no-op that returns an error. Future phases will need to implement an alternative bootstrap mechanism (likely via SSH).
+
+## ckhuffml - Phase 4: Simplify Image Management
+
+- **What was removed**: The complex OCI registry pulling infrastructure (RegistryService with 550 lines), QuickStartService for downloading Firecracker test images from S3, and the `/api/images/pull` and `/api/images/quickstart` endpoints. The CLI `pull` command was also removed.
+
+- **What remains**: Simple local image registration via `POST /api/images/local` with kernel and rootfs file paths. Images are now only registered by pointing to existing files on disk - no downloading, no registry authentication, no complex OCI manifest parsing.
+
+- **Files deleted**:
+  - `packages/api/src/services/registry/` (entire directory with index.ts and registry.ts)
+  - `packages/api/src/services/quickstart.ts`
+  - `packages/api/.integration/registry.integration.test.ts`
+  - `packages/api/.integration/images.integration.test.ts`
+
+- **Files modified**:
+  - `packages/api/src/routes/images.ts` - Removed RegistryService and QuickStartService dependencies, simplified to only support local registration
+  - `packages/api/src/index.ts` - Removed RegistryService from AppConfig and router setup
+  - `packages/cli/src/commands/image.ts` - Removed `pull` command, kept `list` and `rm` with helpful error message for removed `pull` command
+  - `packages/sdk/src/client.ts` - Removed `pullImage()` method
+  - `packages/sdk/src/types.ts` - Removed `PullImageRequest` type
+  - `packages/cli/src/commands/image.test.ts` - Removed pull command tests
+
+- **Testing approach**: When removing interactive CLI commands (like `rm` with confirmation prompts), tests that dispatch to those commands will hang. Either mock the prompt library (@clack/prompts) or skip those integration tests and test only the underlying validation logic.
+
+- **API surface reduction**: The simplification reduced the images API from 5 endpoints to 3:
+  - Removed: `POST /api/images/pull`, `POST /api/images/quickstart`
+  - Kept: `GET /api/images`, `DELETE /api/images/:id`, `POST /api/images/local`

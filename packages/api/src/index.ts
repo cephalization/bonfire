@@ -18,7 +18,6 @@ import { createAgentSessionsRouter } from "./routes/agent-sessions";
 import { createOpencodeProxyRouter } from "./routes/opencode-proxy";
 import type { BootstrapService } from "./services/bootstrap";
 import { RealBootstrapService } from "./services/bootstrap";
-import { RegistryService } from "./services/registry";
 import { NetworkService } from "./services/network";
 import type {
   spawnFirecracker,
@@ -88,7 +87,6 @@ const healthRoute = createRoute({
 
 export interface AppConfig {
   db?: BetterSQLite3Database<typeof schema>;
-  registryService?: RegistryService;
   networkService?: NetworkService;
   bootstrapService?: BootstrapService;
   spawnFirecrackerFn?: typeof spawnFirecracker;
@@ -124,7 +122,6 @@ export function createApp(appConfig: AppConfig = {}) {
   // Only setup routes if database is provided or can be created
   if (appConfig.db) {
     // Use provided database
-    const registryService = appConfig.registryService ?? new RegistryService({ db: appConfig.db });
     const networkService = appConfig.networkService ?? new NetworkService();
 
     // Create auth instance with the provided database
@@ -165,7 +162,6 @@ export function createApp(appConfig: AppConfig = {}) {
 
     const imagesRouter = createImagesRouter({
       db: appConfig.db,
-      registryService,
     });
     const vmsRouter = createVMsRouter({
       db: appConfig.db,
@@ -201,7 +197,6 @@ export function createApp(appConfig: AppConfig = {}) {
       // Check if we can access the directory (will throw if not)
       const sqlite = new Database(dbPath);
       const db = drizzle(sqlite, { schema });
-      const registryService = new RegistryService({ db });
       const networkService = new NetworkService();
 
       // Create auth instance with the database
@@ -224,7 +219,7 @@ export function createApp(appConfig: AppConfig = {}) {
         app.use("/api/agent/*", authMiddleware);
       }
 
-      const imagesRouter = createImagesRouter({ db, registryService });
+      const imagesRouter = createImagesRouter({ db });
       const vmsRouter = createVMsRouter({
         db,
         networkService,

@@ -1,13 +1,15 @@
 /**
- * Image Commands
+ * Image Commands (Simplified)
  *
  * Implements the image subcommands for the Bonfire CLI:
- * - pull: Pull an image from registry
- * - list: List all cached images
- * - rm: Remove a cached image
+ * - list: List all registered images
+ * - rm: Remove a registered image
+ *
+ * NOTE: 'pull' command has been removed as OCI registry pulling
+ * has been simplified to local file path registration only.
  */
 
-import { spinner, confirm, isCancel, cancel } from "@clack/prompts";
+import { confirm, isCancel, cancel } from "@clack/prompts";
 import pc from "picocolors";
 import type { BonfireClient } from "@bonfire/sdk";
 
@@ -74,46 +76,13 @@ function formatDate(dateStr: string): string {
 }
 
 // Image Command Handlers
-export async function handleImagePull(
-  client: BonfireClient,
-  baseUrl: string,
-  args: string[]
-): Promise<void> {
-  if (args.length === 0) {
-    throw new Error("Image reference is required. Usage: bonfire image pull <reference>");
-  }
 
-  const reference = args[0];
-
-  const s = spinner();
-  s.start(`Pulling image ${reference}...`);
-
-  try {
-    const image = await apiRequest<Image>(baseUrl, "POST", "/api/images/pull", {
-      reference,
-    });
-    s.stop(pc.green(`✓ Image pulled successfully`));
-
-    console.log();
-    console.log(pc.bold("Image Details:"));
-    console.log(`  ID:         ${image.id}`);
-    console.log(`  Reference:  ${image.reference}`);
-    console.log(`  Size:       ${formatBytes(image.sizeBytes)}`);
-    console.log(`  Pulled At:  ${new Date(image.pulledAt).toLocaleString()}`);
-  } catch (error) {
-    s.stop(pc.red("Failed to pull image"));
-    throw error;
-  }
-}
-
-export async function handleImageList(client: BonfireClient, baseUrl: string): Promise<void> {
+export async function handleImageList(_client: BonfireClient, baseUrl: string): Promise<void> {
   try {
     const images = await apiRequest<Image[]>(baseUrl, "GET", "/api/images");
 
     if (images.length === 0) {
-      console.log(
-        pc.gray("No images found. Use 'bonfire image pull <reference>' to pull an image.")
-      );
+      console.log(pc.gray("No images found. Images must be registered via the API directly."));
       return;
     }
 
@@ -151,7 +120,7 @@ export async function handleImageList(client: BonfireClient, baseUrl: string): P
 }
 
 export async function handleImageRemove(
-  client: BonfireClient,
+  _client: BonfireClient,
   baseUrl: string,
   args: string[]
 ): Promise<void> {
@@ -186,18 +155,14 @@ export async function handleImageRemove(
     return;
   }
 
-  const s = spinner();
-  s.start(`Deleting image ${imageId}...`);
-
   try {
     await apiRequest<{ success: true }>(
       baseUrl,
       "DELETE",
       `/api/images/${encodeURIComponent(imageId)}`
     );
-    s.stop(pc.green(`✓ Image "${image.reference}" deleted successfully`));
+    console.log(pc.green(`✓ Image "${image.reference}" deleted successfully`));
   } catch (error) {
-    s.stop(pc.red("Failed to delete image"));
     throw error;
   }
 }
@@ -211,7 +176,9 @@ export async function handleImageCommand(
   const subcommand = args[0];
 
   if (!subcommand) {
-    console.error(pc.red("Usage: bonfire image <pull|list|rm> [args...]"));
+    console.error(pc.red("Usage: bonfire image <list|rm> [args...]"));
+    console.log(pc.gray("\nNote: 'pull' command has been removed."));
+    console.log(pc.gray("Images must be registered via the API directly."));
     return 1;
   }
 
@@ -219,18 +186,22 @@ export async function handleImageCommand(
 
   try {
     switch (subcommand) {
-      case "pull":
-        await handleImagePull(client, baseUrl, subcommandArgs);
-        return 0;
       case "list":
         await handleImageList(client, baseUrl);
         return 0;
       case "rm":
         await handleImageRemove(client, baseUrl, subcommandArgs);
         return 0;
+      case "pull":
+        console.error(pc.red("Error: 'pull' command has been removed."));
+        console.log(
+          pc.gray("OCI registry pulling has been simplified to local file path registration.")
+        );
+        console.log(pc.gray("Images must be registered via the API directly."));
+        return 1;
       default:
         console.error(pc.red(`Unknown image subcommand: ${subcommand}`));
-        console.error(pc.gray("Valid subcommands: pull, list, rm"));
+        console.error(pc.gray("Valid subcommands: list, rm"));
         return 1;
     }
   } catch (error) {
