@@ -1,7 +1,7 @@
 /**
  * Terminal Route Tests
  *
- * Tests for terminal route utility functions and serial console integration.
+ * Tests for terminal route utility functions.
  * Note: WebSocket functionality requires a real HTTP server + upgrade handling
  * and is tested in integration/E2E. Unit tests cover protocol parsing utilities.
  */
@@ -115,91 +115,7 @@ describe("Terminal Route Utilities", () => {
   });
 });
 
-describe("Serial Console formatResizeMessage", () => {
-  // Import the formatResizeMessage from serial module
-  it("generates correct xterm escape sequence", async () => {
-    // Dynamic import to avoid immediate evaluation issues
-    const { formatResizeMessage } = await import("../services/firecracker/serial");
-
-    // Format: ESC [ 8 ; rows ; cols t
-    const result = formatResizeMessage(80, 24);
-    expect(result).toBe("\x1b[8;24;80t");
-  });
-
-  it("generates correct sequence for different dimensions", async () => {
-    const { formatResizeMessage } = await import("../services/firecracker/serial");
-
-    const result = formatResizeMessage(120, 40);
-    expect(result).toBe("\x1b[8;40;120t");
-  });
-
-  it("handles single digit dimensions", async () => {
-    const { formatResizeMessage } = await import("../services/firecracker/serial");
-
-    const result = formatResizeMessage(8, 5);
-    expect(result).toBe("\x1b[8;5;8t");
-  });
-
-  it("handles large dimensions", async () => {
-    const { formatResizeMessage } = await import("../services/firecracker/serial");
-
-    const result = formatResizeMessage(320, 100);
-    expect(result).toBe("\x1b[8;100;320t");
-  });
-});
-
-describe("Serial Console Paths", () => {
-  it("generates correct pipe paths", async () => {
-    const { generatePipePaths } = await import("../services/firecracker/serial");
-
-    const paths = generatePipePaths("vm-123", "/var/lib/bonfire/vms");
-    expect(paths.stdin).toBe("/var/lib/bonfire/vms/vm-123.stdin");
-    expect(paths.stdout).toBe("/var/lib/bonfire/vms/vm-123.stdout");
-  });
-
-  it("uses default pipeDir when not specified", async () => {
-    const { generatePipePaths } = await import("../services/firecracker/serial");
-
-    const paths = generatePipePaths("test-vm");
-    expect(paths.stdin).toContain("test-vm.stdin");
-    expect(paths.stdout).toContain("test-vm.stdout");
-  });
-});
-
-describe("Terminal Connection Management", () => {
-  it("hasActiveConnection returns false for non-existent connection", async () => {
-    const { hasActiveConnection } = await import("./terminal");
-
-    expect(hasActiveConnection("vm-does-not-exist")).toBe(false);
-  });
-
-  it("getActiveConnectionCount returns 0 initially", async () => {
-    const { getActiveConnectionCount, closeAllConnections } = await import("./terminal");
-
-    // Ensure clean state
-    await closeAllConnections();
-
-    expect(getActiveConnectionCount()).toBe(0);
-  });
-
-  it("closeAllConnections resolves without error when no connections", async () => {
-    const { closeAllConnections } = await import("./terminal");
-
-    // Should not throw
-    await closeAllConnections();
-  });
-});
-
-describe("Terminal Router concurrent connection logic", () => {
-  // These tests verify the logic without actual WebSocket connections
-  // The actual WebSocket tests are in E2E tests
-
-  it("409 response message indicates only one connection allowed", () => {
-    const errorMessage = "Terminal already connected. Only one connection allowed per VM.";
-    expect(errorMessage).toContain("one connection");
-    expect(errorMessage).toContain("already connected");
-  });
-
+describe("Terminal Router response messages", () => {
   it("400 response for non-running VM includes current status", () => {
     const status = "stopped";
     const errorMessage = `VM is not running. Current status: '${status}'`;

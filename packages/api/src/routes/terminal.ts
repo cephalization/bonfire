@@ -15,11 +15,6 @@ import { eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type * as schema from "../db/schema";
 import { vms } from "../db/schema";
-import {
-  hasActiveSerialConnection,
-  getActiveSerialConnectionCount,
-  closeAllSerialConnections,
-} from "../services/firecracker/serial-connections";
 
 // ==========================================================================
 // OpenAPI Schemas
@@ -166,25 +161,8 @@ export function createTerminalRouter(config: TerminalRouterConfig): OpenAPIHono 
       return c.json({ error: `VM is not running. Current status: '${vm.status}'` }, 400);
     }
 
-    if (hasActiveSerialConnection(id)) {
-      return c.json(
-        {
-          error: "Terminal already connected. Only one connection allowed per VM.",
-        },
-        409
-      );
-    }
-
     return c.json({ error: "WebSocket upgrade required" }, 426);
   });
 
   return app;
 }
-
-// ==========================================================================
-// Connection bookkeeping
-// ==========================================================================
-
-export const hasActiveConnection = hasActiveSerialConnection;
-export const getActiveConnectionCount = getActiveSerialConnectionCount;
-export const closeAllConnections = closeAllSerialConnections;

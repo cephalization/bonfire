@@ -3,7 +3,6 @@ import { eq } from "drizzle-orm";
 import * as schema from "../db/schema";
 import { vms } from "../db/schema";
 import { NetworkService } from "./network";
-import { cleanupVMPipes } from "./firecracker/process";
 import { readFile, unlink } from "fs/promises";
 
 export type StartVmWatchdogOptions = {
@@ -52,12 +51,6 @@ export function startVmWatchdog(options: StartVmWatchdogOptions): () => void {
         });
       } catch (err) {
         console.warn(`[VmWatchdog] Failed to release network for VM ${vm.id}:`, err);
-      }
-
-      try {
-        await cleanupVMPipes(vm.id);
-      } catch {
-        // cleanupVMPipes is best-effort internally, but keep watchdog resilient
       }
 
       try {

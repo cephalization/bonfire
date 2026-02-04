@@ -160,8 +160,6 @@ async function spawnFirecracker(options: SpawnOptions): Promise<FirecrackerProce
   return {
     pid: 12345,
     socketPath: `${socketDir}/mock-${options.vmId}.sock`,
-    stdinPipePath: `${socketDir}/${options.vmId}.stdin`,
-    stdoutPipePath: `${socketDir}/${options.vmId}.stdout`,
   };
 }
 
@@ -345,125 +343,11 @@ export function createMockNetworkService(subnet: string = "10.0.100.0/24"): Mock
 }
 
 /**
- * Mock Serial Console
- *
- * Mocks the serial console interface for testing terminal functionality.
- */
-export interface MockSerialConsole {
-  write: (data: string | Uint8Array) => Promise<void>;
-  onData: (callback: (data: Uint8Array) => void) => void;
-  close: () => Promise<void>;
-  isActive: () => boolean;
-  getPaths: () => { stdin: string; stdout: string };
-  /** Simulate receiving data from the VM */
-  simulateOutput: (data: string) => void;
-  calls: {
-    write: Array<{ data: string | Uint8Array }>;
-    onData: number;
-    close: number;
-  };
-  clearCalls: () => void;
-}
-
-export function createMockSerialConsole(
-  vmId: string,
-  pipeDir: string = "/tmp/bonfire-test"
-): MockSerialConsole {
-  const calls = {
-    write: [] as Array<{ data: string | Uint8Array }>,
-    onData: 0,
-    close: 0,
-  };
-
-  let active = true;
-  const dataCallbacks: Array<(data: Uint8Array) => void> = [];
-
-  return {
-    write: async (data: string | Uint8Array) => {
-      calls.write.push({ data });
-    },
-    onData: (callback: (data: Uint8Array) => void) => {
-      calls.onData++;
-      dataCallbacks.push(callback);
-    },
-    close: async () => {
-      calls.close++;
-      active = false;
-    },
-    isActive: () => active,
-    getPaths: () => ({
-      stdin: `${pipeDir}/${vmId}.stdin`,
-      stdout: `${pipeDir}/${vmId}.stdout`,
-    }),
-    simulateOutput: (data: string) => {
-      const bytes = new TextEncoder().encode(data);
-      for (const callback of dataCallbacks) {
-        callback(bytes);
-      }
-    },
-    calls,
-    clearCalls: () => {
-      calls.write.length = 0;
-      calls.onData = 0;
-      calls.close = 0;
-    },
-  };
-}
-
-/**
- * Mock Serial Console Service
- *
- * Tracks pipe creation and removal for testing VM lifecycle with serial console.
- */
-export interface MockSerialConsoleService {
-  createPipes: (vmId: string, pipeDir?: string) => Promise<{ stdin: string; stdout: string }>;
-  removePipes: (vmId: string, pipeDir?: string) => Promise<void>;
-  createConsole: (vmId: string, pipeDir?: string) => MockSerialConsole;
-  calls: {
-    createPipes: Array<{ vmId: string; pipeDir?: string }>;
-    removePipes: Array<{ vmId: string; pipeDir?: string }>;
-  };
-  clearCalls: () => void;
-}
-
-export function createMockSerialConsoleService(
-  defaultPipeDir: string = "/tmp/bonfire-test"
-): MockSerialConsoleService {
-  const calls = {
-    createPipes: [] as Array<{ vmId: string; pipeDir?: string }>,
-    removePipes: [] as Array<{ vmId: string; pipeDir?: string }>,
-  };
-
-  return {
-    createPipes: async (vmId: string, pipeDir?: string) => {
-      const dir = pipeDir ?? defaultPipeDir;
-      calls.createPipes.push({ vmId, pipeDir });
-      return {
-        stdin: `${dir}/${vmId}.stdin`,
-        stdout: `${dir}/${vmId}.stdout`,
-      };
-    },
-    removePipes: async (vmId: string, pipeDir?: string) => {
-      calls.removePipes.push({ vmId, pipeDir });
-    },
-    createConsole: (vmId: string, pipeDir?: string) => {
-      return createMockSerialConsole(vmId, pipeDir ?? defaultPipeDir);
-    },
-    calls,
-    clearCalls: () => {
-      calls.createPipes.length = 0;
-      calls.removePipes.length = 0;
-    },
-  };
-}
-
-/**
  * Test app configuration
  */
 export interface TestAppConfig {
   firecracker?: MockFirecrackerService;
   network?: MockNetworkService;
-  serialConsole?: MockSerialConsoleService;
   bootstrapService?: MockBootstrapService;
   skipAuth?: boolean;
   /**
@@ -485,7 +369,6 @@ export interface TestApp {
   mocks: {
     firecracker: MockFirecrackerService;
     network: MockNetworkService;
-    serialConsole: MockSerialConsoleService;
     bootstrapService: MockBootstrapService;
   };
 }
@@ -523,7 +406,6 @@ export async function createTestApp(config: TestAppConfig = {}): Promise<TestApp
   // Create mocked services
   const firecracker = config.firecracker ?? createMockFirecrackerService();
   const network = config.network ?? createMockNetworkService();
-  const serialConsole = config.serialConsole ?? createMockSerialConsoleService();
   const bootstrapService = config.bootstrapService ?? createMockBootstrapService();
 
   // Create a mock user for testing
@@ -568,7 +450,6 @@ export async function createTestApp(config: TestAppConfig = {}): Promise<TestApp
     mocks: {
       firecracker,
       network,
-      serialConsole,
       bootstrapService,
     },
   };

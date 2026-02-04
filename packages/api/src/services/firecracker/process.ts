@@ -15,13 +15,10 @@ import {
   isApiReady,
 } from "./socket-client";
 import type { VMConfiguration } from "./socket-client";
-import { createPipes, cleanupPipes, generatePipePaths, type SerialConsolePaths } from "./serial";
 
 export interface FirecrackerProcess {
   pid: number;
   socketPath: string;
-  stdinPipePath: string;
-  stdoutPipePath: string;
 }
 
 export interface SpawnOptions {
@@ -33,8 +30,6 @@ export interface SpawnOptions {
 export interface StopOptions {
   gracefulTimeoutMs?: number;
   sigtermTimeoutMs?: number;
-  vmId?: string;
-  pipeDir?: string;
 }
 
 const DEFAULTS = {
@@ -64,7 +59,7 @@ async function isFirecrackerProcess(pid: number, socketPath?: string | null): Pr
 }
 
 /**
- * Spawns a Firecracker process with API socket and serial console pipes
+ * Spawns a Firecracker process with API socket
  */
 export async function spawnFirecracker(options: SpawnOptions): Promise<FirecrackerProcess> {
   const socketDir = options.socketDir ?? DEFAULTS.socketDir;
@@ -87,144 +82,70 @@ export async function spawnFirecracker(options: SpawnOptions): Promise<Firecrack
     // Socket file doesn't exist, which is fine
   }
 
-  // Create serial console FIFO pipes before spawning process
-  console.log(`[Firecracker] Creating serial console pipes for VM ${options.vmId}`);
-  const pipePaths = await createPipes({ vmId: options.vmId, pipeDir: socketDir });
-  console.log(`[Firecracker] Pipes created: stdin=${pipePaths.stdin}, stdout=${pipePaths.stdout}`);
+  // Avoid piping stderr to the parent process. Dev hot-reload restarts the API
+  // process; if stderr is a pipe, the child may crash on SIGPIPE when the
+  // reader disappears. Log to a per-VM file instead.
+  const stderrLogPath = `${socketDir}/${options.vmId}.firecracker.stderr.log`;
+  const stderrFd = await fsOpen(stderrLogPath, "a");
 
-  // Open file descriptors for pipes to pass to child process
-  // We need to open them before spawning so we can pass the fds
-  let stdinFd: Awaited<ReturnType<typeof fsOpen>> | null = null;
-  let stdoutFd: Awaited<ReturnType<typeof fsOpen>> | null = null;
-  let stderrFd: Awaited<ReturnType<typeof fsOpen>> | null = null;
-  let child: ChildProcess | null = null;
+  // Spawn firecracker process
+  const child = spawn(binaryPath, ["--api-sock", socketPath], {
+    detached: detach,
+    stdio: ["ignore", "ignore", stderrFd.fd],
+  });
 
-  try {
-    // Open pipes for the child process
-    // stdin pipe: we open for reading (child writes to its stdout, which goes to our stdin pipe)
-    // stdout pipe: we open for writing (child reads from its stdin, which comes from our stdout pipe)
-    // Note: Firecracker's stdin connects to our stdout pipe (for sending input TO the VM)
-    //       Firecracker's stdout connects to our stdin pipe (for receiving output FROM the VM)
-    stdinFd = await fsOpen(pipePaths.stdin, "r+");
-    stdoutFd = await fsOpen(pipePaths.stdout, "r+");
-
-    // Avoid piping stderr to the parent process. Dev hot-reload restarts the API
-    // process; if stderr is a pipe, the child may crash on SIGPIPE when the
-    // reader disappears. Log to a per-VM file instead.
-    const stderrLogPath = `${socketDir}/${options.vmId}.firecracker.stderr.log`;
-    stderrFd = await fsOpen(stderrLogPath, "a");
-
-    // Spawn firecracker process with pipes for stdio
-    // stdin (fd 0) <- from stdout pipe (input TO VM)
-    // stdout (fd 1) -> to stdin pipe (output FROM VM)
-    // stderr (fd 2) -> log file
-    child = spawn(binaryPath, ["--api-sock", socketPath], {
-      detached: detach,
-      stdio: [stdoutFd.fd, stdinFd.fd, stderrFd.fd],
-    });
-
-    if (detach) {
-      child.unref();
-    }
-
-    const pid = child.pid;
-    if (!pid) {
-      throw new Error("Failed to spawn Firecracker process: no PID returned");
-    }
-
-    console.log(`[Firecracker] Process spawned with PID ${pid}`);
-
-    // Close the file descriptors in the parent process since they've been passed to the child
-    // The child now owns these fds, and keeping them open in the parent can cause issues
-    // with pipe reopening (e.g., for serial console reconnection)
-    try {
-      await stdinFd.close();
-      stdinFd = null;
-    } catch {
-      // Ignore close errors
-    }
-    try {
-      await stdoutFd.close();
-      stdoutFd = null;
-    } catch {
-      // Ignore close errors
-    }
-
-    try {
-      await stderrFd.close();
-      stderrFd = null;
-    } catch {
-      // Ignore close errors
-    }
-
-    // Handle process exit
-    child.on("exit", (code: number | null, signal: string | null) => {
-      if (code !== 0 && code !== null) {
-        console.error(`[Firecracker:${pid}] Process exited with code ${code}`);
-      } else if (signal) {
-        console.log(`[Firecracker:${pid}] Process exited with signal ${signal}`);
-      }
-    });
-
-    // Handle process errors during startup
-    let startupError: Error | null = null;
-
-    child.on("error", (error: Error) => {
-      console.error(`[Firecracker:${pid}] Process error:`, error);
-      startupError = error;
-    });
-
-    // Wait a moment for the process to start and socket to be created
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    if (startupError) {
-      throw new Error(`Failed to spawn Firecracker process: ${(startupError as Error).message}`);
-    }
-
-    if (child.killed || child.exitCode !== null) {
-      throw new Error(`Firecracker process exited prematurely with code ${child.exitCode}`);
-    }
-
-    console.log(`[Firecracker:${pid}] Process started successfully`);
-
-    return {
-      pid,
-      socketPath,
-      stdinPipePath: pipePaths.stdin,
-      stdoutPipePath: pipePaths.stdout,
-    };
-  } catch (error) {
-    // Clean up pipes if spawning fails
-    console.error(`[Firecracker] Spawn failed, cleaning up pipes`);
-    await cleanupPipes({ vmId: options.vmId, pipeDir: socketDir });
-
-    // File handles are already closed after successful spawn, but close them here
-    // in case the error occurred before the spawn completed
-    if (stdinFd) {
-      try {
-        await stdinFd.close();
-      } catch {
-        // Ignore close errors
-      }
-    }
-    if (stdoutFd) {
-      try {
-        await stdoutFd.close();
-      } catch {
-        // Ignore close errors
-      }
-    }
-
-    if (stderrFd) {
-      try {
-        await stderrFd.close();
-      } catch {
-        // Ignore close errors
-      }
-    }
-
-    throw error;
+  if (detach) {
+    child.unref();
   }
+
+  const pid = child.pid;
+  if (!pid) {
+    throw new Error("Failed to spawn Firecracker process: no PID returned");
+  }
+
+  console.log(`[Firecracker] Process spawned with PID ${pid}`);
+
+  // Close stderr fd in parent after spawning
+  try {
+    await stderrFd.close();
+  } catch {
+    // Ignore close errors
+  }
+
+  // Handle process exit
+  child.on("exit", (code: number | null, signal: string | null) => {
+    if (code !== 0 && code !== null) {
+      console.error(`[Firecracker:${pid}] Process exited with code ${code}`);
+    } else if (signal) {
+      console.log(`[Firecracker:${pid}] Process exited with signal ${signal}`);
+    }
+  });
+
+  // Handle process errors during startup
+  let startupError: Error | null = null;
+
+  child.on("error", (error: Error) => {
+    console.error(`[Firecracker:${pid}] Process error:`, error);
+    startupError = error;
+  });
+
+  // Wait a moment for the process to start and socket to be created
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  if (startupError) {
+    throw new Error(`Failed to spawn Firecracker process: ${(startupError as Error).message}`);
+  }
+
+  if (child.killed || child.exitCode !== null) {
+    throw new Error(`Firecracker process exited prematurely with code ${child.exitCode}`);
+  }
+
+  console.log(`[Firecracker:${pid}] Process started successfully`);
+
+  return {
+    pid,
+    socketPath,
+  };
 }
 
 /**
@@ -255,7 +176,6 @@ export async function startVMProcess(socketPath: string): Promise<void> {
 
 /**
  * Stop a VM gracefully, falling back to SIGTERM if needed
- * Optionally cleans up serial console pipes if vmId is provided
  */
 export async function stopVMProcess(
   socketPath: string,
@@ -274,10 +194,6 @@ export async function stopVMProcess(
       const startTime = Date.now();
       while (Date.now() - startTime < gracefulTimeoutMs) {
         if (!(await isProcessRunning(pid))) {
-          // Clean up pipes if vmId provided
-          if (options.vmId) {
-            await cleanupVMPipes(options.vmId, options.pipeDir);
-          }
           return; // Process exited gracefully
         }
         await new Promise((resolve) => setTimeout(resolve, 100));
@@ -296,10 +212,6 @@ export async function stopVMProcess(
       const startTime = Date.now();
       while (Date.now() - startTime < sigtermTimeoutMs) {
         if (!(await isProcessRunning(pid))) {
-          // Clean up pipes if vmId provided
-          if (options.vmId) {
-            await cleanupVMPipes(options.vmId, options.pipeDir);
-          }
           return;
         }
         await new Promise((resolve) => setTimeout(resolve, 100));
@@ -315,43 +227,6 @@ export async function stopVMProcess(
       `Failed to stop Firecracker process ${pid} after graceful shutdown and SIGTERM`
     );
   }
-
-  // Clean up pipes if vmId provided (process stopped successfully)
-  if (options.vmId) {
-    await cleanupVMPipes(options.vmId, options.pipeDir);
-  }
-}
-
-/**
- * Clean up serial console pipes for a VM
- * Exported for use during VM deletion
- */
-export async function cleanupVMPipes(
-  vmId: string,
-  pipeDir: string = DEFAULTS.socketDir
-): Promise<void> {
-  console.log(`[Firecracker] Cleaning up pipes for VM ${vmId}`);
-  try {
-    await cleanupPipes({ vmId, pipeDir });
-    console.log(`[Firecracker] Pipes cleaned up successfully for VM ${vmId}`);
-  } catch (error) {
-    console.error(`[Firecracker] Failed to clean up pipes for VM ${vmId}:`, error);
-    // Don't throw - pipe cleanup failures shouldn't prevent VM stop/delete
-  }
-}
-
-/**
- * Get the pipe paths for a VM (derived from vmId)
- */
-export function getVMPipePaths(
-  vmId: string,
-  pipeDir: string = DEFAULTS.socketDir
-): { stdinPath: string; stdoutPath: string } {
-  const paths = generatePipePaths(vmId, pipeDir);
-  return {
-    stdinPath: paths.stdin,
-    stdoutPath: paths.stdout,
-  };
 }
 
 /**
