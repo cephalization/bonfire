@@ -5,8 +5,17 @@
  * Uses Clack for interactive prompts and beautiful output.
  */
 
-import { intro, outro, select, isCancel, cancel } from "@clack/prompts";
-import { intro as pintro, outro as poutro, text, confirm, spinner } from "@clack/prompts";
+import {
+  intro,
+  outro,
+  select,
+  isCancel,
+  cancel,
+  text,
+  confirm,
+  spinner,
+  note,
+} from "@clack/prompts";
 import pc from "picocolors";
 import {
   loadConfig,
@@ -23,10 +32,8 @@ import { handleLoginCommand } from "./commands/login.js";
 export const CLI_VERSION = "0.0.1";
 
 function showHelp(): void {
-  console.log(`
-${pc.bold("Bonfire CLI")} v${CLI_VERSION}
-
-${pc.bold("USAGE")}
+  note(
+    `${pc.bold("USAGE")}
   bonfire <command> [options]
 
 ${pc.bold("COMMANDS")}
@@ -45,12 +52,13 @@ ${pc.bold("EXAMPLES")}
   bonfire config set api-url http://localhost:3000
   bonfire vm list
   bonfire vm ssh my-vm
-  bonfire login
-`);
+  bonfire login`,
+    `${pc.bold("Bonfire CLI")} v${CLI_VERSION}`
+  );
 }
 
 function showVersion(): void {
-  console.log(CLI_VERSION);
+  note(CLI_VERSION, `Bonfire CLI v${CLI_VERSION}`);
 }
 
 function normalizeConfigKey(key: string): keyof Config | null {
@@ -67,39 +75,38 @@ async function handleConfigCommand(args: string[]): Promise<void> {
     const value = args[2];
 
     if (!rawKey || !value) {
-      console.error(pc.red("Usage: bonfire config set <key> <value>"));
-      console.error(pc.gray("Keys: api-url, api-key"));
+      cancel("Usage: bonfire config set <key> <value>\nKeys: api-url, api-key");
       process.exit(1);
     }
 
     const key = normalizeConfigKey(rawKey);
     if (!key) {
-      console.error(pc.red(`Unknown config key: ${rawKey}`));
-      console.error(pc.gray("Valid keys: api-url, api-key"));
+      cancel(`Unknown config key: ${rawKey}\nValid keys: api-url, api-key`);
       process.exit(1);
     }
 
     await setConfigValue(key, value);
-    console.log(pc.green(`✓ Set ${rawKey} to ${value}`));
+    note(`${rawKey} = ${value}`, "Configuration saved");
   } else if (subcommand === "get") {
     const rawKey = args[1];
 
     if (rawKey) {
       const key = normalizeConfigKey(rawKey);
       if (!key) {
-        console.error(pc.red(`Unknown config key: ${rawKey}`));
-        console.error(pc.gray("Valid keys: api-url, api-key"));
+        cancel(`Unknown config key: ${rawKey}\nValid keys: api-url, api-key`);
         process.exit(1);
       }
       const value = await getConfigValue(key);
-      console.log(value || "");
+      note(value || "(not set)", rawKey);
     } else {
       const config = await loadConfig();
-      console.log(`api-url: ${config.apiUrl}`);
-      console.log(`api-key: ${config.apiKey || "(not set)"}`);
+      note(
+        `api-url: ${config.apiUrl}\napi-key: ${config.apiKey || "(not set)"}`,
+        "Current Configuration"
+      );
     }
   } else {
-    console.error(pc.red("Usage: bonfire config <set|get> [args...]"));
+    cancel("Usage: bonfire config <set|get> [args...]");
     process.exit(1);
   }
 }
@@ -166,12 +173,12 @@ async function main(): Promise<void> {
         await handleLoginCmd();
         break;
       default:
-        console.error(pc.red(`Unknown command: ${command}`));
+        cancel(`Unknown command: ${command}`);
         showHelp();
         process.exit(1);
     }
   } catch (error) {
-    console.error(pc.red(`Error: ${error instanceof Error ? error.message : String(error)}`));
+    cancel(error instanceof Error ? error.message : String(error));
     process.exit(1);
   }
 }

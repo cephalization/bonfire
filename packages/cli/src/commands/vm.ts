@@ -13,7 +13,7 @@
  *   bonfire vm ssh <name|id> -- <command>
  */
 
-import { spinner, confirm, isCancel, cancel } from "@clack/prompts";
+import { spinner, confirm, isCancel, cancel, note, outro } from "@clack/prompts";
 import pc from "picocolors";
 import type { BonfireClient } from "@bonfire/sdk";
 
@@ -128,18 +128,20 @@ export async function handleVMCreate(
 
   try {
     const vm = await apiRequest<VM>(baseUrl, "POST", "/api/vms", request);
-    s.stop(pc.green(`✓ VM "${vm.name}" created successfully`));
+    s.stop(`VM "${vm.name}" created successfully`);
 
-    console.log();
-    console.log(pc.bold("VM Details:"));
-    console.log(`  ID:       ${vm.id}`);
-    console.log(`  Name:     ${vm.name}`);
-    console.log(`  Status:   ${vm.status}`);
-    console.log(`  vCPUs:    ${vm.vcpus}`);
-    console.log(`  Memory:   ${vm.memoryMib} MiB`);
-    if (vm.imageId) console.log(`  Image:    ${vm.imageId}`);
+    const details = [
+      `ID:       ${vm.id}`,
+      `Name:     ${vm.name}`,
+      `Status:   ${vm.status}`,
+      `vCPUs:    ${vm.vcpus}`,
+      `Memory:   ${vm.memoryMib} MiB`,
+      ...(vm.imageId ? [`Image:    ${vm.imageId}`] : []),
+    ].join("\n");
+
+    note(details, "VM Details");
   } catch (error) {
-    s.stop(pc.red("Failed to create VM"));
+    s.stop("Failed to create VM");
     throw error;
   }
 }
@@ -148,7 +150,7 @@ export async function handleVMList(client: BonfireClient, baseUrl: string): Prom
   const vms = await apiRequest<VM[]>(baseUrl, "GET", "/api/vms");
 
   if (vms.length === 0) {
-    console.log(pc.gray("No VMs found."));
+    note("No VMs found.");
     return;
   }
 
@@ -161,19 +163,18 @@ export async function handleVMList(client: BonfireClient, baseUrl: string): Prom
 
   // Print header
   const header = [
-    "ID".padEnd(idWidth),
-    "Name".padEnd(nameWidth),
-    "Status".padEnd(statusWidth),
-    "IP".padEnd(ipWidth),
-    "vCPUs".padEnd(vcpusWidth),
-    "Memory",
+    pc.bold("ID".padEnd(idWidth)),
+    pc.bold("Name".padEnd(nameWidth)),
+    pc.bold("Status".padEnd(statusWidth)),
+    pc.bold("IP".padEnd(ipWidth)),
+    pc.bold("vCPUs".padEnd(vcpusWidth)),
+    pc.bold("Memory"),
   ].join("  ");
 
-  console.log(pc.bold(header));
-  console.log(pc.gray("-".repeat(header.length)));
+  const separator = pc.gray("-".repeat(header.length));
 
-  // Print rows
-  for (const vm of vms) {
+  // Build table rows
+  const rows = vms.map((vm) => {
     const statusColor =
       vm.status === "running"
         ? pc.green
@@ -183,7 +184,7 @@ export async function handleVMList(client: BonfireClient, baseUrl: string): Prom
             ? pc.red
             : pc.yellow;
 
-    const row = [
+    return [
       vm.id.padEnd(idWidth),
       vm.name.padEnd(nameWidth),
       statusColor(vm.status.padEnd(statusWidth)),
@@ -191,9 +192,9 @@ export async function handleVMList(client: BonfireClient, baseUrl: string): Prom
       String(vm.vcpus).padEnd(vcpusWidth),
       `${vm.memoryMib} MiB`,
     ].join("  ");
+  });
 
-    console.log(row);
-  }
+  note([header, separator, ...rows].join("\n"), "VMs");
 }
 
 export async function handleVMStart(
@@ -216,13 +217,13 @@ export async function handleVMStart(
       "POST",
       `/api/vms/${encodeURIComponent(identifier)}/start`
     );
-    s.stop(pc.green(`✓ VM "${vm.name}" started successfully`));
+    s.stop(`VM "${vm.name}" started successfully`);
 
     if (vm.ipAddress) {
-      console.log(pc.gray(`  IP: ${vm.ipAddress}`));
+      note(`IP: ${vm.ipAddress}`);
     }
   } catch (error) {
-    s.stop(pc.red("Failed to start VM"));
+    s.stop("Failed to start VM");
     throw error;
   }
 }
@@ -247,9 +248,9 @@ export async function handleVMStop(
       "POST",
       `/api/vms/${encodeURIComponent(identifier)}/stop`
     );
-    s.stop(pc.green(`✓ VM "${vm.name}" stopped successfully`));
+    s.stop(`VM "${vm.name}" stopped successfully`);
   } catch (error) {
-    s.stop(pc.red("Failed to stop VM"));
+    s.stop("Failed to stop VM");
     throw error;
   }
 }
@@ -292,9 +293,9 @@ export async function handleVMRemove(
       "DELETE",
       `/api/vms/${encodeURIComponent(identifier)}`
     );
-    s.stop(pc.green(`✓ VM "${vm.name}" deleted successfully`));
+    s.stop(`VM "${vm.name}" deleted successfully`);
   } catch (error) {
-    s.stop(pc.red("Failed to delete VM"));
+    s.stop("Failed to delete VM");
     throw error;
   }
 }
@@ -367,9 +368,9 @@ export async function handleVMSSH(
       await writeFile(sshKeyPath, keyData.privateKey, { mode: 0o600 });
       await chmod(sshKeyPath, 0o600);
 
-      s.stop(pc.green("✓ SSH key downloaded"));
+      s.stop("SSH key downloaded");
     } catch (error) {
-      s.stop(pc.red("Failed to download SSH key"));
+      s.stop("Failed to download SSH key");
       throw new Error(
         `Failed to download SSH key: ${error instanceof Error ? error.message : String(error)}. ` +
           "Make sure the VM has been started at least once.",
@@ -378,9 +379,10 @@ export async function handleVMSSH(
     }
   }
 
-  console.log(pc.gray(`Connecting to ${vm.name} (${vm.ipAddress}) as agent...`));
-  console.log(pc.gray("Press Ctrl+D or type 'exit' to disconnect"));
-  console.log();
+  note(
+    `Connecting to ${vm.name} (${vm.ipAddress}) as agent...\nPress Ctrl+D or type 'exit' to disconnect`,
+    "SSH Connection"
+  );
 
   // Spawn native SSH process
   const sshArgs = [
@@ -404,8 +406,7 @@ export async function handleVMSSH(
   return new Promise((resolve, reject) => {
     sshProcess.on("close", (code) => {
       if (code === 0) {
-        console.log();
-        console.log(pc.gray("Connection closed"));
+        outro("Connection closed");
         resolve();
       } else {
         reject(new Error(`SSH exited with code ${code}`));
@@ -427,7 +428,7 @@ export async function handleVMCommand(
   const subcommand = args[0];
 
   if (!subcommand) {
-    console.error(pc.red("Usage: bonfire vm <create|list|start|stop|rm|ssh> [args...]"));
+    cancel("Usage: bonfire vm <create|list|start|stop|rm|ssh> [args...]");
     return 1;
   }
 
@@ -451,25 +452,21 @@ export async function handleVMCommand(
         await handleVMRemove(client, baseUrl, subcommandArgs);
         return 0;
       case "exec":
-        console.error(pc.red("Error: 'exec' command has been removed."));
-        console.log(pc.gray("Use SSH instead:"));
-        console.log(pc.gray("  Interactive: bonfire vm ssh <name|id>"));
-        console.log(pc.gray("  Command:     ssh -i <key> agent@<ip> <command>"));
+        cancel(
+          "Error: 'exec' command has been removed.\n\nUse SSH instead:\n  Interactive: bonfire vm ssh <name|id>\n  Command:     ssh -i <key> agent@<ip> <command>"
+        );
         return 1;
       case "ssh":
         await handleVMSSH(client, baseUrl, subcommandArgs);
         return 0;
       default:
-        console.error(pc.red(`Unknown vm subcommand: ${subcommand}`));
-        console.error(pc.gray("Valid subcommands: create, list, start, stop, rm, ssh"));
+        cancel(
+          `Unknown vm subcommand: ${subcommand}\nValid subcommands: create, list, start, stop, rm, ssh`
+        );
         return 1;
     }
   } catch (error) {
-    if (error instanceof Error) {
-      console.error(pc.red(`Error: ${error.message}`));
-    } else {
-      console.error(pc.red(`Error: ${String(error)}`));
-    }
+    cancel(error instanceof Error ? error.message : String(error));
     return 1;
   }
 }
