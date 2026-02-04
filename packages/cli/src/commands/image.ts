@@ -9,7 +9,7 @@
  * has been simplified to local file path registration only.
  */
 
-import { confirm, isCancel, cancel } from "@clack/prompts";
+import { confirm, isCancel, cancel, note, spinner } from "@clack/prompts";
 import pc from "picocolors";
 import type { BonfireClient } from "@bonfire/sdk";
 
@@ -81,7 +81,7 @@ export async function handleImageList(_client: BonfireClient, baseUrl: string): 
   const images = await apiRequest<Image[]>(baseUrl, "GET", "/api/images");
 
   if (images.length === 0) {
-    console.log(pc.gray("No images found. Images must be registered via the API directly."));
+    note("No images found. Images must be registered via the API directly.");
     return;
   }
 
@@ -92,26 +92,25 @@ export async function handleImageList(_client: BonfireClient, baseUrl: string): 
 
   // Print header
   const header = [
-    "ID".padEnd(idWidth),
-    "Reference".padEnd(refWidth),
-    "Size".padEnd(sizeWidth),
-    "Pulled At",
+    pc.bold("ID".padEnd(idWidth)),
+    pc.bold("Reference".padEnd(refWidth)),
+    pc.bold("Size".padEnd(sizeWidth)),
+    pc.bold("Pulled At"),
   ].join("  ");
 
-  console.log(pc.bold(header));
-  console.log(pc.gray("-".repeat(header.length)));
+  const separator = pc.gray("-".repeat(header.length));
 
-  // Print rows
-  for (const image of images) {
-    const row = [
+  // Build table rows
+  const rows = images.map((image) => {
+    return [
       image.id.padEnd(idWidth),
       image.reference.padEnd(refWidth),
       formatBytes(image.sizeBytes).padEnd(sizeWidth),
       formatDate(image.pulledAt),
     ].join("  ");
+  });
 
-    console.log(row);
-  }
+  note([header, separator, ...rows].join("\n"), "Images");
 }
 
 export async function handleImageRemove(
@@ -151,14 +150,18 @@ export async function handleImageRemove(
     return;
   }
 
+  const s = spinner();
+  s.start(`Deleting image ${imageId}...`);
+
   try {
     await apiRequest<{ success: true }>(
       baseUrl,
       "DELETE",
       `/api/images/${encodeURIComponent(imageId)}`
     );
-    console.log(pc.green(`✓ Image "${image.reference}" deleted successfully`));
+    s.stop(`Image "${image.reference}" deleted successfully`);
   } catch (error) {
+    s.stop("Failed to delete image");
     throw error;
   }
 }
@@ -172,9 +175,9 @@ export async function handleImageCommand(
   const subcommand = args[0];
 
   if (!subcommand) {
-    console.error(pc.red("Usage: bonfire image <list|rm> [args...]"));
-    console.log(pc.gray("\nNote: 'pull' command has been removed."));
-    console.log(pc.gray("Images must be registered via the API directly."));
+    cancel(
+      "Usage: bonfire image <list|rm> [args...]\n\nNote: 'pull' command has been removed.\nImages must be registered via the API directly."
+    );
     return 1;
   }
 
@@ -189,23 +192,16 @@ export async function handleImageCommand(
         await handleImageRemove(client, baseUrl, subcommandArgs);
         return 0;
       case "pull":
-        console.error(pc.red("Error: 'pull' command has been removed."));
-        console.log(
-          pc.gray("OCI registry pulling has been simplified to local file path registration.")
+        cancel(
+          "Error: 'pull' command has been removed.\n\nOCI registry pulling has been simplified to local file path registration.\nImages must be registered via the API directly."
         );
-        console.log(pc.gray("Images must be registered via the API directly."));
         return 1;
       default:
-        console.error(pc.red(`Unknown image subcommand: ${subcommand}`));
-        console.error(pc.gray("Valid subcommands: list, rm"));
+        cancel(`Unknown image subcommand: ${subcommand}\nValid subcommands: list, rm`);
         return 1;
     }
   } catch (error) {
-    if (error instanceof Error) {
-      console.error(pc.red(`Error: ${error.message}`));
-    } else {
-      console.error(pc.red(`Error: ${String(error)}`));
-    }
+    cancel(error instanceof Error ? error.message : String(error));
     return 1;
   }
 }

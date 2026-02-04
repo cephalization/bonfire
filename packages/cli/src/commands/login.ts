@@ -8,7 +8,7 @@
  * - Prints success message
  */
 
-import { text, spinner, intro, outro, isCancel, cancel } from "@clack/prompts";
+import { text, spinner, intro, outro, isCancel, cancel, note } from "@clack/prompts";
 import pc from "picocolors";
 import { loadConfig, saveConfig, type Config } from "../lib/config.js";
 
@@ -93,23 +93,18 @@ export async function handleLoginCommand(): Promise<number> {
     config.apiKey = apiKey;
     await saveConfig(config);
 
-    s.stop(pc.green("✓ Configuration saved"));
+    s.stop("Configuration saved");
 
-    console.log();
-    console.log(pc.bold("Welcome back!"));
-    console.log(pc.gray(`API URL: ${apiUrl}`));
-    console.log();
-    console.log(pc.gray(`API key saved to ~/.bonfire/config.json`));
+    note(
+      `Welcome back!\nAPI URL: ${apiUrl}\n\nAPI key saved to ~/.bonfire/config.json`,
+      "Login successful"
+    );
 
-    outro(pc.green("You're all set! Try: bonfire vm list"));
+    outro("You're all set! Try: bonfire vm list");
     return 0;
   } catch (error) {
-    if (error instanceof Error) {
-      console.error(pc.red(`Error: ${error.message}`));
-    } else {
-      console.error(pc.red(`Error: ${String(error)}`));
-    }
-    outro(pc.red("Login failed"));
+    cancel(error instanceof Error ? error.message : String(error));
+    outro("Login failed");
     return 1;
   }
 }
