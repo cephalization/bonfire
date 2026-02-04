@@ -11,7 +11,7 @@ import { randomUUID } from "crypto";
 import { unlinkSync } from "fs";
 import * as schema from "./db/schema";
 import { createApp } from "./index";
-import { createMockBootstrapService, type MockBootstrapService } from "./services/bootstrap";
+
 import type { FirecrackerProcess } from "./services/firecracker/process";
 import type { NetworkResources } from "./services/network/index";
 import type { OpenAPIHono } from "@hono/zod-openapi";
@@ -102,22 +102,6 @@ CREATE TABLE IF NOT EXISTS \`vms\` (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS \`vms_name_unique\` ON \`vms\` (\`name\`);
-
-CREATE TABLE IF NOT EXISTS \`agent_sessions\` (
-  \`id\` text PRIMARY KEY NOT NULL,
-  \`user_id\` text NOT NULL,
-  \`title\` text,
-  \`repo_url\` text NOT NULL,
-  \`branch\` text,
-  \`vm_id\` text,
-  \`workspace_path\` text,
-  \`status\` text DEFAULT 'creating' NOT NULL,
-  \`error_message\` text,
-  \`created_at\` integer NOT NULL,
-  \`updated_at\` integer NOT NULL,
-  FOREIGN KEY (\`user_id\`) REFERENCES \`user\`(\`id\`) ON UPDATE no action ON DELETE no action,
-  FOREIGN KEY (\`vm_id\`) REFERENCES \`vms\`(\`id\`) ON UPDATE no action ON DELETE no action
-);
 `;
 
 /**
@@ -348,12 +332,7 @@ export function createMockNetworkService(subnet: string = "10.0.100.0/24"): Mock
 export interface TestAppConfig {
   firecracker?: MockFirecrackerService;
   network?: MockNetworkService;
-  bootstrapService?: MockBootstrapService;
   skipAuth?: boolean;
-  /**
-   * Fetch function for proxy requests (can be mocked in tests)
-   */
-  proxyFetch?: typeof fetch;
 }
 
 /**
@@ -369,7 +348,6 @@ export interface TestApp {
   mocks: {
     firecracker: MockFirecrackerService;
     network: MockNetworkService;
-    bootstrapService: MockBootstrapService;
   };
 }
 
@@ -406,7 +384,6 @@ export async function createTestApp(config: TestAppConfig = {}): Promise<TestApp
   // Create mocked services
   const firecracker = config.firecracker ?? createMockFirecrackerService();
   const network = config.network ?? createMockNetworkService();
-  const bootstrapService = config.bootstrapService ?? createMockBootstrapService();
 
   // Create a mock user for testing
   const mockUserId = `test-user-${randomUUID()}`;
@@ -424,10 +401,8 @@ export async function createTestApp(config: TestAppConfig = {}): Promise<TestApp
     configureVMProcessFn: firecracker.configureVMProcess as any,
     startVMProcessFn: firecracker.startVMProcess as any,
     stopVMProcessFn: firecracker.stopVMProcess as any,
-    bootstrapService,
     skipAuth: config.skipAuth ?? true,
     mockUserId,
-    fetchFn: config.proxyFetch,
   });
 
   // Cleanup function
@@ -450,7 +425,6 @@ export async function createTestApp(config: TestAppConfig = {}): Promise<TestApp
     mocks: {
       firecracker,
       network,
-      bootstrapService,
     },
   };
 }

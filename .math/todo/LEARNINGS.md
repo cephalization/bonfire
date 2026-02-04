@@ -242,3 +242,25 @@ Use this knowledge to avoid repeating mistakes and build on what works.
 - **API surface reduction**: The simplification reduced the images API from 5 endpoints to 3:
   - Removed: `POST /api/images/pull`, `POST /api/images/quickstart`
   - Kept: `GET /api/images`, `DELETE /api/images/:id`, `POST /api/images/local`
+
+## lmse9cyd - Phase 3: Remove Agent Sessions
+
+- **Systematic deletion approach**: When removing a major feature, start by identifying all files through grep searches, then delete them systematically. Check imports in index.ts and other entry points.
+
+- **Cascading changes in index.ts**: Removing routes requires updating:
+  - Import statements
+  - AppConfig interface (removing related properties like bootstrapService, fetchFn, opencodeCredentials)
+  - Router instantiation and mounting
+  - Middleware registrations (removed /api/agent/\* auth middleware)
+  - Service startup code (removed startAgentSessionWatchdog)
+
+- **Database migration cleanup**: When removing tables, update both:
+  - Drizzle schema (packages/api/src/db/schema.ts)
+  - Migration SQL (packages/api/src/db/migrate.ts)
+  - Test utilities SQL (packages/api/src/test-utils.ts)
+
+- **Test utilities impact**: Removing services affects test-utils.ts - need to remove MockBootstrapService from TestAppConfig, TestApp interface, and createTestApp function.
+
+- **Build verification**: Always run `pnpm run build` and `pnpm -r test` after major deletions to catch TypeScript errors and ensure tests still pass.
+
+- **Lines removed**: ~1,500+ lines including routes, services, tests, and related infrastructure.
