@@ -34,34 +34,26 @@ Get from zero to a running VM in under 5 minutes with Docker and the CLI.
 
 ### Installation
 
-1. **Clone and start**:
+1. **Clone and build the VM image**:
 
 ```bash
 git clone https://github.com/cephalization/bonfire.git
 cd bonfire
-docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml up -d --remove-orphans
-```
-
-2. **Build the VM image** (one-time setup):
-
-```bash
-# This creates the kernel and rootfs needed to run VMs
 ./scripts/build-agent-image-docker.sh
 ```
 
-Creates:
+This creates the kernel and rootfs needed to run VMs:
 
 - `images/agent-kernel` (~10 MB)
 - `images/agent-rootfs.ext4` (~4 GB sparse file)
 
-3. **Copy images into the container**:
+2. **Start Bonfire** (auto-registers the image on startup):
 
 ```bash
-docker cp images/agent-kernel bonfire-api-1:/var/lib/bonfire/images/
-docker cp images/agent-rootfs.ext4 bonfire-api-1:/var/lib/bonfire/images/
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml up -d --remove-orphans
 ```
 
-4. **Install the CLI**:
+3. **Install the CLI**:
 
 ```bash
 npm install -g @bonfire/cli
@@ -70,19 +62,7 @@ npm install -g @bonfire/cli
 npx @bonfire/cli
 ```
 
-5. **Register the image** with Bonfire:
-
-```bash
-curl -X POST http://localhost:3000/api/images/local \
-  -H "Content-Type: application/json" \
-  -d '{
-    "reference": "local:agent-ready",
-    "kernelPath": "/var/lib/bonfire/images/agent-kernel",
-    "rootfsPath": "/var/lib/bonfire/images/agent-rootfs.ext4"
-  }'
-```
-
-6. **Login** (uses default credentials):
+4. **Login** (uses default credentials):
 
 ```bash
 bonfire login
@@ -90,16 +70,12 @@ bonfire login
 # API Key: admin123
 ```
 
-7. **Create and connect to your first VM**:
+5. **Create and connect to your first VM**:
 
 ```bash
-# Create a VM
+# Create, start, and connect
 bonfire vm create my-first-vm --image=local:agent-ready
-
-# Start it
 bonfire vm start my-first-vm
-
-# Connect via SSH (automatically downloads keys)
 bonfire vm ssh my-first-vm
 ```
 
@@ -161,13 +137,13 @@ sudo ./scripts/setup.sh
 ./scripts/build-agent-image-docker.sh
 ```
 
-4. **Start servers**:
+4. **Start servers** (in one terminal):
 
 ```bash
 pnpm run dev
 ```
 
-5. **Register the image** (in another terminal):
+5. **Register the image** (in another terminal, after API is ready):
 
 ```bash
 curl -X POST http://localhost:3000/api/images/local \
