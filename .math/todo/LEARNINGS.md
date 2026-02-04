@@ -311,3 +311,36 @@ Use this knowledge to avoid repeating mistakes and build on what works.
 
 - **Files created**:
   - `packages/api/src/middleware/api-key.ts` - New API key middleware (later consolidated into auth.ts)
+
+## ypwrhvbq - Phase 7: Testing & Cleanup
+
+- **Test verification before documentation**: Always run the full test suite (`pnpm -r test`) before declaring a phase complete. All 306 tests passed (API: 162, Web: 106, SDK: 4, CLI: 34), confirming the refactor didn't break existing functionality.
+
+- **Integration test configuration**: Integration tests in `.integration/` directory are excluded from regular test runs via `vitest.config.ts`. They require a separate test configuration or Docker environment to run properly.
+
+- **Auth test migration pattern**: When migrating from session-based auth to API key auth, integration tests need complete rewriting rather than just updates. The new tests should verify:
+  - Requests without API key are rejected (401)
+  - Requests with invalid API key are rejected (401)
+  - Requests with valid API key are accepted (200)
+  - Error messages are clear and helpful
+
+- **Documentation is part of the deliverable**: Phase 7 specifically requires creating REFACTOR_SUMMARY.md and MIGRATION_GUIDE.md. These should be comprehensive and include:
+  - What changed and why
+  - Before/after comparisons
+  - Step-by-step migration instructions
+  - Troubleshooting common issues
+  - API changes for SDK users
+
+- **Default API key handling**: The test app uses the default dev API key from config (`dev-api-key-change-in-production`). Tests should reference this constant rather than trying to inject custom keys via config options that don't exist in TestAppConfig.
+
+- **Codebase verification checklist**:
+  1. All unit tests pass (`pnpm -r test`)
+  2. Integration tests updated (if applicable)
+  3. Documentation created (REFACTOR_SUMMARY.md, MIGRATION_GUIDE.md)
+  4. No deprecated code references remain (grep for old patterns)
+  5. Type checking passes (`pnpm run typecheck`)
+  6. Build succeeds (`pnpm run build`)
+
+- **Stub endpoints for removed features**: When features are removed but API endpoints must remain for compatibility, return clear error messages explaining the feature is unavailable. This is better than 404 errors that might confuse users.
+
+- **Lines of code reduction**: The refactor removed ~8,000 lines of code (from ~13,000 to ~5,000) while maintaining core VM management functionality. This significantly improves maintainability.
