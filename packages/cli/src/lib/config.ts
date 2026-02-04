@@ -10,7 +10,7 @@ import { homedir } from "os";
 
 export interface Config {
   apiUrl: string;
-  token?: string;
+  apiKey?: string;
 }
 
 export const DEFAULT_CONFIG: Config = {
@@ -62,8 +62,8 @@ export async function setConfigValue(key: keyof Config, value: string): Promise<
   const config = await loadConfig();
   if (key === "apiUrl") {
     config.apiUrl = value;
-  } else if (key === "token") {
-    config.token = value;
+  } else if (key === "apiKey") {
+    config.apiKey = value;
   }
   await saveConfig(config);
 }

@@ -18,8 +18,8 @@ export async function createClient(): Promise<BonfireClient> {
     baseUrl: config.apiUrl,
   };
 
-  if (config.token) {
-    clientConfig.token = config.token;
+  if (config.apiKey) {
+    clientConfig.apiKey = config.apiKey;
   }
 
   return new BonfireClient(clientConfig);

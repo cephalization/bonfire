@@ -9,7 +9,6 @@ import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
 import { drizzle, type BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import Database from "better-sqlite3";
 import { config } from "./lib/config";
-import { createAuth } from "./lib/auth";
 import * as schema from "./db/schema";
 import { createImagesRouter } from "./routes/images";
 import { createVMsRouter } from "./routes/vms";
@@ -21,7 +20,7 @@ import type {
   startVMProcess,
   stopVMProcess,
 } from "./services/firecracker/process";
-import { createAuthMiddleware } from "./middleware/auth";
+import { apiKeyAuth, skipAuth } from "./middleware/auth";
 import { seedInitialAdmin } from "./db/seed";
 import { serve } from "@hono/node-server";
 import { fileURLToPath } from "url";
@@ -114,26 +113,20 @@ export function createApp(appConfig: AppConfig = {}) {
     // Use provided database
     const networkService = appConfig.networkService ?? new NetworkService();
 
-    // Create auth instance with the provided database
-    const auth = createAuth(appConfig.db);
-    const authMiddleware = createAuthMiddleware(auth);
+    // Choose auth middleware based on configuration
+    const authMiddleware = appConfig.skipAuth ? skipAuth() : apiKeyAuth();
 
-    // Mount Better Auth handler at /api/auth/*
-    app.on(["POST", "GET"], "/api/auth/*", (c) => auth.handler(c.req.raw));
-
-    // Apply auth middleware to protected routes (skip in test mode if configured)
-    if (!appConfig.skipAuth) {
-      app.use("/api/images/*", async (c, next) => {
-        // Dev DX: allow registering a local agent image without requiring login.
-        // This endpoint only registers paths that must already exist on disk.
-        const url = new URL(c.req.url);
-        if (process.env.NODE_ENV === "development" && url.pathname === "/api/images/local") {
-          return next();
-        }
-        return authMiddleware(c, next);
-      });
-      app.use("/api/vms/*", authMiddleware);
-    }
+    // Apply auth middleware to protected routes
+    app.use("/api/images/*", async (c, next) => {
+      // Dev DX: allow registering a local agent image without requiring auth.
+      // This endpoint only registers paths that must already exist on disk.
+      const url = new URL(c.req.url);
+      if (process.env.NODE_ENV === "development" && url.pathname === "/api/images/local") {
+        return next();
+      }
+      return authMiddleware(c, next);
+    });
+    app.use("/api/vms/*", authMiddleware);
 
     const imagesRouter = createImagesRouter({
       db: appConfig.db,
@@ -162,24 +155,18 @@ export function createApp(appConfig: AppConfig = {}) {
       const db = drizzle(sqlite, { schema });
       const networkService = new NetworkService();
 
-      // Create auth instance with the database
-      const auth = createAuth(db);
-      const authMiddleware = createAuthMiddleware(auth);
+      // Choose auth middleware based on configuration
+      const authMiddleware = appConfig.skipAuth ? skipAuth() : apiKeyAuth();
 
-      // Mount Better Auth handler at /api/auth/*
-      app.on(["POST", "GET"], "/api/auth/*", (c) => auth.handler(c.req.raw));
-
-      // Apply auth middleware to protected routes (skip in test mode if configured)
-      if (!appConfig.skipAuth) {
-        app.use("/api/images/*", async (c, next) => {
-          const url = new URL(c.req.url);
-          if (process.env.NODE_ENV === "development" && url.pathname === "/api/images/local") {
-            return next();
-          }
-          return authMiddleware(c, next);
-        });
-        app.use("/api/vms/*", authMiddleware);
-      }
+      // Apply auth middleware to protected routes
+      app.use("/api/images/*", async (c, next) => {
+        const url = new URL(c.req.url);
+        if (process.env.NODE_ENV === "development" && url.pathname === "/api/images/local") {
+          return next();
+        }
+        return authMiddleware(c, next);
+      });
+      app.use("/api/vms/*", authMiddleware);
 
       const imagesRouter = createImagesRouter({ db });
       const vmsRouter = createVMsRouter({
@@ -210,15 +197,14 @@ export const app = createApp();
 if (process.argv[1] && process.argv[1] === fileURLToPath(import.meta.url)) {
   console.log(`🚀 Bonfire API v${API_VERSION} starting on port ${config.port}...`);
 
-  // Create DB + auth (used by HTTP routes and WS auth)
+  // Create DB connection
   const dbPath = process.env.DATABASE_URL || "/var/lib/bonfire/bonfire.db";
   const sqlite = new Database(dbPath);
   const db = drizzle(sqlite, { schema });
-  const auth = createAuth(db);
 
-  // Seed initial admin user if configured
+  // Seed initial admin (no-op with API key auth)
   try {
-    await seedInitialAdmin(db, auth);
+    await seedInitialAdmin(db);
   } catch (error) {
     console.error("⚠️  Failed to seed initial admin:", error);
   }
@@ -230,7 +216,6 @@ if (process.argv[1] && process.argv[1] === fileURLToPath(import.meta.url)) {
 
   attachTerminalWebSocketServer(server as any, {
     db,
-    auth,
   });
 
   // Dev-friendly safety net: in dev, hot-reload can restart the API process.

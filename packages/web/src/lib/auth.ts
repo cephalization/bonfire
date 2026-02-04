@@ -1,14 +1,16 @@
 /**
- * Better Auth Client Configuration
+ * API Key Authentication Client
  *
- * Client-side authentication setup using Better Auth.
+ * Simple API key-based authentication for the web UI.
+ * Replaces Better Auth with a simple X-API-Key header approach.
  */
 
-import { createAuthClient } from "better-auth/react";
+// API key storage
+let apiKey: string | null = null;
 
-// Better Auth requires a full URL with protocol
-// In development without VITE_API_URL, use window.location.origin
-// In production, VITE_API_URL should be set to the full API URL
+/**
+ * Get the base URL for the API
+ */
 const getBaseURL = () => {
   const envUrl = import.meta.env.VITE_API_URL;
   if (envUrl) return envUrl;
@@ -19,13 +21,62 @@ const getBaseURL = () => {
   return "http://localhost:3000";
 };
 
-export const authClient = createAuthClient({
-  baseURL: `${getBaseURL()}/api/auth`,
-});
+/**
+ * Set the API key for authentication
+ */
+export function setApiKey(key: string): void {
+  apiKey = key;
+  localStorage.setItem("bonfire_api_key", key);
+}
 
-export const { useSession, signIn, signOut, signUp } = authClient;
+/**
+ * Get the current API key
+ */
+export function getApiKey(): string | null {
+  if (!apiKey) {
+    apiKey = localStorage.getItem("bonfire_api_key");
+  }
+  return apiKey;
+}
 
-// Export extended user type for use in components
+/**
+ * Clear the API key (logout)
+ */
+export function clearApiKey(): void {
+  apiKey = null;
+  localStorage.removeItem("bonfire_api_key");
+}
+
+/**
+ * Check if user is authenticated
+ */
+export function isAuthenticated(): boolean {
+  return !!getApiKey();
+}
+
+/**
+ * Get auth headers for API requests
+ */
+export function getAuthHeaders(): Record<string, string> {
+  const key = getApiKey();
+  if (key) {
+    return { "X-API-Key": key };
+  }
+  return {};
+}
+
+/**
+ * Simple user type
+ */
+export interface ApiKeyUser {
+  id: string;
+  name: string;
+  role: "admin" | "user";
+}
+
+/**
+ * User type for backwards compatibility
+ */
 export interface UserWithRole {
   id: string;
   name: string;
@@ -36,3 +87,76 @@ export interface UserWithRole {
   createdAt: Date;
   updatedAt: Date;
 }
+
+/**
+ * Get current user (returns mock user when authenticated)
+ */
+export function getCurrentUser(): ApiKeyUser | null {
+  if (isAuthenticated()) {
+    return {
+      id: "api-user",
+      name: "API User",
+      role: "admin",
+    };
+  }
+  return null;
+}
+
+/**
+ * Mock auth client for backwards compatibility
+ * This provides the same interface as Better Auth but uses API keys
+ */
+export const authClient = {
+  useSession: () => ({
+    data: isAuthenticated()
+      ? {
+          user: {
+            id: "api-user",
+            name: "API User",
+            email: "user@example.com",
+            role: "admin",
+          },
+        }
+      : null,
+    isPending: false,
+  }),
+  signIn: {
+    email: async ({ email, password }: { email: string; password: string }) => {
+      // In a real implementation, this would validate the API key
+      // For now, we treat any non-empty password as the API key
+      if (password) {
+        setApiKey(password);
+        return { data: { user: { id: "api-user", email } }, error: null };
+      }
+      return { data: null, error: { message: "Invalid API key" } };
+    },
+  },
+  signOut: async () => {
+    clearApiKey();
+    return { data: null, error: null };
+  },
+  signUp: {
+    email: async () => {
+      return { data: null, error: { message: "Sign up not available with API key auth" } };
+    },
+  },
+};
+
+// Hook for session management (backwards compatible)
+export const useSession = authClient.useSession;
+
+// Sign in object with email method (backwards compatible)
+export const signIn = {
+  email: authClient.signIn.email,
+};
+
+// Sign out function (backwards compatible)
+export const signOut = authClient.signOut;
+
+// Sign up object with email method (backwards compatible - not supported)
+export const signUp = {
+  email: authClient.signUp.email,
+};
+
+// Re-export for compatibility
+export { getApiKey as getToken, setApiKey as setToken, clearApiKey as clearToken };

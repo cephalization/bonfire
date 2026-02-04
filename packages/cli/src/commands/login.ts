@@ -3,33 +3,14 @@
  *
  * Implements the login command for the Bonfire CLI:
  * - Prompts for API URL if not configured
- * - Prompts for email and password
- * - Calls auth endpoint
- * - Saves token to config
+ * - Prompts for API key
+ * - Saves API key to config
  * - Prints success message
  */
 
-import { text, password, spinner, intro, outro, isCancel, cancel } from "@clack/prompts";
+import { text, spinner, intro, outro, isCancel, cancel } from "@clack/prompts";
 import pc from "picocolors";
 import { loadConfig, saveConfig, type Config } from "../lib/config.js";
-
-// Auth response from Better Auth
-interface AuthResponse {
-  token?: string;
-  session?: {
-    token: string;
-  };
-  user?: {
-    id: string;
-    email: string;
-  };
-}
-
-// Login credentials
-interface LoginCredentials {
-  email: string;
-  password: string;
-}
 
 /**
  * Prompt for API URL if not configured
@@ -63,64 +44,24 @@ async function promptForApiUrl(currentConfig: Config): Promise<string> {
 }
 
 /**
- * Prompt for email and password
+ * Prompt for API key
  */
-async function promptForCredentials(): Promise<LoginCredentials> {
-  const email = await text({
-    message: "Enter your email:",
-    placeholder: "user@example.com",
+async function promptForApiKey(): Promise<string> {
+  const apiKey = await text({
+    message: "Enter your API key:",
+    placeholder: "your-api-key-here",
     validate: (value) => {
-      if (!value) return "Email is required";
-      if (!value.includes("@")) return "Please enter a valid email";
+      if (!value) return "API key is required";
       return undefined;
     },
   });
 
-  if (isCancel(email)) {
+  if (isCancel(apiKey)) {
     cancel("Login cancelled");
     process.exit(0);
   }
 
-  const pass = await password({
-    message: "Enter your password:",
-    mask: "*",
-  });
-
-  if (isCancel(pass)) {
-    cancel("Login cancelled");
-    process.exit(0);
-  }
-
-  return {
-    email: email as string,
-    password: pass as string,
-  };
-}
-
-/**
- * Call Better Auth sign-in endpoint
- */
-async function signIn(apiUrl: string, credentials: LoginCredentials): Promise<AuthResponse> {
-  const url = new URL("/api/auth/sign-in/email", apiUrl);
-
-  const response = await fetch(url.toString(), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      email: credentials.email,
-      password: credentials.password,
-    }),
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    const errorMessage = errorData.message || errorData.error || `HTTP ${response.status}`;
-    throw new Error(errorMessage);
-  }
-
-  return response.json();
+  return apiKey as string;
 }
 
 /**
@@ -142,51 +83,29 @@ export async function handleLoginCommand(): Promise<number> {
       await saveConfig(config);
     }
 
-    // Prompt for credentials
-    const credentials = await promptForCredentials();
+    // Prompt for API key
+    const apiKey = await promptForApiKey();
 
-    // Attempt login
+    // Save API key to config
     const s = spinner();
-    s.start("Authenticating...");
+    s.start("Saving configuration...");
 
-    try {
-      const authResponse = await signIn(apiUrl, credentials);
+    config.apiKey = apiKey;
+    await saveConfig(config);
 
-      // Extract token from response
-      // Better Auth may return token in different formats depending on configuration
-      const token = authResponse.token || authResponse.session?.token;
+    s.stop(pc.green("✓ Configuration saved"));
 
-      if (!token) {
-        throw new Error("No token received from server");
-      }
+    console.log();
+    console.log(pc.bold("Welcome back!"));
+    console.log(pc.gray(`API URL: ${apiUrl}`));
+    console.log();
+    console.log(pc.gray(`API key saved to ~/.bonfire/config.json`));
 
-      // Save token to config
-      config.token = token;
-      await saveConfig(config);
-
-      s.stop(pc.green("✓ Authentication successful"));
-
-      console.log();
-      console.log(pc.bold("Welcome back!"));
-      if (authResponse.user?.email) {
-        console.log(pc.gray(`Logged in as: ${authResponse.user.email}`));
-      }
-      console.log();
-      console.log(pc.gray(`Token saved to ~/.bonfire/config.json`));
-
-      outro(pc.green("You're all set! Try: bonfire vm list"));
-      return 0;
-    } catch (error) {
-      s.stop(pc.red("Authentication failed"));
-      throw error;
-    }
+    outro(pc.green("You're all set! Try: bonfire vm list"));
+    return 0;
   } catch (error) {
     if (error instanceof Error) {
-      if (error.message.includes("Invalid email or password")) {
-        console.error(pc.red("Error: Invalid email or password"));
-      } else {
-        console.error(pc.red(`Error: ${error.message}`));
-      }
+      console.error(pc.red(`Error: ${error.message}`));
     } else {
       console.error(pc.red(`Error: ${String(error)}`));
     }
