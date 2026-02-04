@@ -33,7 +33,7 @@ function headersFromNodeRequest(req: IncomingMessage): Headers {
 export function attachTerminalWebSocketServer(server: Server, wsConfig: TerminalWsConfig): void {
   const wss = new WebSocketServer({ noServer: true });
 
-  const handleConnection = (ws: WebSocket, vmId: string) => {
+  const handleConnection = (ws: WebSocket, _vmId: string) => {
     // Terminal access is currently unavailable - serial console removed
     ws.send(
       JSON.stringify({

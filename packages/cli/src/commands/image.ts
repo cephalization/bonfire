@@ -78,44 +78,39 @@ function formatDate(dateStr: string): string {
 // Image Command Handlers
 
 export async function handleImageList(_client: BonfireClient, baseUrl: string): Promise<void> {
-  try {
-    const images = await apiRequest<Image[]>(baseUrl, "GET", "/api/images");
+  const images = await apiRequest<Image[]>(baseUrl, "GET", "/api/images");
 
-    if (images.length === 0) {
-      console.log(pc.gray("No images found. Images must be registered via the API directly."));
-      return;
-    }
+  if (images.length === 0) {
+    console.log(pc.gray("No images found. Images must be registered via the API directly."));
+    return;
+  }
 
-    // Calculate column widths
-    const idWidth = Math.max(8, ...images.map((img) => img.id.length));
-    const refWidth = Math.max(10, ...images.map((img) => img.reference.length));
-    const sizeWidth = 8;
-    const pulledWidth = 12;
+  // Calculate column widths
+  const idWidth = Math.max(8, ...images.map((img) => img.id.length));
+  const refWidth = Math.max(10, ...images.map((img) => img.reference.length));
+  const sizeWidth = 8;
 
-    // Print header
-    const header = [
-      "ID".padEnd(idWidth),
-      "Reference".padEnd(refWidth),
-      "Size".padEnd(sizeWidth),
-      "Pulled At",
+  // Print header
+  const header = [
+    "ID".padEnd(idWidth),
+    "Reference".padEnd(refWidth),
+    "Size".padEnd(sizeWidth),
+    "Pulled At",
+  ].join("  ");
+
+  console.log(pc.bold(header));
+  console.log(pc.gray("-".repeat(header.length)));
+
+  // Print rows
+  for (const image of images) {
+    const row = [
+      image.id.padEnd(idWidth),
+      image.reference.padEnd(refWidth),
+      formatBytes(image.sizeBytes).padEnd(sizeWidth),
+      formatDate(image.pulledAt),
     ].join("  ");
 
-    console.log(pc.bold(header));
-    console.log(pc.gray("-".repeat(header.length)));
-
-    // Print rows
-    for (const image of images) {
-      const row = [
-        image.id.padEnd(idWidth),
-        image.reference.padEnd(refWidth),
-        formatBytes(image.sizeBytes).padEnd(sizeWidth),
-        formatDate(image.pulledAt),
-      ].join("  ");
-
-      console.log(row);
-    }
-  } catch (error) {
-    throw error;
+    console.log(row);
   }
 }
 
@@ -136,7 +131,8 @@ export async function handleImageRemove(
     images = await apiRequest<Image[]>(baseUrl, "GET", "/api/images");
   } catch (error) {
     throw new Error(
-      `Failed to fetch images: ${error instanceof Error ? error.message : String(error)}`
+      `Failed to fetch images: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error }
     );
   }
 

@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
-import { useParams, Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, Loader2, AlertCircle, RefreshCw, ExternalLink } from "lucide-react";
+import { useParams, Link } from "react-router-dom";
+import { ArrowLeft, Loader2, AlertCircle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { getAgentSession, retryAgentSession, type AgentSession, BonfireAPIError } from "@/lib/api";
@@ -33,7 +33,6 @@ function getStatusBadgeVariant(status: AgentSession["status"]) {
 
 export function AgentSessionDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
   const [session, setSession] = useState<AgentSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRetrying, setIsRetrying] = useState(false);

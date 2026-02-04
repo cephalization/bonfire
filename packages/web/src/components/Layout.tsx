@@ -17,7 +17,6 @@ import {
   DrawerContent,
   DrawerHeader,
   DrawerTitle,
-  DrawerTrigger,
   DrawerClose,
 } from "@/components/ui/drawer";
 import {
@@ -207,7 +206,6 @@ function MobileMenu({
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const location = useLocation();
   const { data: session } = authClient.useSession();
   const user = session?.user as UserWithRole | undefined;
 

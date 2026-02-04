@@ -5,10 +5,10 @@
  * Mounts the rootfs temporarily to add authorized_keys before VM boot.
  */
 
-import { spawn, execFile } from "child_process";
+import { execFile } from "child_process";
 import { promisify } from "util";
 import { mkdir, writeFile, readFile, chmod, stat } from "fs/promises";
-import { dirname, join } from "path";
+import { join } from "path";
 import { randomUUID } from "crypto";
 import { mkdtemp, rm } from "fs/promises";
 
@@ -194,7 +194,7 @@ async function mountRootfs(rootfsPath: string, mountPoint: string): Promise<void
 async function unmountRootfs(mountPoint: string): Promise<void> {
   try {
     await execFileAsync("umount", [mountPoint]);
-  } catch (error) {
+  } catch (_error) {
     // If umount fails, try with lazy unmount
     await execFileAsync("umount", ["-l", mountPoint]);
   }
