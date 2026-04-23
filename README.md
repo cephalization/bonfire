@@ -1,5 +1,8 @@
 # Bonfire
 
+> [!WARNING]
+> Just use https://github.com/sahil-shubham/bhatti instead
+
 > **Warning**: This is an experimental project intended for learning and exploration. It is not production-ready and may have security vulnerabilities, bugs, or breaking changes. Use at your own risk.
 
 A self-hosted platform for ephemeral Firecracker microVMs, optimized for remote code development and execution.
