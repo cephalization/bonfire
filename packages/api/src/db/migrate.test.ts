@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 import Database from "better-sqlite3";
-import { applyMigrations, resolveMigrationsFolder } from "./migrate";
+import { existsSync, mkdtempSync, rmSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
+import { applyMigrations, openDatabase, resolveMigrationsFolder } from "./migrate";
 
 function tableNames(sqlite: Database.Database): string[] {
   return sqlite
@@ -88,5 +91,33 @@ describe("applyMigrations", () => {
     expect(columnNames(sqlite, "vms")).toContain("organization_id");
     // Application data survives.
     expect(sqlite.prepare("SELECT name FROM vms").get()).toEqual({ name: "kept" });
+  });
+});
+
+describe("openDatabase", () => {
+  it("creates the directory and the file, and migrates it", () => {
+    const root = mkdtempSync(join(tmpdir(), "bonfire-db-"));
+    const dbPath = join(root, "nested", "data", "bonfire.db");
+    try {
+      const sqlite = openDatabase(dbPath);
+      try {
+        expect(existsSync(dbPath)).toBe(true);
+        expect(tableNames(sqlite)).toEqual(
+          expect.arrayContaining(["user", "vms", "conversations"])
+        );
+      } finally {
+        sqlite.close();
+      }
+
+      // Opening again is a no-op on an up-to-date database.
+      const again = openDatabase(dbPath);
+      try {
+        expect(tableNames(again)).toEqual(expect.arrayContaining(["user", "vms"]));
+      } finally {
+        again.close();
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

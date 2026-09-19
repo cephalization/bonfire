@@ -6,10 +6,10 @@
  */
 
 import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
-import { drizzle, type BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import Database from "better-sqlite3";
+import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { config } from "./lib/config";
 import * as schema from "./db/schema";
+import { createDatabase } from "./db";
 import { createImagesRouter } from "./routes/images";
 import { createVMsRouter } from "./routes/vms";
 import { createTerminalRouter } from "./routes/terminal";
@@ -42,8 +42,6 @@ import { bootstrapDefaultImage } from "./services/images";
 import { createTerminalTicketStore, type TerminalTicketStore } from "./lib/terminal-tickets";
 
 export const API_VERSION = config.apiVersion;
-
-const DEFAULT_DB_PATH = "/var/lib/bonfire/bonfire.db";
 
 // OpenAPI schemas
 const HealthResponseSchema = z
@@ -120,7 +118,8 @@ export interface AppConfig {
 }
 
 /**
- * Open the default on-disk database.
+ * Open the configured on-disk database (see `config.dbPath`), creating and
+ * migrating it if needed.
  *
  * Returns null when no database is reachable (e.g. a test environment with no
  * writable data directory), in which case route mounting is skipped.
@@ -130,8 +129,7 @@ function createDefaultDatabase(): BetterSQLite3Database<typeof schema> | null {
     return null;
   }
   try {
-    const sqlite = new Database(process.env.DATABASE_URL || DEFAULT_DB_PATH);
-    return drizzle(sqlite, { schema });
+    return createDatabase().db;
   } catch {
     return null;
   }
@@ -239,9 +237,10 @@ export function createApp(appConfig: AppConfig = {}) {
 if (process.argv[1] && process.argv[1] === fileURLToPath(import.meta.url)) {
   console.log(`🚀 Bonfire API v${API_VERSION} starting on port ${config.port}...`);
 
-  const dbPath = process.env.DATABASE_URL || DEFAULT_DB_PATH;
-  const sqlite = new Database(dbPath);
-  const db = drizzle(sqlite, { schema });
+  // Creates the file (and its directory) and applies pending migrations, so
+  // `pnpm dev` on a fresh checkout works without a separate migrate step.
+  const { db } = createDatabase(config.dbPath);
+  console.log(`💾 Database: ${config.dbPath}`);
 
   const app = createApp({ db });
 

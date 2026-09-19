@@ -379,12 +379,16 @@ For bare metal (running `packages/api` directly), you can also put them in `pack
 Review and update the values as needed:
 
 ```env
-DATABASE_URL=/var/lib/bonfire/bonfire.db
+DATABASE_URL=./bonfire.db   # Docker uses /var/lib/bonfire/bonfire.db
 BETTER_AUTH_SECRET=<generate with: openssl rand -base64 32>
 BONFIRE_URL=http://localhost:3000
 PORT=3000
 NODE_ENV=development
 ```
+
+None of these are required for local development: `pnpm dev` starts the API on
+port 3000 with a development auth secret, creates and migrates `./bonfire.db`
+on first start, and serves the web app on http://localhost:5173.
 
 See [.env.example](./.env.example) for the annotated version.
 
