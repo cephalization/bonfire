@@ -153,17 +153,32 @@ export class BonfireClient {
   // ============================================================================
 
   /**
-   * Create a WebSocket connection for terminal access to a VM
-   * Returns a WebSocket instance connected to the VM's terminal
-   * Note: API key must be passed differently for WebSocket connections
+   * Mint a single-use ticket for the terminal WebSocket.
+   *
+   * A WebSocket handshake cannot carry an X-API-Key header from a browser, so
+   * the terminal is authenticated with a short-lived ticket in the URL.
    */
-  createTerminalWebSocket(id: string): WebSocket {
+  async createTerminalTicket(id: string): Promise<{ ticket: string; expiresAt: number }> {
+    return this.request<{ ticket: string; expiresAt: number }>(
+      "POST",
+      `/api/vms/${id}/terminal/ticket`
+    );
+  }
+
+  /**
+   * Open a WebSocket for terminal access to a VM.
+   *
+   * Mints a ticket first, so this is async. Tickets are single use: call this
+   * again for each reconnect rather than reusing the URL.
+   */
+  async createTerminalWebSocket(id: string): Promise<WebSocket> {
+    const { ticket } = await this.createTerminalTicket(id);
+
     const wsUrl = new URL(`/api/vms/${id}/terminal`, this.baseUrl);
     // Convert http(s) to ws(s)
     wsUrl.protocol = wsUrl.protocol === "https:" ? "wss:" : "ws:";
-    // Note: WebSocket connections in browsers cannot set custom headers.
-    // The API key should be configured via other means (e.g., query param)
-    // for browser-based WebSocket connections.
+    wsUrl.searchParams.set("ticket", ticket);
+
     return new WebSocket(wsUrl.toString());
   }
 }

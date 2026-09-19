@@ -28,7 +28,8 @@ Inside `packages/api/src`:
 - `services/network/` — `ip-pool` (allocation), `tap` (device lifecycle)
 - `services/ssh.ts`, `services/ssh-keys.ts` — ssh2 wrapper, per-VM keypairs
 - `services/vm-watchdog.ts` — reconciles DB state against live processes
-- `ws/terminal.ts` — terminal WebSocket (**currently a stub**, see below)
+- `ws/terminal.ts` — terminal WebSocket, bridged to an SSH pty on the VM
+- `lib/terminal-tickets.ts` — single-use tickets for the terminal handshake
 
 ## Conventions
 
@@ -53,6 +54,39 @@ you add something that shells out or touches hardware, inject it.
 
 `services/ssh.ts` also ships a fake implementation (`createMockSSHService`)
 alongside the real one. Follow that pattern.
+
+### How the browser terminal is wired
+
+`ws/terminal.ts` bridges the WebSocket to a pty-backed SSH shell on the VM,
+using `services/ssh.ts` (`shell()`) and the per-VM key from
+`services/ssh-keys.ts`. The protocol, which `web/src/components/Terminal.tsx`
+already spoke:
+
+- server → client: `{"ready":true}` once the shell is open, then raw output.
+  The client clears its screen on `ready` and drops anything before it, so
+  `ready` must precede the first byte of output.
+- server → client: `{"error":"..."}` for anything the user should see.
+- client → server: raw keystrokes, or `{"resize":{"cols":N,"rows":N}}`.
+
+A frame is only parsed as a control message if it starts with `{`, so typing a
+brace into the shell is passed through rather than swallowed.
+
+**Authentication is the non-obvious part.** A browser cannot set an
+`X-API-Key` header on a WebSocket handshake — there is no API for it. So the
+client first POSTs `/api/vms/:id/terminal/ticket` (authenticated normally) and
+puts the returned ticket in the socket URL. Tickets are single-use and expire
+in 30 seconds, so a URL captured from logs or history is not a usable
+credential. The handshake still accepts `X-API-Key` for clients that can set
+headers, such as the CLI and tests.
+
+Because tickets are spent on use, `Terminal.tsx` passes PartySocket a _URL
+function_ rather than a string, so each automatic reconnect mints a fresh one.
+
+One VM has one terminal at a time; a second connection is refused with
+`"Terminal already connected"`, matching the documented 409.
+
+The ticket store is in-memory, so it is per-process. That is fine for a single
+API server and is the seam where per-user auth attaches in the next milestone.
 
 ### Other conventions
 
@@ -84,22 +118,6 @@ This repo went through a large refactor in early 2026 that removed several
 subsystems. Some of their clients were left behind, and a cleanup pass in
 September 2026 deleted those. Be aware of what is _absent by design_ so you
 don't assume it exists:
-
-### The in-browser terminal does not work
-
-`ws/terminal.ts` accepts the WebSocket, authenticates it, validates the VM is
-running, and then sends `{"error": "Terminal access is currently unavailable"}`
-and closes. The serial-console transport it used to wrap was removed and
-nothing replaced it.
-
-The frontend half is complete and good: `web/src/components/Terminal.tsx` wraps
-ghostty-web with auto-reconnect, input buffering and debounced resize. It
-speaks a `{"resize":{"cols":N,"rows":N}}` control protocol.
-
-**To fix it**, wire `ws/terminal.ts` to an SSH shell using the existing
-`services/ssh.ts` (ssh2 supports `shell()` with a PTY and `setWindow()` for
-resize) and the per-VM key from `services/ssh-keys.ts`. The frontend needs no
-changes. `e2e/terminal.test.ts` already exists to verify it.
 
 ### Authentication is one shared static key
 
@@ -140,8 +158,8 @@ much more API surface is added.
 
 Roughly in order:
 
-1. **Restore the browser terminal** over SSH (above). Highest value per unit of
-   work; the pieces are all in the repo.
+1. ~~Restore the browser terminal over SSH.~~ Done — see "How the browser
+   terminal is wired" above.
 2. **Real authentication and permissioning** — actual users, project/membership
    tables, API keys as rows scoped to a user, route-level authorization. This
    blocks everything below it.

@@ -221,6 +221,25 @@ export async function stopVM(id: string, config?: APIClientConfig): Promise<VM> 
   return apiFetch<VM>(`/api/vms/${id}/stop`, { method: "POST" }, config);
 }
 
+export interface TerminalTicket {
+  ticket: string;
+  expiresAt: number;
+}
+
+/**
+ * Mint a single-use ticket for the terminal WebSocket.
+ *
+ * The WebSocket handshake cannot carry an X-API-Key header from a browser, so
+ * the ticket goes in the URL instead. Tickets are single-use and short-lived,
+ * so one must be minted per connection attempt.
+ */
+export async function createTerminalTicket(
+  id: string,
+  config?: APIClientConfig
+): Promise<TerminalTicket> {
+  return apiFetch<TerminalTicket>(`/api/vms/${id}/terminal/ticket`, { method: "POST" }, config);
+}
+
 // Image Endpoints
 
 export async function listImages(config?: APIClientConfig): Promise<Image[]> {
@@ -280,6 +299,7 @@ export function createAPIClient(config: APIClientConfig = {}) {
       delete: (id: string) => deleteVM(id, config),
       start: (id: string) => startVM(id, config),
       stop: (id: string) => stopVM(id, config),
+      terminalTicket: (id: string) => createTerminalTicket(id, config),
     },
     // Images
     images: {

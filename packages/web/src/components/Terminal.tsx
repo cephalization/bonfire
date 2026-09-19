@@ -15,7 +15,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { init, Terminal as GhosttyTerminal } from "ghostty-web";
 import { WebSocket as PartyWebSocket } from "partysocket";
 import { Loader2, WifiOff } from "lucide-react";
-import { getWebSocketBaseUrl } from "@/lib/api";
+import { getWebSocketBaseUrl, createTerminalTicket } from "@/lib/api";
 
 interface TerminalProps {
   vmId: string;
@@ -49,8 +49,15 @@ export function Terminal({ vmId }: TerminalProps) {
   const readyReceivedRef = useRef(false);
   const dataReceivedAfterReadyRef = useRef(false);
 
-  // Determine WebSocket URL - connect directly to API server
-  const wsUrl = `${getWebSocketBaseUrl()}/api/vms/${vmId}/terminal`;
+  // A browser cannot set an X-API-Key header on a WebSocket handshake, so the
+  // connection is authenticated with a single-use ticket in the URL. This is a
+  // function rather than a string so that every reconnect mints a fresh one:
+  // tickets are spent on use and expire in seconds.
+  const buildWsUrl = useCallback(async () => {
+    const base = `${getWebSocketBaseUrl()}/api/vms/${vmId}/terminal`;
+    const { ticket } = await createTerminalTicket(vmId);
+    return `${base}?ticket=${encodeURIComponent(ticket)}`;
+  }, [vmId]);
 
   // Send data to WebSocket
   const sendData = useCallback((data: string) => {
@@ -88,7 +95,7 @@ export function Terminal({ vmId }: TerminalProps) {
   useEffect(() => {
     isUnmountingRef.current = false;
 
-    const ws = new PartyWebSocket(wsUrl, [], {
+    const ws = new PartyWebSocket(buildWsUrl, [], {
       maxRetries: 10,
       minReconnectionDelay: 1000,
       maxReconnectionDelay: 10000,
@@ -167,7 +174,7 @@ export function Terminal({ vmId }: TerminalProps) {
       ws.close();
       wsRef.current = null;
     };
-  }, [wsUrl]);
+  }, [buildWsUrl]);
 
   // Initialize ghostty-web terminal
   useEffect(() => {

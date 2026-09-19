@@ -10,16 +10,11 @@ A self-hosted platform for ephemeral Firecracker microVMs, optimized for remote 
 ## Features
 
 - **Web UI** - Manage VMs from your browser (mobile-responsive)
+- **Terminal Access** - Full interactive terminal in the browser, backed by an SSH pty on the VM
 - **SSH Access** - Per-VM keypairs, injected at boot; connect with `bonfire vm ssh`
 - **TypeScript SDK** - Programmatic control of your VMs
 - **CLI** - Full-featured command-line interface
 - **Ephemeral VMs** - Spin up and tear down VMs in seconds
-
-> **Not currently working**: in-browser terminal access. The ghostty-web
-> frontend is built and the WebSocket route exists, but the serial-console
-> transport behind it was removed and its SSH-backed replacement is not wired
-> up yet — connections are accepted and immediately closed with an error. Use
-> `bonfire vm ssh` in the meantime. See [CLAUDE.md](./CLAUDE.md).
 
 ## Tech Stack
 
@@ -28,7 +23,7 @@ A self-hosted platform for ephemeral Firecracker microVMs, optimized for remote 
 - **Frontend**: React + Vite + shadcn/ui
 - **Database**: SQLite + Drizzle
 - **Auth**: Shared API key (`X-API-Key`) — see Authentication below
-- **Terminal**: ghostty-web (frontend only; backend transport not wired up)
+- **Terminal**: ghostty-web in the browser, over a WebSocket bridged to SSH
 - **CLI**: Clack
 - **VMs**: Firecracker microVMs
 
@@ -449,12 +444,13 @@ pnpm run build -- --filter=@bonfire/api
    - Hono web framework with OpenAPI spec
    - RESTful endpoints for VM lifecycle
    - Firecracker, network (TAP/bridge) and SSH services
+   - WebSocket terminal bridged to an SSH pty
    - Shared API key auth (`X-API-Key`)
 
 2. **Web UI** (`packages/web`)
    - React with TypeScript
    - Tailwind CSS + shadcn/ui components
-   - ghostty-web terminal component (backend transport not wired up)
+   - ghostty-web terminal component
    - Mobile-responsive design
 
 3. **SDK** (`packages/sdk`)
@@ -471,6 +467,7 @@ pnpm run build -- --filter=@bonfire/api
 2. **Start** - Network resources allocated, Firecracker process spawned, a per-VM
    SSH keypair generated and injected into the rootfs
 3. **Running** - VM boots and is reachable over SSH (`bonfire vm ssh <name>`)
+   or from the browser terminal on the VM's detail page
 4. **Stop** - Firecracker process stopped, network resources released
 5. **Delete** - VM record removed from DB
 
@@ -513,9 +510,10 @@ DB against their actual Firecracker processes every 20s.
 
 ## Status
 
-Experimental. VM lifecycle, networking and SSH access work. In-browser terminal
-access and real multi-user authentication do not — see [CLAUDE.md](./CLAUDE.md)
-for the current state and what is planned next.
+Experimental. VM lifecycle, networking, SSH access and the browser terminal
+work. Real multi-user authentication does not — there is a single shared API
+key. See [CLAUDE.md](./CLAUDE.md) for the current state and what is planned
+next.
 
 ## License
 

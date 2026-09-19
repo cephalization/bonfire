@@ -241,25 +241,21 @@ Read /tmp/screenshot.png
 
 ### Terminal Architecture
 
-> **The in-browser terminal does not currently work.** The serial-console
-> transport was removed and nothing replaced it: `ws/terminal.ts` authenticates
-> the connection, validates the VM, then closes with
-> `"Terminal access is currently unavailable"`. Use `bonfire vm ssh` instead.
-> See [CLAUDE.md](./CLAUDE.md) for what wiring it back up involves.
-
-The intended shape, once the SSH-backed transport is in place:
-
 ```
-Browser (ghostty-web) <-> WebSocket <-> API (ws/terminal.ts) <-> SSH <-> Firecracker VM
+Browser (ghostty-web) <-> WebSocket <-> API (ws/terminal.ts) <-> SSH pty <-> Firecracker VM
 ```
 
 Key files:
 
-- `packages/api/src/ws/terminal.ts` - WebSocket upgrade (transport is a stub)
-- `packages/api/src/routes/terminal.ts` - HTTP preflight + OpenAPI metadata
-- `packages/api/src/services/ssh.ts` - ssh2 wrapper, the intended transport
+- `packages/api/src/ws/terminal.ts` - WebSocket upgrade + SSH bridge
+- `packages/api/src/routes/terminal.ts` - HTTP preflight, ticket minting, OpenAPI metadata
+- `packages/api/src/lib/terminal-tickets.ts` - single-use handshake tickets
+- `packages/api/src/services/ssh.ts` - ssh2 wrapper, including `shell()`
 - `packages/api/src/services/ssh-keys.ts` - per-VM keypair generation/injection
-- `packages/web/src/components/Terminal.tsx` - Frontend terminal component (complete)
+- `packages/web/src/components/Terminal.tsx` - Frontend terminal component
+
+The handshake cannot carry an `X-API-Key` header from a browser, so the client
+mints a single-use ticket first. See [CLAUDE.md](./CLAUDE.md) for the details.
 
 ## Common Issues and Solutions
 
@@ -364,8 +360,9 @@ Changes:
 
 1. **API Logs**: `docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml logs -f api`
 
-2. **Terminal Issues**: The in-browser terminal is not wired up (see above).
-   For VM shell access use `bonfire vm ssh <name>`.
+2. **Terminal Issues**: Check the API logs for the SSH bridge in
+   `ws/terminal.ts`. A terminal that opens and immediately errors is usually
+   the VM refusing SSH; try `bonfire vm ssh <name>` to confirm.
 
 3. **SSH Issues**: Check `ssh-keys.ts` for key injection and `ssh.ts` for the
    connection itself; keys land under `/var/lib/bonfire/`

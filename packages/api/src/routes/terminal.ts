@@ -15,6 +15,7 @@ import { eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type * as schema from "../db/schema";
 import { vms } from "../db/schema";
+import type { TerminalTicketStore } from "../lib/terminal-tickets";
 
 // ==========================================================================
 // OpenAPI Schemas
@@ -31,13 +32,61 @@ const TerminalParamsSchema = z.object({
 // Route Definitions
 // ==========================================================================
 
+export const terminalTicketRoute = createRoute({
+  method: "post",
+  path: "/vms/{id}/terminal/ticket",
+  tags: ["VMs"],
+  summary: "Mint a terminal WebSocket ticket",
+  description:
+    "Returns a short-lived, single-use ticket for opening the terminal WebSocket. " +
+    "Browsers cannot set an X-API-Key header on a WebSocket handshake, so they " +
+    "authenticate this endpoint normally and then pass the ticket as the " +
+    "`ticket` query parameter on the WebSocket URL.",
+  request: {
+    params: TerminalParamsSchema,
+  },
+  responses: {
+    200: {
+      description: "Ticket issued",
+      content: {
+        "application/json": {
+          schema: z.object({
+            ticket: z.string().openapi({ description: "Single-use ticket value" }),
+            expiresAt: z.number().openapi({
+              description: "Expiry as a Unix timestamp in milliseconds",
+            }),
+          }),
+        },
+      },
+    },
+    404: {
+      description: "VM not found",
+      content: {
+        "application/json": {
+          schema: z.object({ error: z.string() }),
+        },
+      },
+    },
+    400: {
+      description: "VM is not running",
+      content: {
+        "application/json": {
+          schema: z.object({ error: z.string() }),
+        },
+      },
+    },
+  },
+});
+
 export const terminalRoute = createRoute({
   method: "get",
   path: "/vms/{id}/terminal",
   tags: ["VMs"],
   summary: "Terminal WebSocket",
   description:
-    "WebSocket endpoint for terminal access to VMs. Connects to the VM's serial console via named pipes.",
+    "WebSocket endpoint for terminal access to VMs. Bridges to an interactive " +
+    "SSH shell on the VM. Authenticate with an X-API-Key header, or with a " +
+    "ticket from POST /vms/{id}/terminal/ticket.",
   request: {
     params: TerminalParamsSchema,
   },
@@ -137,6 +186,7 @@ export function formatOutputData(data: Uint8Array): string {
 
 export interface TerminalRouterConfig {
   db: BetterSQLite3Database<typeof schema>;
+  ticketStore: TerminalTicketStore;
 }
 
 /**
@@ -147,7 +197,23 @@ export interface TerminalRouterConfig {
  */
 export function createTerminalRouter(config: TerminalRouterConfig): OpenAPIHono {
   const app = new OpenAPIHono();
-  const { db } = config;
+  const { db, ticketStore } = config;
+
+  app.openapi(terminalTicketRoute, async (c) => {
+    const id = c.req.param("id");
+    const [vm] = await db.select().from(vms).where(eq(vms.id, id));
+
+    if (!vm) {
+      return c.json({ error: "VM not found" }, 404);
+    }
+
+    if (vm.status !== "running") {
+      return c.json({ error: `VM is not running. Current status: '${vm.status}'` }, 400);
+    }
+
+    const { ticket, expiresAt } = ticketStore.issue(id);
+    return c.json({ ticket, expiresAt }, 200);
+  });
 
   app.openapi(terminalRoute, async (c) => {
     const id = c.req.param("id");
