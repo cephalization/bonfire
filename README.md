@@ -12,6 +12,8 @@ A self-hosted platform for ephemeral Firecracker microVMs, optimized for remote 
 - **Web UI** - Manage VMs from your browser (mobile-responsive)
 - **Terminal Access** - Full interactive terminal in the browser, backed by an SSH pty on the VM
 - **SSH Access** - Per-VM keypairs, injected at boot; connect with `bonfire vm ssh`
+- **Conversations** - Group chats per organization, live for everyone in them
+- **Agents** - Add an [opencode](https://opencode.ai) agent to any conversation; it runs inside one of your VMs with the LLM provider keys your organization admins configured
 - **TypeScript SDK** - Programmatic control of your VMs
 - **CLI** - Full-featured command-line interface
 - **Ephemeral VMs** - Spin up and tear down VMs in seconds
@@ -24,6 +26,8 @@ A self-hosted platform for ephemeral Firecracker microVMs, optimized for remote 
 - **Database**: SQLite + Drizzle
 - **Auth**: Better Auth — accounts, organizations, invitations, API keys (see Authentication below)
 - **Terminal**: ghostty-web in the browser, over a WebSocket bridged to SSH
+- **Chat**: shadcn/ui chat components (MessageScroller, Message, Bubble, Marker), server-sent events for realtime
+- **Agents**: opencode's HTTP API, served from inside the VM
 - **CLI**: Clack
 - **VMs**: Firecracker microVMs
 

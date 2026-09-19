@@ -13,6 +13,17 @@ import * as schema from "./db/schema";
 import { createImagesRouter } from "./routes/images";
 import { createVMsRouter } from "./routes/vms";
 import { createTerminalRouter } from "./routes/terminal";
+import { createProvidersRouter } from "./routes/providers";
+import { createConversationsRouter } from "./routes/conversations";
+import {
+  createConversationEventBus,
+  type ConversationEventBus,
+} from "./services/conversation-events";
+import { createAgentManager, type AgentManager } from "./services/agent/manager";
+import type { AgentClientFactory } from "./services/agent/opencode";
+import type { provisionAgent } from "./services/agent/provisioner";
+import type { SSHService } from "./services/ssh";
+import { createSecretBox, type SecretBox } from "./lib/secrets";
 import { NetworkService } from "./services/network";
 import type {
   spawnFirecracker,
@@ -94,6 +105,18 @@ export interface AppConfig {
   ticketStore?: TerminalTicketStore;
   /** Injected by tests; otherwise built from `config` for the app's database. */
   auth?: Auth;
+  /** Encryption for stored provider keys; derived from BETTER_AUTH_SECRET by default. */
+  secrets?: SecretBox;
+  conversationEvents?: ConversationEventBus;
+  /** How the agent manager reaches opencode in a VM; tests inject a fake. */
+  agentClientFactory?: AgentClientFactory;
+  /** SSH access used to provision the agent in a VM; tests inject the mock. */
+  sshService?: SSHService;
+  loadPrivateKeyFn?: (vmId: string) => Promise<string | null>;
+  provisionAgentFn?: typeof provisionAgent;
+  /** Pre-built manager (tests); otherwise one is created from the options above. */
+  agentManager?: AgentManager;
+  agentHealthTimeoutMs?: number;
 }
 
 /**
@@ -142,6 +165,8 @@ export function createApp(appConfig: AppConfig = {}) {
   // Set once the database is known; null means only /health and the OpenAPI
   // document are served.
   let auth: Auth | null = null;
+  let agentManager: AgentManager | null = null;
+  const conversationEvents = appConfig.conversationEvents ?? createConversationEventBus();
 
   if (db) {
     const networkService = appConfig.networkService ?? new NetworkService();
@@ -169,6 +194,23 @@ export function createApp(appConfig: AppConfig = {}) {
     app.use("/api/images/*", requireAuth);
     app.use("/api/vms", requireAuth);
     app.use("/api/vms/*", requireAuth);
+    app.use("/api/conversations", requireAuth);
+    app.use("/api/conversations/*", requireAuth);
+    app.use("/api/organizations/*", requireAuth);
+
+    const secrets = appConfig.secrets ?? createSecretBox();
+    agentManager =
+      appConfig.agentManager ??
+      createAgentManager({
+        db,
+        events: conversationEvents,
+        secrets,
+        clientFactory: appConfig.agentClientFactory,
+        sshService: appConfig.sshService,
+        loadPrivateKeyFn: appConfig.loadPrivateKeyFn,
+        provisionFn: appConfig.provisionAgentFn,
+        healthTimeoutMs: appConfig.agentHealthTimeoutMs,
+      });
 
     app.route("/api", createImagesRouter({ db }));
     app.route(
@@ -183,9 +225,14 @@ export function createApp(appConfig: AppConfig = {}) {
       })
     );
     app.route("/api", createTerminalRouter({ db, ticketStore }));
+    app.route("/api", createProvidersRouter({ db, secrets }));
+    app.route(
+      "/api",
+      createConversationsRouter({ db, events: conversationEvents, agents: agentManager })
+    );
   }
 
-  return Object.assign(app, { ticketStore, auth });
+  return Object.assign(app, { ticketStore, auth, agentManager, conversationEvents });
 }
 
 // Start server if this file is run directly

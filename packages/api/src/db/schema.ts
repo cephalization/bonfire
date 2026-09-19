@@ -217,11 +217,147 @@ export const vms = sqliteTable(
     macAddress: text("mac_address"),
     ipAddress: text("ip_address"),
 
+    /**
+     * Basic-auth password of the opencode server Bonfire started in this VM,
+     * encrypted with lib/secrets.ts. Null until an agent is first attached.
+     */
+    agentPasswordCiphertext: text("agent_password_ciphertext"),
+
     createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
     updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
   },
   (t) => [index("vms_organization_id_idx").on(t.organizationId)]
 );
+
+// ============================================================================
+// Conversations
+//
+// A conversation belongs to an organization. Members post messages; at most
+// one agent (an opencode server running in one of the organization's VMs) can
+// be attached and takes part as a participant. See services/agent/.
+// ============================================================================
+
+/**
+ * An LLM provider API key an organization admin configured. The key itself is
+ * stored encrypted (lib/secrets.ts); `keyHint` is the last few characters so
+ * the UI can show which key is set. Keys are written into a VM's opencode
+ * configuration when an agent is attached to a conversation.
+ */
+export const providerCredentials = sqliteTable(
+  "provider_credentials",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    /** opencode provider id: "anthropic", "openai", "google", ... */
+    providerId: text("provider_id").notNull(),
+    label: text("label"),
+    keyCiphertext: text("key_ciphertext").notNull(),
+    keyHint: text("key_hint").notNull(),
+    createdById: text("created_by_id").references(() => user.id, { onDelete: "set null" }),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex("provider_credentials_org_provider_idx").on(t.organizationId, t.providerId)]
+);
+
+export const conversations = sqliteTable(
+  "conversations",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    createdById: text("created_by_id").references(() => user.id, { onDelete: "set null" }),
+
+    /** The VM the attached agent runs in; null when no agent is attached. */
+    agentVmId: text("agent_vm_id").references(() => vms.id, { onDelete: "set null" }),
+    /** "providerID/modelID" the agent was asked to use; null lets opencode pick. */
+    agentModel: text("agent_model"),
+    /** opencode session id inside the VM. */
+    agentSessionId: text("agent_session_id"),
+    agentStatus: text("agent_status", {
+      enum: ["offline", "provisioning", "idle", "busy", "error"],
+    })
+      .notNull()
+      .default("offline"),
+    agentError: text("agent_error"),
+
+    lastMessageAt: integer("last_message_at", { mode: "timestamp_ms" }),
+    ...timestamps,
+  },
+  (t) => [index("conversations_organization_id_idx").on(t.organizationId)]
+);
+
+export const conversationParticipants = sqliteTable(
+  "conversation_participants",
+  {
+    id: text("id").primaryKey(),
+    conversationId: text("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    joinedAt: integer("joined_at", { mode: "timestamp" }).notNull(),
+  },
+  (t) => [
+    uniqueIndex("conversation_participants_conversation_user_idx").on(t.conversationId, t.userId),
+  ]
+);
+
+export const conversationMessages = sqliteTable(
+  "conversation_messages",
+  {
+    id: text("id").primaryKey(),
+    conversationId: text("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    authorKind: text("author_kind", { enum: ["user", "agent", "system"] }).notNull(),
+    /** opencode message id for agent messages, so replayed events do not duplicate rows. */
+    externalId: text("external_id"),
+    authorId: text("author_id").references(() => user.id, { onDelete: "set null" }),
+    /** Display name at the time of posting, so history survives account changes. */
+    authorName: text("author_name").notNull(),
+    body: text("body").notNull(),
+    /**
+     * JSON array of message parts for agent messages: tool calls, errors and
+     * the like, in the order they happened. See services/agent/manager.ts.
+     */
+    parts: text("parts", { mode: "json" }).$type<MessagePart[]>().notNull().default([]),
+    status: text("status", { enum: ["complete", "streaming", "error"] })
+      .notNull()
+      .default("complete"),
+    // Millisecond precision: messages arrive faster than once a second and
+    // clients order and page by this.
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => [index("conversation_messages_conversation_created_idx").on(t.conversationId, t.createdAt)]
+);
+
+/** A run of text the agent wrote. `body` holds all text parts joined. */
+export type TextMessagePart = { type: "text"; id: string; text: string };
+
+/** A tool call the agent made while producing a message. */
+export type ToolMessagePart = {
+  type: "tool";
+  callId: string;
+  name: string;
+  status: "running" | "completed" | "error";
+  input?: unknown;
+  output?: string;
+  error?: string;
+};
+
+export type ErrorMessagePart = { type: "error"; message: string };
+
+/**
+ * Agent messages are stored as ordered parts (text, tool calls, errors) so the
+ * UI can show what happened in sequence. User messages have no parts.
+ */
+export type MessagePart = TextMessagePart | ToolMessagePart | ErrorMessagePart;
 
 // Export types for convenience
 export type VM = typeof vms.$inferSelect;
@@ -232,3 +368,7 @@ export type User = typeof user.$inferSelect;
 export type Organization = typeof organization.$inferSelect;
 export type Member = typeof member.$inferSelect;
 export type Invitation = typeof invitation.$inferSelect;
+export type ProviderCredential = typeof providerCredentials.$inferSelect;
+export type Conversation = typeof conversations.$inferSelect;
+export type ConversationParticipant = typeof conversationParticipants.$inferSelect;
+export type ConversationMessage = typeof conversationMessages.$inferSelect;

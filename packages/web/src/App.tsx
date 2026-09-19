@@ -10,6 +10,8 @@ import { Signup } from "@/pages/Signup";
 import { AcceptInvitation } from "@/pages/AcceptInvitation";
 import { CreateOrganization } from "@/pages/CreateOrganization";
 import { Settings } from "@/pages/Settings";
+import { Conversations } from "@/pages/Conversations";
+import { Conversation } from "@/pages/Conversation";
 
 function NotFound() {
   return (
@@ -39,6 +41,22 @@ function LayoutRoutes() {
             element={
               <RequireOrganization>
                 <VMDetail />
+              </RequireOrganization>
+            }
+          />
+          <Route
+            path="/conversations"
+            element={
+              <RequireOrganization>
+                <Conversations />
+              </RequireOrganization>
+            }
+          />
+          <Route
+            path="/conversations/:id"
+            element={
+              <RequireOrganization>
+                <Conversation />
               </RequireOrganization>
             }
           />

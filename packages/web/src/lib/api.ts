@@ -304,6 +304,255 @@ export async function deleteImage(id: string, config?: APIClientConfig): Promise
   return apiFetch<SuccessResponse>(`/api/images/${id}`, { method: "DELETE" }, config);
 }
 
+// ============================================================================
+// Conversations
+// ============================================================================
+
+export type AgentStatus = "offline" | "provisioning" | "idle" | "busy" | "error";
+
+export interface Conversation {
+  id: string;
+  organizationId: string;
+  title: string;
+  createdById: string | null;
+  agentVmId: string | null;
+  agentModel: string | null;
+  agentStatus: AgentStatus;
+  agentError: string | null;
+  lastMessageAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ConversationParticipant {
+  userId: string;
+  name: string;
+  email: string;
+  joinedAt: string;
+}
+
+export interface ConversationDetail extends Conversation {
+  participants: ConversationParticipant[];
+  agentVmName: string | null;
+}
+
+export type MessagePart =
+  | { type: "text"; id: string; text: string }
+  | {
+      type: "tool";
+      callId: string;
+      name: string;
+      status: "running" | "completed" | "error";
+      input?: unknown;
+      output?: string;
+      error?: string;
+    }
+  | { type: "error"; message: string };
+
+export interface ConversationMessage {
+  id: string;
+  conversationId: string;
+  authorKind: "user" | "agent" | "system";
+  authorId: string | null;
+  authorName: string;
+  body: string;
+  parts: MessagePart[];
+  status: "complete" | "streaming" | "error";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AgentModel {
+  providerID: string;
+  id: string;
+  name: string;
+}
+
+export async function listConversations(
+  config?: APIClientConfig,
+  options: { organizationId?: string } = {}
+): Promise<Conversation[]> {
+  const query = options.organizationId
+    ? `?organizationId=${encodeURIComponent(options.organizationId)}`
+    : "";
+  return apiFetch<Conversation[]>(`/api/conversations${query}`, {}, config);
+}
+
+export async function createConversation(
+  request: { title?: string; organizationId?: string },
+  config?: APIClientConfig
+): Promise<ConversationDetail> {
+  return apiFetch<ConversationDetail>(
+    "/api/conversations",
+    { method: "POST", body: JSON.stringify(request) },
+    config
+  );
+}
+
+export async function getConversation(
+  id: string,
+  config?: APIClientConfig
+): Promise<ConversationDetail> {
+  return apiFetch<ConversationDetail>(`/api/conversations/${id}`, {}, config);
+}
+
+export async function deleteConversation(
+  id: string,
+  config?: APIClientConfig
+): Promise<SuccessResponse> {
+  return apiFetch<SuccessResponse>(`/api/conversations/${id}`, { method: "DELETE" }, config);
+}
+
+export async function listMessages(
+  conversationId: string,
+  options: { after?: string } = {},
+  config?: APIClientConfig
+): Promise<ConversationMessage[]> {
+  const query = options.after ? `?after=${encodeURIComponent(options.after)}` : "";
+  return apiFetch<ConversationMessage[]>(
+    `/api/conversations/${conversationId}/messages${query}`,
+    {},
+    config
+  );
+}
+
+export async function postMessage(
+  conversationId: string,
+  body: string,
+  config?: APIClientConfig
+): Promise<ConversationMessage> {
+  return apiFetch<ConversationMessage>(
+    `/api/conversations/${conversationId}/messages`,
+    { method: "POST", body: JSON.stringify({ body }) },
+    config
+  );
+}
+
+export async function attachAgent(
+  conversationId: string,
+  request: { vmId: string; model?: string },
+  config?: APIClientConfig
+): Promise<ConversationDetail> {
+  return apiFetch<ConversationDetail>(
+    `/api/conversations/${conversationId}/agent`,
+    { method: "POST", body: JSON.stringify(request) },
+    config
+  );
+}
+
+export async function detachAgent(
+  conversationId: string,
+  config?: APIClientConfig
+): Promise<ConversationDetail> {
+  return apiFetch<ConversationDetail>(
+    `/api/conversations/${conversationId}/agent`,
+    { method: "DELETE" },
+    config
+  );
+}
+
+export async function interruptAgent(
+  conversationId: string,
+  config?: APIClientConfig
+): Promise<SuccessResponse> {
+  return apiFetch<SuccessResponse>(
+    `/api/conversations/${conversationId}/agent/interrupt`,
+    { method: "POST" },
+    config
+  );
+}
+
+export async function listAgentModels(
+  conversationId: string,
+  config?: APIClientConfig
+): Promise<AgentModel[]> {
+  return apiFetch<AgentModel[]>(`/api/conversations/${conversationId}/agent/models`, {}, config);
+}
+
+export type ConversationEvent =
+  | { type: "ready"; conversationId: string }
+  | { type: "message.created"; message: ConversationMessage }
+  | { type: "message.updated"; message: ConversationMessage }
+  | { type: "conversation.updated"; conversation: Conversation }
+  | { type: "participant.joined"; participant: { userId: string; name: string } };
+
+/**
+ * Subscribe to a conversation's server-sent events. The browser's EventSource
+ * carries the session cookie, so no ticket is needed (unlike the terminal
+ * WebSocket). Returns a function that closes the stream.
+ */
+export function subscribeToConversation(
+  conversationId: string,
+  onEvent: (event: ConversationEvent) => void,
+  options: { baseUrl?: string; onError?: () => void } = {}
+): () => void {
+  const baseUrl = options.baseUrl ?? getDefaultBaseUrl();
+  const source = new EventSource(`${baseUrl}/api/conversations/${conversationId}/events`, {
+    withCredentials: true,
+  });
+  const forward = (type: ConversationEvent["type"], key: string) => (raw: Event) => {
+    try {
+      const data = JSON.parse((raw as MessageEvent).data);
+      onEvent({ type, [key]: data } as ConversationEvent);
+    } catch {
+      // ignore malformed frames
+    }
+  };
+  source.addEventListener("ready", forward("ready", "conversationId"));
+  source.addEventListener("message.created", forward("message.created", "message"));
+  source.addEventListener("message.updated", forward("message.updated", "message"));
+  source.addEventListener("conversation.updated", forward("conversation.updated", "conversation"));
+  source.addEventListener("participant.joined", forward("participant.joined", "participant"));
+  source.onerror = () => options.onError?.();
+  return () => source.close();
+}
+
+// ============================================================================
+// Provider keys (per organization)
+// ============================================================================
+
+export interface Provider {
+  id: string;
+  name: string;
+  keysUrl: string;
+  configured: boolean;
+  keyHint: string | null;
+  label: string | null;
+  updatedAt: string | null;
+}
+
+export async function listProviders(
+  organizationId: string,
+  config?: APIClientConfig
+): Promise<Provider[]> {
+  return apiFetch<Provider[]>(`/api/organizations/${organizationId}/providers`, {}, config);
+}
+
+export async function setProviderKey(
+  organizationId: string,
+  providerId: string,
+  request: { apiKey: string; label?: string },
+  config?: APIClientConfig
+): Promise<Provider> {
+  return apiFetch<Provider>(
+    `/api/organizations/${organizationId}/providers/${providerId}`,
+    { method: "PUT", body: JSON.stringify(request) },
+    config
+  );
+}
+
+export async function deleteProviderKey(
+  organizationId: string,
+  providerId: string,
+  config?: APIClientConfig
+): Promise<Provider> {
+  return apiFetch<Provider>(
+    `/api/organizations/${organizationId}/providers/${providerId}`,
+    { method: "DELETE" },
+    config
+  );
+}
+
 // Create a configured API client instance
 export function createAPIClient(config: APIClientConfig = {}) {
   return {
