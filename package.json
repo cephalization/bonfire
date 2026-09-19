@@ -51,6 +51,9 @@
       "esbuild",
       "better-sqlite3",
       "ssh2"
-    ]
+    ],
+    "overrides": {
+      "@better-auth/utils": "0.5.0"
+    }
   }
 }

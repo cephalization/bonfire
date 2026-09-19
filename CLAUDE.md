@@ -280,6 +280,11 @@ Roughly in order:
   `MISSING_OR_NULL_ORIGIN`. Browsers do this automatically; curl and Node
   scripts must add it (see `e2e/auth-helper.ts`). `X-API-Key` requests to
   `/api/vms` and `/api/images` are not affected.
+- `pnpm.overrides` in the root `package.json` pins `@better-auth/utils` to one
+  version. Without it pnpm resolves two copies (better-auth pins one,
+  better-call wants another), which installs two `@better-auth/core` instances
+  and breaks the API typecheck on a fresh `pnpm install --frozen-lockfile`.
+  Revisit when bumping better-auth.
 - The VM watchdog exists because dev hot-reload kills Firecracker children and
   leaves rows marked `running`. If VMs seem stuck, check it.
 - E2E tests need a self-hosted KVM runner; they only run on pushes to `main`.
