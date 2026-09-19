@@ -203,7 +203,9 @@ Use the provided mock services in `test-utils.ts`:
 
 - `createMockFirecrackerService()` - Mock Firecracker process management
 - `createMockNetworkService()` - Mock network allocation
-- `createMockSerialConsole()` - Mock serial console for terminal tests
+
+`packages/api/src/services/ssh.ts` also exports `createMockSSHService()` for
+tests that need SSH without a real VM.
 
 ## Questions?
 

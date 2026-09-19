@@ -21,13 +21,14 @@ import type {
   stopVMProcess,
 } from "./services/firecracker/process";
 import { apiKeyAuth, skipAuth } from "./middleware/auth";
-import { seedInitialAdmin } from "./db/seed";
 import { serve } from "@hono/node-server";
 import { fileURLToPath } from "url";
 import { attachTerminalWebSocketServer } from "./ws/terminal";
 import { startVmWatchdog } from "./services/vm-watchdog";
 
 export const API_VERSION = config.apiVersion;
+
+const DEFAULT_DB_PATH = "/var/lib/bonfire/bonfire.db";
 
 // OpenAPI schemas
 const HealthResponseSchema = z
@@ -90,6 +91,24 @@ export interface AppConfig {
   mockUserId?: string;
 }
 
+/**
+ * Open the default on-disk database.
+ *
+ * Returns null when no database is reachable (e.g. a test environment with no
+ * writable data directory), in which case route mounting is skipped.
+ */
+function createDefaultDatabase(): BetterSQLite3Database<typeof schema> | null {
+  if (!process.env.DATABASE_URL && typeof window !== "undefined") {
+    return null;
+  }
+  try {
+    const sqlite = new Database(process.env.DATABASE_URL || DEFAULT_DB_PATH);
+    return drizzle(sqlite, { schema });
+  } catch {
+    return null;
+  }
+}
+
 export function createApp(appConfig: AppConfig = {}) {
   const app = new OpenAPIHono();
 
@@ -108,9 +127,11 @@ export function createApp(appConfig: AppConfig = {}) {
     },
   });
 
-  // Only setup routes if database is provided or can be created
-  if (appConfig.db) {
-    // Use provided database
+  // Resolve the database: an injected one (tests), or the default on-disk one.
+  // Without either, the app still serves /health and the OpenAPI document.
+  const db = appConfig.db ?? createDefaultDatabase();
+
+  if (db) {
     const networkService = appConfig.networkService ?? new NetworkService();
 
     // Choose auth middleware based on configuration
@@ -128,64 +149,19 @@ export function createApp(appConfig: AppConfig = {}) {
     });
     app.use("/api/vms/*", authMiddleware);
 
-    const imagesRouter = createImagesRouter({
-      db: appConfig.db,
-    });
-    const vmsRouter = createVMsRouter({
-      db: appConfig.db,
-      networkService,
-      spawnFirecrackerFn: appConfig.spawnFirecrackerFn,
-      configureVMProcessFn: appConfig.configureVMProcessFn,
-      startVMProcessFn: appConfig.startVMProcessFn,
-      stopVMProcessFn: appConfig.stopVMProcessFn,
-    });
-    const terminalRouter = createTerminalRouter({
-      db: appConfig.db,
-    });
-
-    app.route("/api", imagesRouter);
-    app.route("/api", vmsRouter);
-    app.route("/api", terminalRouter);
-  } else if (process.env.DATABASE_URL || typeof window === "undefined") {
-    // Try to create default database connection in production/server context
-    try {
-      const dbPath = process.env.DATABASE_URL || "/var/lib/bonfire/bonfire.db";
-      // Check if we can access the directory (will throw if not)
-      const sqlite = new Database(dbPath);
-      const db = drizzle(sqlite, { schema });
-      const networkService = new NetworkService();
-
-      // Choose auth middleware based on configuration
-      const authMiddleware = appConfig.skipAuth ? skipAuth() : apiKeyAuth();
-
-      // Apply auth middleware to protected routes
-      app.use("/api/images/*", async (c, next) => {
-        const url = new URL(c.req.url);
-        if (process.env.NODE_ENV === "development" && url.pathname === "/api/images/local") {
-          return next();
-        }
-        return authMiddleware(c, next);
-      });
-      app.use("/api/vms/*", authMiddleware);
-
-      const imagesRouter = createImagesRouter({ db });
-      const vmsRouter = createVMsRouter({
+    app.route("/api", createImagesRouter({ db }));
+    app.route(
+      "/api",
+      createVMsRouter({
         db,
         networkService,
         spawnFirecrackerFn: appConfig.spawnFirecrackerFn,
         configureVMProcessFn: appConfig.configureVMProcessFn,
         startVMProcessFn: appConfig.startVMProcessFn,
         stopVMProcessFn: appConfig.stopVMProcessFn,
-      });
-      const terminalRouter = createTerminalRouter({ db });
-
-      app.route("/api", imagesRouter);
-      app.route("/api", vmsRouter);
-      app.route("/api", terminalRouter);
-    } catch {
-      // Database not available, skip mounting routes
-      // This allows the app to work in test environments without a database
-    }
+      })
+    );
+    app.route("/api", createTerminalRouter({ db }));
   }
 
   return app;
@@ -198,16 +174,9 @@ if (process.argv[1] && process.argv[1] === fileURLToPath(import.meta.url)) {
   console.log(`🚀 Bonfire API v${API_VERSION} starting on port ${config.port}...`);
 
   // Create DB connection
-  const dbPath = process.env.DATABASE_URL || "/var/lib/bonfire/bonfire.db";
+  const dbPath = process.env.DATABASE_URL || DEFAULT_DB_PATH;
   const sqlite = new Database(dbPath);
   const db = drizzle(sqlite, { schema });
-
-  // Seed initial admin (no-op with API key auth)
-  try {
-    await seedInitialAdmin(db);
-  } catch (error) {
-    console.error("⚠️  Failed to seed initial admin:", error);
-  }
 
   const server = serve({
     port: config.port,

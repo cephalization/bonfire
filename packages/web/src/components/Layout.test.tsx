@@ -54,10 +54,9 @@ describe("Layout", () => {
       </Layout>
     );
 
-    // Should have Dashboard, Images, and Settings links
+    // Should have Dashboard and Images links
     expect(getAllByText("Dashboard").length).toBeGreaterThan(0);
     expect(getAllByText("Images").length).toBeGreaterThan(0);
-    expect(getAllByText("Settings").length).toBeGreaterThan(0);
   });
 
   it("renders user menu button", () => {

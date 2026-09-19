@@ -31,11 +31,7 @@ services:
     environment:
       NODE_ENV: development
       DATABASE_URL: /var/lib/bonfire/bonfire.db
-      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-dev-secret-do-not-use-in-production}
-      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
-      INITIAL_ADMIN_EMAIL: ${INITIAL_ADMIN_EMAIL:-admin@example.com}
-      INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:-admin123}
-      INITIAL_ADMIN_NAME: ${INITIAL_ADMIN_NAME:-Admin}
+      BONFIRE_API_KEY: ${BONFIRE_API_KEY:-dev-api-key-change-in-production}
     stdin_open: true
     tty: true
 
