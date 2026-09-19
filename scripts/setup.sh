@@ -204,14 +204,14 @@ if [ ! -f "$ENV_FILE" ]; then
 # IMPORTANT: Change these values before deploying to production!
 
 # SQLite database path
-DB_PATH=/var/lib/bonfire/bonfire.db
+DATABASE_URL=/var/lib/bonfire/bonfire.db
 
-# Better Auth configuration
-# Change this to a secure random string (min 32 characters) for production
-BETTER_AUTH_SECRET=change-me-in-production-32-chars-min
+# Signs session cookies. Required in production; generate with:
+#   openssl rand -base64 32
+BETTER_AUTH_SECRET=$(openssl rand -base64 32 2>/dev/null || echo change-me-in-production)
 
-# API URL for auth callbacks
-BETTER_AUTH_URL=http://localhost:3000
+# URL the browser reaches Bonfire at (cookies and origin checks depend on it)
+BONFIRE_URL=http://localhost:3000
 
 # Server port
 PORT=3000
@@ -219,12 +219,9 @@ PORT=3000
 # Environment
 NODE_ENV=development
 
-# Initial Admin User Configuration
-# These credentials will be used to create the first admin user on startup
-# IMPORTANT: Change these before deploying to production!
-INITIAL_ADMIN_EMAIL=admin@example.com
-INITIAL_ADMIN_PASSWORD=admin123
-INITIAL_ADMIN_NAME=Admin
+# The first account to sign up becomes the first user; everyone after that
+# needs an invitation unless this is "true".
+BONFIRE_OPEN_SIGNUP=false
 EOF
     info "Created ${ENV_FILE}"
     warn "Please review and update the values in ${ENV_FILE}"

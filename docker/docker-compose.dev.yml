@@ -31,7 +31,8 @@ services:
     environment:
       NODE_ENV: development
       DATABASE_URL: /var/lib/bonfire/bonfire.db
-      BONFIRE_API_KEY: ${BONFIRE_API_KEY:-dev-api-key-change-in-production}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
+      BONFIRE_OPEN_SIGNUP: ${BONFIRE_OPEN_SIGNUP:-false}
     stdin_open: true
     tty: true
 

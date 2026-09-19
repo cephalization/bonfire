@@ -27,9 +27,14 @@ Inside `packages/api/src`:
   `socket-client` (Firecracker's HTTP-over-unix-socket API)
 - `services/network/` — `ip-pool` (allocation), `tap` (device lifecycle)
 - `services/ssh.ts`, `services/ssh-keys.ts` — ssh2 wrapper, per-VM keypairs
+- `services/images.ts` — image registration, default-image bootstrap at start
 - `services/vm-watchdog.ts` — reconciles DB state against live processes
 - `ws/terminal.ts` — terminal WebSocket, bridged to an SSH pty on the VM
 - `lib/terminal-tickets.ts` — single-use tickets for the terminal handshake
+- `lib/auth.ts` — the Better Auth instance (`createAuth`), mounted at `/api/auth`
+- `lib/authz.ts` — organization membership checks used by every VM route
+- `middleware/auth.ts` — turns a session cookie or `X-API-Key` into a `Principal`
+- `db/migrate.ts` — applies the drizzle-kit migrations in `drizzle/`
 
 ## Conventions
 
@@ -49,11 +54,44 @@ createVMsRouter({
 });
 ```
 
-This is why 162 API tests run in CI on a machine with no KVM. **Keep it.** If
-you add something that shells out or touches hardware, inject it.
+This is why the whole API test suite runs in CI on a machine with no KVM.
+**Keep it.** If you add something that shells out or touches hardware, inject
+it.
 
 `services/ssh.ts` also ships a fake implementation (`createMockSSHService`)
 alongside the real one. Follow that pattern.
+
+Auth is injected the same way: `createApp({ auth })`. `createTestApp()` in
+`test-utils.ts` builds a real Better Auth instance against a migrated temp
+SQLite database (with a fast password hasher), signs up a user, creates an
+organization, and returns a `request` helper that carries that user's session
+cookie. Route tests therefore go through the real auth middleware.
+
+### How auth and authorization work
+
+- **Better Auth** (`lib/auth.ts`) owns accounts, sessions, organizations,
+  invitations and API keys. Its routes live under `/api/auth/*` and its tables
+  are hand-written in `db/schema.ts` (table variable names must equal Better
+  Auth model names: `user`, `session`, `organization`, `member`, `invitation`,
+  `apikey`, ...).
+- **Two credentials** are accepted by `middleware/auth.ts`: the session cookie
+  (browser) and an `X-API-Key` header (CLI, SDK). Both resolve to a `Principal`
+  `{ user, via, defaultOrganizationId }`. An API key's organization is stored
+  in its metadata when it is created.
+- **Everything is scoped to an organization** (`lib/authz.ts`). Listing and
+  creating VMs resolves an organization (explicit `organizationId`, else the
+  session's active organization, else the API key's) and requires membership.
+  Per-VM routes use `loadAuthorizedVm`, which answers "not found" for VMs in
+  organizations the caller is not in, so ids cannot be probed. Images are
+  global: any signed-in user can see and register them.
+- **Sign-up is invitation-only by default**: the first user may sign up, and so
+  may anyone with a pending invitation for their email. `BONFIRE_OPEN_SIGNUP`
+  opens it. This is enforced in a Better Auth `databaseHooks.user.create`
+  hook.
+- **There is no email service.** Invitation links are returned to the inviter
+  in the UI and written to the API log.
+- The terminal WebSocket accepts a ticket (minted by an authorized caller) or
+  ordinary credentials on the handshake; see `authenticateUpgrade`.
 
 ### How the browser terminal is wired
 
@@ -86,7 +124,7 @@ One VM has one terminal at a time; a second connection is refused with
 `"Terminal already connected"`, matching the documented 409.
 
 The ticket store is in-memory, so it is per-process. That is fine for a single
-API server and is the seam where per-user auth attaches in the next milestone.
+API server.
 
 ### Other conventions
 
@@ -106,11 +144,12 @@ pnpm dev            # mprocs: api + web
 pnpm build
 pnpm typecheck
 pnpm test           # unit tests, no KVM needed
-pnpm run test:int   # integration, needs Docker
 pnpm run test:e2e   # e2e, needs KVM + Linux
 ```
 
-`pnpm test` is the one to run constantly; it is fast and hermetic.
+`pnpm test` is the one to run constantly; it is fast and hermetic. It covers
+the routes end to end (real auth, real migrations, mocked hardware); there is
+no separate "integration" tier.
 
 ## What is deliberately missing
 
@@ -119,19 +158,12 @@ subsystems. Some of their clients were left behind, and a cleanup pass in
 September 2026 deleted those. Be aware of what is _absent by design_ so you
 don't assume it exists:
 
-### Authentication is one shared static key
+### Things that used to be missing
 
-There are no users, sessions, roles or permissions. `middleware/auth.ts`
-compares `X-API-Key` against a single `BONFIRE_API_KEY` and sets every caller
-to `{ id: "api-user", role: "admin" }`.
-
-`lib/config.ts` refuses to boot in production without a real key, but that is
-damage control, not security. `web/src/lib/auth.ts` is a shim that stores the
-key in `localStorage` and fakes a session object; `Login.tsx` collects an email
-and discards it.
-
-**Anything multi-user is blocked on replacing this.** There is no way to
-express "these members belong to this thing" today.
+Authentication was a single shared static key until September 2026. It is now
+real (see "How auth and authorization work" above). If you find code or docs
+that talk about `BONFIRE_API_KEY` or `dev-api-key-change-in-production`, they
+are stale.
 
 ### Endpoints that were removed (don't re-add clients for them)
 
@@ -160,9 +192,10 @@ Roughly in order:
 
 1. ~~Restore the browser terminal over SSH.~~ Done — see "How the browser
    terminal is wired" above.
-2. **Real authentication and permissioning** — actual users, project/membership
-   tables, API keys as rows scoped to a user, route-level authorization. This
-   blocks everything below it.
+2. ~~Real authentication and permissioning.~~ Done — users, organizations,
+   memberships, invitations, per-user API keys, membership checks on every VM
+   route. Still open within it: an email service for invitations and password
+   resets, and finer-grained permissions than owner/admin/member.
 3. **Repos and branches** — model a repo + branch, clone it into the sandbox at
    boot, tie it to members.
 4. **Conversations** — conversation/message/participant tables scoped to a
@@ -174,10 +207,20 @@ Roughly in order:
 
 - `/var/lib/bonfire/` is the data root in Docker; locally the DB defaults to
   `./bonfire.db`. `DATABASE_URL` overrides both.
-- Drizzle migrations live in `packages/api/drizzle/`. If you change
-  `db/schema.ts` you **must** generate a migration — the schema file drifting
-  ahead of the migrations is what left four phantom auth tables in the codebase
-  for months.
+- Drizzle migrations live in `packages/api/drizzle/` and are applied by
+  `db/migrate.ts` (on server start, in tests, and by `pnpm --filter
+@bonfire/api migrate`). If you change `db/schema.ts` you **must** run
+  `pnpm --filter @bonfire/api db:generate` and commit the result — the schema
+  file drifting ahead of the migrations is what left four phantom auth tables
+  in the codebase for months. Databases created before the migration journal
+  existed are upgraded in place; see the comment in `db/migrate.ts`.
+- `BONFIRE_URL` must be the URL the browser uses. Better Auth ties cookies and
+  CSRF origin checks to it, so behind the Docker nginx it is the web URL.
+- A cookie-authenticated `POST` to `/api/auth/*` must carry an `Origin` (or
+  `Referer`) header from a trusted origin, or Better Auth answers
+  `MISSING_OR_NULL_ORIGIN`. Browsers do this automatically; curl and Node
+  scripts must add it (see `e2e/auth-helper.ts`). `X-API-Key` requests to
+  `/api/vms` and `/api/images` are not affected.
 - The VM watchdog exists because dev hot-reload kills Firecracker children and
   leaves rows marked `running`. If VMs seem stuck, check it.
 - E2E tests need a self-hosted KVM runner; they only run on pushes to `main`.

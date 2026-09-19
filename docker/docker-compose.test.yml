@@ -1,14 +1,4 @@
 services:
-  test-integration:
-    build:
-      context: ..
-      dockerfile: docker/test.Dockerfile
-    environment:
-      - NODE_ENV=test
-      - BONFIRE_TEST_MODE=integration
-    networks:
-      - bonfire-test
-
   api:
     build:
       context: ..
@@ -28,7 +18,8 @@ services:
     environment:
       - NODE_ENV=test
       - DATABASE_URL=/var/lib/bonfire/bonfire.db
-      - BONFIRE_API_KEY=test-api-key-not-for-production
+      - BETTER_AUTH_SECRET=test-secret-not-for-production
+      - BONFIRE_OPEN_SIGNUP=true
       - BONFIRE_BRIDGE=bonfire-test0
       - BONFIRE_SUBNET=10.0.200.0/24
       - BONFIRE_GATEWAY=10.0.200.1
@@ -64,7 +55,8 @@ services:
     environment:
       - NODE_ENV=test
       - DATABASE_URL=/var/lib/bonfire/bonfire.db
-      - BONFIRE_API_KEY=test-api-key-not-for-production
+      - BETTER_AUTH_SECRET=test-secret-not-for-production
+      - BONFIRE_OPEN_SIGNUP=true
       - BONFIRE_BRIDGE=bonfire-test0
       - BONFIRE_SUBNET=10.0.200.0/24
       - BONFIRE_GATEWAY=10.0.200.1

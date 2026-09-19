@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { bridgeShellToWebSocket, authenticateUpgrade } from "./terminal";
+import { bridgeShellToWebSocket, authenticateUpgrade, type UpgradeAuthenticator } from "./terminal";
 import { createMockSSHService, type MockSSHService } from "../services/ssh";
 import { createTerminalTicketStore } from "../lib/terminal-tickets";
-import { config as appConfig } from "../lib/config";
+import type { Principal } from "../middleware/auth";
 
 /**
  * Minimal stand-in for a `ws` WebSocket: records what the bridge sends and
@@ -54,57 +54,92 @@ function createFakeSocket() {
 }
 
 describe("authenticateUpgrade", () => {
-  const vmId = "vm-1";
+  const vm = { id: "vm-1", organizationId: "org-1" };
+  const alice: Principal = {
+    user: { id: "user-alice", name: "Alice", email: "alice@example.com" },
+    via: "api-key",
+    defaultOrganizationId: "org-1",
+  };
 
-  it("accepts a correct X-API-Key header", () => {
-    const store = createTerminalTicketStore();
-    const headers = new Headers({ "X-API-Key": appConfig.apiKey });
+  /** An authenticator that knows one principal and one membership. */
+  function createAuthenticator(
+    overrides: Partial<UpgradeAuthenticator> = {}
+  ): UpgradeAuthenticator {
+    return {
+      ticketStore: createTerminalTicketStore(),
+      resolvePrincipalFn: async (headers) =>
+        headers.get("x-api-key") === "alice-key" ? alice : null,
+      isMemberFn: async (userId, organizationId) =>
+        userId === "user-alice" && organizationId === "org-1",
+      ...overrides,
+    };
+  }
+
+  const url = (query = "") => new URL(`http://x/api/vms/vm-1/terminal${query}`);
+
+  it("accepts request credentials from a member of the VM's organization", async () => {
+    const headers = new Headers({ "X-API-Key": "alice-key" });
+
+    expect(await authenticateUpgrade(url(), headers, vm, createAuthenticator())).toBe(true);
+  });
+
+  it("rejects credentials that resolve to no principal", async () => {
+    const headers = new Headers({ "X-API-Key": "nope" });
+
+    expect(await authenticateUpgrade(url(), headers, vm, createAuthenticator())).toBe(false);
+  });
+
+  it("rejects a principal who is not a member of the VM's organization", async () => {
+    const headers = new Headers({ "X-API-Key": "alice-key" });
+    const other = { id: "vm-1", organizationId: "org-2" };
+
+    expect(await authenticateUpgrade(url(), headers, other, createAuthenticator())).toBe(false);
+  });
+
+  it("rejects a VM that belongs to no organization", async () => {
+    const headers = new Headers({ "X-API-Key": "alice-key" });
+    const orphan = { id: "vm-1", organizationId: null };
+
+    expect(await authenticateUpgrade(url(), headers, orphan, createAuthenticator())).toBe(false);
+  });
+
+  it("accepts a valid ticket in the query string without other credentials", async () => {
+    const authenticator = createAuthenticator();
+    const { ticket } = authenticator.ticketStore.issue(vm.id);
 
     expect(
-      authenticateUpgrade(new URL("http://x/api/vms/vm-1/terminal"), headers, vmId, store)
+      await authenticateUpgrade(url(`?ticket=${ticket}`), new Headers(), vm, authenticator)
     ).toBe(true);
   });
 
-  it("rejects a wrong X-API-Key header", () => {
-    const store = createTerminalTicketStore();
-    const headers = new Headers({ "X-API-Key": "nope" });
+  it("rejects a ticket minted for a different VM", async () => {
+    const authenticator = createAuthenticator();
+    const { ticket } = authenticator.ticketStore.issue("vm-other");
 
     expect(
-      authenticateUpgrade(new URL("http://x/api/vms/vm-1/terminal"), headers, vmId, store)
+      await authenticateUpgrade(url(`?ticket=${ticket}`), new Headers(), vm, authenticator)
     ).toBe(false);
   });
 
-  it("accepts a valid ticket in the query string", () => {
-    const store = createTerminalTicketStore();
-    const { ticket } = store.issue(vmId);
-    const url = new URL(`http://x/api/vms/vm-1/terminal?ticket=${ticket}`);
+  it("rejects a replayed ticket", async () => {
+    const authenticator = createAuthenticator();
+    const { ticket } = authenticator.ticketStore.issue(vm.id);
+    const ticketUrl = url(`?ticket=${ticket}`);
 
-    expect(authenticateUpgrade(url, new Headers(), vmId, store)).toBe(true);
+    expect(await authenticateUpgrade(ticketUrl, new Headers(), vm, authenticator)).toBe(true);
+    expect(await authenticateUpgrade(ticketUrl, new Headers(), vm, authenticator)).toBe(false);
   });
 
-  it("rejects a ticket minted for a different VM", () => {
-    const store = createTerminalTicketStore();
-    const { ticket } = store.issue("vm-other");
-    const url = new URL(`http://x/api/vms/vm-1/terminal?ticket=${ticket}`);
-
-    expect(authenticateUpgrade(url, new Headers(), vmId, store)).toBe(false);
-  });
-
-  it("rejects a replayed ticket", () => {
-    const store = createTerminalTicketStore();
-    const { ticket } = store.issue(vmId);
-    const url = new URL(`http://x/api/vms/vm-1/terminal?ticket=${ticket}`);
-
-    expect(authenticateUpgrade(url, new Headers(), vmId, store)).toBe(true);
-    expect(authenticateUpgrade(url, new Headers(), vmId, store)).toBe(false);
-  });
-
-  it("rejects a handshake with neither header nor ticket", () => {
-    const store = createTerminalTicketStore();
+  it("does not fall back to headers when a bad ticket is presented", async () => {
+    const headers = new Headers({ "X-API-Key": "alice-key" });
 
     expect(
-      authenticateUpgrade(new URL("http://x/api/vms/vm-1/terminal"), new Headers(), vmId, store)
+      await authenticateUpgrade(url("?ticket=bogus"), headers, vm, createAuthenticator())
     ).toBe(false);
+  });
+
+  it("rejects a handshake with neither credentials nor ticket", async () => {
+    expect(await authenticateUpgrade(url(), new Headers(), vm, createAuthenticator())).toBe(false);
   });
 });
 

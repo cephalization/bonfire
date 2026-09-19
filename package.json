@@ -14,7 +14,6 @@
     "typecheck": "turbo run typecheck",
     "dev": "mprocs",
     "dev:docker": "docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml up -d --remove-orphans",
-    "test:int": "docker compose -f docker/docker-compose.test.yml run --build --rm test-integration",
     "test:e2e": "docker compose -f docker/docker-compose.test.yml run --build --rm test-e2e",
     "test:all": "turbo run test && pnpm run test:int",
     "prepare": "test -x node_modules/.bin/husky && husky || true"

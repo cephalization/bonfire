@@ -1,123 +1,83 @@
 /**
  * Database Migration
  *
- * Creates all required database tables using SQLite.
- * This runs before the server starts to ensure tables exist.
+ * Applies the SQL migrations in `packages/api/drizzle/`, which drizzle-kit
+ * generates from `schema.ts` (`pnpm --filter @bonfire/api db:generate`). The
+ * same function runs before the server starts and in tests, so there is one
+ * definition of the schema.
  */
 
 import Database from "better-sqlite3";
+import { drizzle } from "drizzle-orm/better-sqlite3";
+import { migrate } from "drizzle-orm/better-sqlite3/migrator";
+import { existsSync } from "fs";
+import { dirname, join } from "path";
+import { fileURLToPath } from "url";
 import { config } from "../lib/config";
 
+/**
+ * Locate the migrations folder from wherever this module runs: `src/db/` in
+ * development and tests, `dist/` once bundled.
+ */
+export function resolveMigrationsFolder(): string {
+  if (process.env.BONFIRE_MIGRATIONS_DIR) return process.env.BONFIRE_MIGRATIONS_DIR;
+
+  const here = dirname(fileURLToPath(import.meta.url));
+  const candidates = [join(here, "../../drizzle"), join(here, "../drizzle"), join(here, "drizzle")];
+  const found = candidates.find((dir) => existsSync(join(dir, "meta", "_journal.json")));
+  if (!found) {
+    throw new Error(
+      `Could not find the drizzle migrations folder (looked in ${candidates.join(", ")}). ` +
+        "Set BONFIRE_MIGRATIONS_DIR to point at it."
+    );
+  }
+  return found;
+}
+
+/**
+ * Before September 2026 the schema was created by hand-written SQL that still
+ * carried Better Auth tables from an earlier design (a `user` table with a
+ * `role` column, no organizations). Those tables have the wrong shape for the
+ * current auth and were never reachable through the API, so on a database
+ * that predates the migration journal they are dropped before migrating.
+ */
+function dropLegacyAuthTables(sqlite: Database.Database, log: (message: string) => void): void {
+  const hasJournal = sqlite
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '__drizzle_migrations'")
+    .get();
+  if (hasJournal) return;
+
+  const hasLegacyUser = sqlite
+    .prepare("SELECT 1 FROM pragma_table_info('user') WHERE name = 'role'")
+    .get();
+  if (!hasLegacyUser) return;
+
+  log("Dropping auth tables from the pre-organization schema; accounts must be recreated.");
+  for (const table of ["session", "account", "verification", "user"]) {
+    sqlite.exec(`DROP TABLE IF EXISTS "${table}"`);
+  }
+}
+
+export interface MigrateOptions {
+  log?: (message: string) => void;
+}
+
+/** Apply pending migrations to an open connection. */
+export function applyMigrations(sqlite: Database.Database, options: MigrateOptions = {}): void {
+  const log = options.log ?? (() => {});
+  sqlite.pragma("foreign_keys = ON");
+  dropLegacyAuthTables(sqlite, log);
+  migrate(drizzle(sqlite), { migrationsFolder: resolveMigrationsFolder() });
+}
+
+/** Open `dbPath`, apply pending migrations and close it. */
 export function runMigrations(dbPath: string = config.dbPath): void {
   console.log("🔧 Running database migrations...");
-
-  const db = new Database(dbPath);
-
+  const sqlite = new Database(dbPath);
   try {
-    // Enable foreign keys
-    db.exec("PRAGMA foreign_keys = ON;");
-
-    // Better Auth user table
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS "user" (
-        "id" TEXT PRIMARY KEY NOT NULL,
-        "name" TEXT NOT NULL,
-        "email" TEXT NOT NULL UNIQUE,
-        "email_verified" INTEGER DEFAULT 0 NOT NULL,
-        "image" TEXT,
-        "role" TEXT DEFAULT 'member' NOT NULL,
-        "created_at" INTEGER NOT NULL,
-        "updated_at" INTEGER NOT NULL
-      );
-    `);
-
-    // Better Auth session table
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS "session" (
-        "id" TEXT PRIMARY KEY NOT NULL,
-        "user_id" TEXT NOT NULL,
-        "token" TEXT NOT NULL UNIQUE,
-        "expires_at" INTEGER NOT NULL,
-        "ip_address" TEXT,
-        "user_agent" TEXT,
-        "created_at" INTEGER NOT NULL,
-        "updated_at" INTEGER NOT NULL,
-        FOREIGN KEY ("user_id") REFERENCES "user"("id") ON DELETE CASCADE
-      );
-    `);
-
-    // Better Auth account table
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS "account" (
-        "id" TEXT PRIMARY KEY NOT NULL,
-        "user_id" TEXT NOT NULL,
-        "account_id" TEXT NOT NULL,
-        "provider_id" TEXT NOT NULL,
-        "access_token" TEXT,
-        "refresh_token" TEXT,
-        "access_token_expires_at" INTEGER,
-        "refresh_token_expires_at" INTEGER,
-        "scope" TEXT,
-        "id_token" TEXT,
-        "password" TEXT,
-        "created_at" INTEGER NOT NULL,
-        "updated_at" INTEGER NOT NULL,
-        FOREIGN KEY ("user_id") REFERENCES "user"("id") ON DELETE CASCADE
-      );
-    `);
-
-    // Better Auth verification table
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS "verification" (
-        "id" TEXT PRIMARY KEY NOT NULL,
-        "identifier" TEXT NOT NULL,
-        "value" TEXT NOT NULL,
-        "expires_at" INTEGER NOT NULL,
-        "created_at" INTEGER NOT NULL,
-        "updated_at" INTEGER NOT NULL
-      );
-    `);
-
-    // Application: images table
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS "images" (
-        "id" TEXT PRIMARY KEY NOT NULL,
-        "reference" TEXT NOT NULL UNIQUE,
-        "kernel_path" TEXT NOT NULL,
-        "rootfs_path" TEXT NOT NULL,
-        "size_bytes" INTEGER,
-        "pulled_at" INTEGER NOT NULL
-      );
-    `);
-
-    // Application: VMs table
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS "vms" (
-        "id" TEXT PRIMARY KEY NOT NULL,
-        "name" TEXT NOT NULL UNIQUE,
-        "status" TEXT DEFAULT 'creating' NOT NULL,
-        "vcpus" INTEGER DEFAULT 1 NOT NULL,
-        "memory_mib" INTEGER DEFAULT 512 NOT NULL,
-        "image_id" TEXT,
-        "pid" INTEGER,
-        "socket_path" TEXT,
-        "tap_device" TEXT,
-        "mac_address" TEXT,
-        "ip_address" TEXT,
-        "created_at" INTEGER NOT NULL,
-        "updated_at" INTEGER NOT NULL,
-        FOREIGN KEY ("image_id") REFERENCES "images"("id")
-      );
-    `);
-
-    // Create indexes for better performance
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_session_user_id ON "session"("user_id");`);
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_account_user_id ON "account"("user_id");`);
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_vms_status ON "vms"("status");`);
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_vms_image_id ON "vms"("image_id");`);
-
+    applyMigrations(sqlite, { log: (message) => console.log(`   ${message}`) });
     console.log("✅ Database migrations complete");
   } finally {
-    db.close();
+    sqlite.close();
   }
 }

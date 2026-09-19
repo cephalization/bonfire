@@ -13,12 +13,12 @@
 import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { eq } from "drizzle-orm";
-import { createHash } from "crypto";
-import { stat, access } from "fs/promises";
+import { access, stat } from "fs/promises";
 import { isAbsolute, resolve, join, dirname } from "path";
 import { fileURLToPath } from "url";
 import * as schema from "../db/schema";
 import { images, vms } from "../db/schema";
+import { registerLocalImage } from "../services/images";
 
 // ============================================================================
 // Configuration
@@ -319,38 +319,7 @@ export function createImagesRouter(config: ImagesRouterConfig): OpenAPIHono {
         );
       }
 
-      const [kernelStat, rootfsStat] = await Promise.all([stat(kernelPath), stat(rootfsPath)]);
-      const sizeBytes = kernelStat.size + rootfsStat.size;
-      const imageId = createHash("sha256").update(reference).digest("hex");
-      const now = new Date();
-
-      const [existing] = await db.select().from(images).where(eq(images.reference, reference));
-
-      if (existing) {
-        await db
-          .update(images)
-          .set({
-            kernelPath,
-            rootfsPath,
-            sizeBytes,
-            pulledAt: now,
-          })
-          .where(eq(images.reference, reference));
-      } else {
-        await db.insert(images).values({
-          id: imageId,
-          reference,
-          kernelPath,
-          rootfsPath,
-          sizeBytes,
-          pulledAt: now,
-        });
-      }
-
-      const [saved] = await db.select().from(images).where(eq(images.reference, reference));
-      if (!saved) {
-        return c.json({ error: "Failed to register local image" }, 500);
-      }
+      const saved = await registerLocalImage(db, { reference, kernelPath, rootfsPath });
 
       return c.json(
         {

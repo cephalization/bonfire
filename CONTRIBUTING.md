@@ -56,18 +56,15 @@ This is a monorepo using pnpm workspaces and Turborepo:
 
 All changes must include tests:
 
-1. **Unit tests** (`*.test.ts`) - Fast, isolated tests
-   - No filesystem writes
-   - No network calls
-   - No database connections
-   - Run with: `pnpm -r test`
+1. **Unit tests** (`*.test.ts`) - Fast, hermetic, next to the code
+   - Route tests use `createTestApp()` from `packages/api/src/test-utils.ts`,
+     which gives you a migrated temp SQLite database, real auth with a
+     signed-in user and organization, and mocked Firecracker and network
+     services
+   - No KVM, Docker or network access needed
+   - Run with: `pnpm test`
 
-2. **Integration tests** (`*.integration.test.ts`) - Test with real routes
-   - Use `createTestApp()` helper
-   - Mock external services (Firecracker, Network)
-   - Run with: `pnpm run test:int`
-
-3. **E2E tests** (`e2e/*.test.ts`) - Full VM lifecycle tests
+2. **E2E tests** (`e2e/*.test.ts`) - Full VM lifecycle tests
    - Require Linux with KVM
    - Run real Firecracker VMs
    - Run with: `pnpm run test:e2e`
@@ -119,7 +116,7 @@ Example:
 feat: add terminal resize handling
 
 Adds terminal resize support via xterm escape sequences.
-Includes unit and integration tests.
+Includes unit tests.
 ```
 
 ### Pull Request Process

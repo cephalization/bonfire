@@ -22,7 +22,7 @@ A self-hosted platform for ephemeral Firecracker microVMs, optimized for remote 
 - **Backend**: Hono
 - **Frontend**: React + Vite + shadcn/ui
 - **Database**: SQLite + Drizzle
-- **Auth**: Shared API key (`X-API-Key`) — see Authentication below
+- **Auth**: Better Auth — accounts, organizations, invitations, API keys (see Authentication below)
 - **Terminal**: ghostty-web in the browser, over a WebSocket bridged to SSH
 - **CLI**: Clack
 - **VMs**: Firecracker microVMs
@@ -66,16 +66,22 @@ npm install -g @bonfire/cli
 npx @bonfire/cli
 ```
 
-4. **Login** (uses default credentials):
+4. **Create your account and an API key**:
+
+Open http://localhost:5173, click "Sign up" and create the first account (the
+first user of a server may always sign up; after that people need an
+invitation). Create an organization, then go to **Settings → API keys** and
+create a key.
+
+5. **Login with the CLI**:
 
 ```bash
 bonfire login
 # API URL: http://localhost:3000
-# API Key: the value of BONFIRE_API_KEY, or `dev-api-key-change-in-production`
-#          if you have not set one (development only)
+# API Key: paste the key you just created
 ```
 
-5. **Create and connect to your first VM**:
+6. **Create and connect to your first VM**:
 
 ```bash
 # Create, start, and connect
@@ -91,8 +97,7 @@ That's it! You're now connected to your Firecracker microVM via SSH.
 If you prefer a graphical interface:
 
 1. Open http://localhost:5173 in your browser
-2. Log in. There are no user accounts yet: the email field is not checked, and
-   the password field is where you paste your `BONFIRE_API_KEY`.
+2. Sign up (or sign in) and pick your organization
 3. Click "New VM", select `local:agent-ready` image
 4. Start the VM and click "SSH" to connect
 
@@ -101,7 +106,7 @@ If you prefer a graphical interface:
 For a production-like setup (static web served by nginx with `/api` reverse-proxied to the API):
 
 ```bash
-BONFIRE_API_KEY="$(openssl rand -base64 32)" \
+BETTER_AUTH_SECRET="$(openssl rand -base64 32)" \
 docker compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml up
 ```
 
@@ -146,25 +151,22 @@ sudo ./scripts/setup.sh
 pnpm run dev
 ```
 
-5. **Register the image** (in another terminal, after API is ready):
-
-```bash
-curl -X POST http://localhost:3000/api/images/local \
-  -H "Content-Type: application/json" \
-  -d '{
-    "reference": "local:agent-ready",
-    "kernelPath": "/var/lib/bonfire/images/agent-kernel",
-    "rootfsPath": "/var/lib/bonfire/images/agent-rootfs.ext4"
-  }'
-```
+5. **Register the image**: the API registers `local:agent-ready` on startup
+   when it finds `agent-kernel` and `agent-rootfs.ext4` in its images
+   directory. Point it at the build output with `IMAGES_DIR=$PWD/images` before
+   `pnpm run dev`, or register any kernel/rootfs pair from the web UI's Images
+   page.
 
 6. **Install CLI and login**:
+
+Open http://localhost:5173, sign up, create an organization and an API key
+under **Settings → API keys**, then:
 
 ```bash
 npm install -g @bonfire/cli
 bonfire login
 # API URL: http://localhost:3000
-# API Key: the value of BONFIRE_API_KEY from your .env
+# API Key: the key you just created
 ```
 
 7. **Create and connect to your first VM**:
@@ -374,7 +376,8 @@ Review and update the values as needed:
 
 ```env
 DATABASE_URL=/var/lib/bonfire/bonfire.db
-BONFIRE_API_KEY=<generate with: openssl rand -base64 32>
+BETTER_AUTH_SECRET=<generate with: openssl rand -base64 32>
+BONFIRE_URL=http://localhost:3000
 PORT=3000
 NODE_ENV=development
 ```
@@ -383,16 +386,26 @@ See [.env.example](./.env.example) for the annotated version.
 
 #### Authentication
 
-Bonfire currently authenticates with a **single shared API key**, sent as the
-`X-API-Key` header. There are no user accounts, sessions or roles — every
-authenticated caller is treated as the same admin.
+Bonfire has user accounts, organizations and API keys, built on
+[Better Auth](https://better-auth.com).
 
-Set it with `BONFIRE_API_KEY`. In production the API refuses to start if it is
-unset or left at the development default.
+- **Accounts** are email + password. The **first user** of a server may sign up
+  freely; after that sign-up is **invitation only** unless you set
+  `BONFIRE_OPEN_SIGNUP=true`.
+- **Organizations** own VMs. A user can belong to several and switches between
+  them in the sidebar. Roles are `owner`, `admin` and `member`; owners and
+  admins can invite and remove people.
+- **Invitations** are links. There is no email service yet, so the inviter
+  copies the link from **Settings → Invitations** (it is also written to the API
+  log) and sends it themselves. The invitee signs up with the invited address
+  and accepts.
+- **API keys** are created under **Settings → API keys**. A key acts as the user
+  who made it, in the organization it was made for, and is sent as the
+  `X-API-Key` header. This is what the CLI and SDK use.
 
-> **This is not adequate for a multi-user or internet-facing deployment.**
-> Real per-user authentication and permissioning is the next planned milestone;
-> see [CLAUDE.md](./CLAUDE.md).
+`BETTER_AUTH_SECRET` signs sessions and is required in production. `BONFIRE_URL`
+must be the URL the browser reaches Bonfire at, because cookies and origin
+checks are tied to it (behind the Docker nginx that is the web URL).
 
 ### Running Tests
 
@@ -445,7 +458,7 @@ pnpm run build -- --filter=@bonfire/api
    - RESTful endpoints for VM lifecycle
    - Firecracker, network (TAP/bridge) and SSH services
    - WebSocket terminal bridged to an SSH pty
-   - Shared API key auth (`X-API-Key`)
+   - Better Auth: accounts, organizations, invitations, API keys
 
 2. **Web UI** (`packages/web`)
    - React with TypeScript
@@ -510,10 +523,9 @@ DB against their actual Firecracker processes every 20s.
 
 ## Status
 
-Experimental. VM lifecycle, networking, SSH access and the browser terminal
-work. Real multi-user authentication does not — there is a single shared API
-key. See [CLAUDE.md](./CLAUDE.md) for the current state and what is planned
-next.
+Experimental. VM lifecycle, networking, SSH access, the browser terminal,
+accounts, organizations and invitations work. See [CLAUDE.md](./CLAUDE.md) for
+the current state and what is planned next.
 
 ## License
 

@@ -17,6 +17,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { spawn } from "child_process";
+import { bootstrapE2EAuth, E2E_EMAIL, E2E_PASSWORD } from "./auth-helper";
 
 // Test configuration
 const WEB_URL = process.env.BONFIRE_WEB_URL || "http://localhost:5173";
@@ -28,42 +29,24 @@ const SESSION_NAME = `bonfire-e2e-${Date.now()}`;
 const createdVMNames: string[] = [];
 
 // Authentication credentials
-const AUTH_EMAIL = "admin@example.com";
-const AUTH_PASSWORD = "admin123";
+// The e2e user is created by bootstrapE2EAuth before the browser signs in.
+const AUTH_EMAIL = E2E_EMAIL;
+const AUTH_PASSWORD = E2E_PASSWORD;
 
 // Store auth cookie for API requests
 let authCookie: string | null = null;
 
 /**
- * Authenticate with the API and store the session cookie
+ * Create the e2e user and organization (idempotent) and store a session
+ * cookie for direct API calls. The browser then signs in with the same
+ * credentials.
  */
 async function authenticate(): Promise<void> {
   if (authCookie) {
     return; // Already authenticated
   }
-
-  const response = await fetch(`${API_URL}/api/auth/sign-in/email`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      email: AUTH_EMAIL,
-      password: AUTH_PASSWORD,
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Authentication failed: ${response.status}`);
-  }
-
-  // Extract and store the session cookie
-  const setCookieHeader = response.headers.get("set-cookie");
-  if (setCookieHeader) {
-    authCookie = setCookieHeader;
-  }
-
-  console.log("Authenticated successfully");
+  const auth = await bootstrapE2EAuth(API_URL);
+  authCookie = auth.cookie;
 }
 
 /**

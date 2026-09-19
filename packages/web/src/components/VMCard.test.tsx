@@ -13,6 +13,8 @@ function createMockVM(overrides: Partial<VM> = {}): VM {
     vcpus: 2,
     memoryMib: 1024,
     imageId: "img-1",
+    organizationId: "org-1",
+    createdById: "user-1",
     pid: 12345,
     socketPath: "/tmp/test.sock",
     tapDevice: "tap0",

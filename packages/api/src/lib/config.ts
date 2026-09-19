@@ -4,45 +4,81 @@
  * Centralized configuration for the API package.
  */
 
-const DEV_API_KEY = "dev-api-key-change-in-production";
+const DEV_AUTH_SECRET = "dev-auth-secret-change-in-production";
 
 const environment = process.env.NODE_ENV || "development";
+const port = Number(process.env.PORT) || 3000;
 
 /**
- * Resolve the API key.
+ * Resolve the secret Better Auth uses to sign session cookies and tokens.
  *
- * Authentication is currently a single shared key (see CLAUDE.md — replacing
- * this with real per-user auth is the next planned milestone). Until then the
- * one thing we must not do is boot a production server on the well-known dev
- * key, so that combination is a hard failure rather than a silent default.
+ * Booting a production server on the well-known development secret would let
+ * anyone forge a session, so that combination is a hard failure rather than a
+ * silent default.
  */
-function resolveApiKey(): string {
-  const apiKey = process.env.BONFIRE_API_KEY;
+function resolveAuthSecret(): string {
+  const secret = process.env.BETTER_AUTH_SECRET;
 
-  if (!apiKey) {
+  if (!secret) {
     if (environment === "production") {
       throw new Error(
-        "BONFIRE_API_KEY must be set in production. Generate one with: openssl rand -base64 32"
+        "BETTER_AUTH_SECRET must be set in production. Generate one with: openssl rand -base64 32"
       );
     }
-    return DEV_API_KEY;
+    return DEV_AUTH_SECRET;
   }
 
-  if (environment === "production" && apiKey === DEV_API_KEY) {
+  if (environment === "production" && secret === DEV_AUTH_SECRET) {
     throw new Error(
-      "BONFIRE_API_KEY is set to the development default in production. " +
+      "BETTER_AUTH_SECRET is set to the development default in production. " +
         "Generate a real one with: openssl rand -base64 32"
     );
   }
 
-  return apiKey;
+  return secret;
+}
+
+const baseUrl = process.env.BONFIRE_URL || `http://localhost:${port}`;
+
+/**
+ * Where the web app is served, for links written to logs (invitations).
+ * In production the web app and API share an origin behind nginx.
+ */
+const webUrl =
+  process.env.BONFIRE_WEB_URL || (environment === "production" ? baseUrl : "http://localhost:5173");
+
+/**
+ * Origins allowed to make credentialed (cookie) requests to the API.
+ *
+ * The API's own origin is always trusted. In development the Vite dev server
+ * is added so the web app works without configuration.
+ */
+function resolveTrustedOrigins(): string[] {
+  const configured = (process.env.BONFIRE_TRUSTED_ORIGINS || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const origins = new Set<string>([new URL(baseUrl).origin, ...configured]);
+  if (environment !== "production") {
+    origins.add("http://localhost:5173");
+    origins.add("http://127.0.0.1:5173");
+  }
+  return [...origins];
 }
 
 export const config = {
-  port: Number(process.env.PORT) || 3000,
+  port,
   dbPath: process.env.DATABASE_URL || process.env.DB_PATH || "./bonfire.db",
   apiVersion: "0.0.1",
   environment,
-  apiKey: resolveApiKey(),
-  baseUrl: process.env.BONFIRE_URL || `http://localhost:${Number(process.env.PORT) || 3000}`,
+  baseUrl,
+  webUrl,
+  authSecret: resolveAuthSecret(),
+  trustedOrigins: resolveTrustedOrigins(),
+  /**
+   * When false (the default), only the first user and people holding a
+   * pending invitation can sign up. Set BONFIRE_OPEN_SIGNUP=true to let anyone
+   * who can reach the server create an account.
+   */
+  openSignup: process.env.BONFIRE_OPEN_SIGNUP === "true",
 };

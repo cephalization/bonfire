@@ -9,11 +9,11 @@
  * seconds, so a leaked URL (server logs, browser history, a `Referer` header)
  * does not hand over the long-lived API key.
  *
- * The store is in-memory and therefore per-process. That is fine while Bonfire
- * runs as a single API server; a multi-instance deployment needs shared
- * storage. See CLAUDE.md — this is also the seam where per-user auth will
- * attach in the next milestone, since a ticket is already "one principal, one
- * VM, right now".
+ * A ticket is minted only for a caller who is already authorized for the VM
+ * (a member of its organization, see lib/authz.ts), so redeeming one needs no
+ * further checks. The store is in-memory and therefore per-process. That is
+ * fine while Bonfire runs as a single API server; a multi-instance deployment
+ * needs shared storage.
  */
 
 import { randomBytes } from "crypto";
