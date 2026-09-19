@@ -1,7 +1,7 @@
 /**
- * E2E Tests: Terminal WebSocket (Serial Console)
+ * E2E Tests: Terminal WebSocket (SSH pty)
  *
- * Tests WebSocket terminal functionality using serial console:
+ * Tests WebSocket terminal functionality over the SSH bridge:
  * 1. WebSocket connection and basic I/O
  * 2. Command execution (echo, pwd, ls)
  * 3. Resize handling with xterm sequences
@@ -25,44 +25,14 @@ const API_URL = process.env.BONFIRE_API_URL || "http://localhost:3000";
 const TEST_TIMEOUT = 120000; // 120 seconds per test (VM boot can take time)
 const VM_BOOT_WAIT = 15000; // Wait for VM to boot and present login prompt
 
-// Test credentials from docker-compose.test.yml
-const TEST_EMAIL = "admin@example.com";
-const TEST_PASSWORD = "admin123";
+// Shared API key from docker-compose.test.yml
+const API_KEY = process.env.BONFIRE_API_KEY || "test-api-key-not-for-production";
 
-// Test client (will be initialized with auth cookie in beforeAll)
 let client: BonfireClient;
-let authCookie: string;
 
 // Track created resources for cleanup
 const createdVMs: string[] = [];
 let testImage: Image | null = null;
-
-/**
- * Login to get an auth cookie
- */
-async function login(): Promise<string> {
-  const response = await fetch(`${API_URL}/api/auth/sign-in/email`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      email: TEST_EMAIL,
-      password: TEST_PASSWORD,
-    }),
-  });
-
-  const data = await response.json().catch(() => ({ error: "Login failed" }));
-
-  if (!response.ok) {
-    throw new Error(data.error || `Login failed: ${response.status}`);
-  }
-
-  // Return the cookie header from the response
-  const cookie = response.headers.get("set-cookie");
-  if (!cookie) {
-    throw new Error("No session cookie received from login");
-  }
-  return cookie;
-}
 
 /**
  * Wait for VM to reach running status
@@ -92,11 +62,13 @@ async function waitForVMRunning(
  * Create a WebSocket connection and wait for it to open
  */
 async function createWebSocketConnection(vmId: string, timeout = 10000): Promise<WebSocket> {
-  // Build WebSocket URL with auth cookie as query parameter
   const wsUrl = new URL(`${API_URL.replace("http", "ws")}/api/vms/${vmId}/terminal`);
 
-  // Pass auth cookie as query parameter for WebSocket authentication
-  wsUrl.searchParams.set("cookie", authCookie);
+  // A WebSocket handshake cannot carry an X-API-Key header, so authenticate
+  // with a single-use ticket. Tickets are spent on use, so each connection
+  // attempt mints its own.
+  const { ticket } = await client.createTerminalTicket(vmId);
+  wsUrl.searchParams.set("ticket", ticket);
 
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(wsUrl.toString());
@@ -242,14 +214,9 @@ async function waitForReady(ws: WebSocket, timeout = 10000): Promise<void> {
   });
 }
 
-describe("Terminal WebSocket - Serial Console (E2E)", () => {
+describe("Terminal WebSocket - SSH pty (E2E)", () => {
   beforeAll(async () => {
-    // Authenticate first
-    console.log("Authenticating with API...");
-    const cookie = await login();
-    client = new BonfireClient({ baseUrl: API_URL, cookie });
-    authCookie = cookie; // Store for WebSocket use
-    console.log("Authentication successful");
+    client = new BonfireClient({ baseUrl: API_URL, apiKey: API_KEY });
 
     // Check API health
     const health = await client.getHealth();
@@ -270,7 +237,7 @@ describe("Terminal WebSocket - Serial Console (E2E)", () => {
       const response = await fetch(`${API_URL}/api/images/quickstart`, {
         method: "POST",
         headers: {
-          Cookie: authCookie,
+          "X-API-Key": API_KEY,
         },
       });
       if (!response.ok) {

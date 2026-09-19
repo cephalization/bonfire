@@ -25,6 +25,7 @@ import { serve } from "@hono/node-server";
 import { fileURLToPath } from "url";
 import { attachTerminalWebSocketServer } from "./ws/terminal";
 import { startVmWatchdog } from "./services/vm-watchdog";
+import { createTerminalTicketStore, type TerminalTicketStore } from "./lib/terminal-tickets";
 
 export const API_VERSION = config.apiVersion;
 
@@ -89,6 +90,7 @@ export interface AppConfig {
   stopVMProcessFn?: typeof stopVMProcess;
   skipAuth?: boolean;
   mockUserId?: string;
+  ticketStore?: TerminalTicketStore;
 }
 
 /**
@@ -111,6 +113,9 @@ function createDefaultDatabase(): BetterSQLite3Database<typeof schema> | null {
 
 export function createApp(appConfig: AppConfig = {}) {
   const app = new OpenAPIHono();
+  // The route that mints tickets and the WebSocket server that redeems them
+  // must share one store, so it is created here and handed to both.
+  const ticketStore = appConfig.ticketStore ?? createTerminalTicketStore();
 
   // Health check endpoint (doesn't require database)
   app.openapi(healthRoute, (c) => {
@@ -161,10 +166,10 @@ export function createApp(appConfig: AppConfig = {}) {
         stopVMProcessFn: appConfig.stopVMProcessFn,
       })
     );
-    app.route("/api", createTerminalRouter({ db }));
+    app.route("/api", createTerminalRouter({ db, ticketStore }));
   }
 
-  return app;
+  return Object.assign(app, { ticketStore });
 }
 
 export const app = createApp();
@@ -185,6 +190,7 @@ if (process.argv[1] && process.argv[1] === fileURLToPath(import.meta.url)) {
 
   attachTerminalWebSocketServer(server as any, {
     db,
+    ticketStore: app.ticketStore,
   });
 
   // Dev-friendly safety net: in dev, hot-reload can restart the API process.
