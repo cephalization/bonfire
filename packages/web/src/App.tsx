@@ -4,17 +4,6 @@ import { Dashboard } from "@/pages/Dashboard";
 import { VMDetail } from "@/pages/VMDetail";
 import { Images } from "@/pages/Images";
 import { Login } from "@/pages/Login";
-import { AgentSessionsPage } from "@/pages/AgentSessions";
-import { AgentSessionDetailPage } from "@/pages/AgentSessionDetail";
-
-function Settings() {
-  return (
-    <div>
-      <h1 className="text-2xl font-bold">Settings</h1>
-      <p className="mt-4 text-muted-foreground">Settings page placeholder</p>
-    </div>
-  );
-}
 
 function NotFound() {
   return (
@@ -32,10 +21,7 @@ function LayoutRoutes() {
       <Routes>
         <Route path="/" element={<Dashboard />} />
         <Route path="/vms/:id" element={<VMDetail />} />
-        <Route path="/agent/sessions" element={<AgentSessionsPage />} />
-        <Route path="/agent/sessions/:id" element={<AgentSessionDetailPage />} />
         <Route path="/images" element={<Images />} />
-        <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </Layout>

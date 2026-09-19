@@ -1,6 +1,10 @@
 # Agent Development Guide
 
-This document provides essential information for AI agents working on the Bonfire codebase.
+This document covers day-to-day workflow: running things, testing, and browser
+automation.
+
+For architecture, conventions, and — importantly — what is deliberately missing
+from this codebase, read [CLAUDE.md](./CLAUDE.md) first.
 
 ## Project Overview
 
@@ -10,9 +14,9 @@ Bonfire is a self-hosted platform for ephemeral Firecracker microVMs with a web 
 
 - **Runtime**: Node.js 24+
 - **Backend**: Hono (TypeScript)
-- **Frontend**: React + Vite + shadcn/ui + ghostty-web terminal
+- **Frontend**: React + Vite + shadcn/ui + ghostty-web terminal component
 - **Database**: SQLite + Drizzle ORM
-- **Auth**: Better Auth
+- **Auth**: Shared API key via `X-API-Key` (no user accounts — see CLAUDE.md)
 - **VMs**: Firecracker microVMs
 - **Build**: Turborepo monorepo
 
@@ -23,7 +27,7 @@ bonfire/
 ├── packages/
 │   ├── api/           # Hono API server (port 3000)
 │   ├── web/           # React + Vite frontend (port 5173)
-│   ├── sdk/           # TypeScript SDK (auto-generated)
+│   ├── sdk/           # TypeScript SDK (hand-written)
 │   └── cli/           # CLI with Clack
 ├── docker/            # Docker configurations
 ├── scripts/           # Setup and utility scripts
@@ -231,34 +235,33 @@ Read /tmp/screenshot.png
 
 ### Web
 
-- `packages/web/src/components/Terminal.tsx` - Terminal component (xterm.js)
+- `packages/web/src/components/Terminal.tsx` - Terminal component (ghostty-web)
 - `packages/web/src/pages/` - Page components
 - `packages/web/src/lib/api.ts` - API client
 
 ### Terminal Architecture
 
-The terminal uses a WebSocket connection to the API which connects to the VM's serial console via named pipes (FIFOs):
+> **The in-browser terminal does not currently work.** The serial-console
+> transport was removed and nothing replaced it: `ws/terminal.ts` authenticates
+> the connection, validates the VM, then closes with
+> `"Terminal access is currently unavailable"`. Use `bonfire vm ssh` instead.
+> See [CLAUDE.md](./CLAUDE.md) for what wiring it back up involves.
+
+The intended shape, once the SSH-backed transport is in place:
 
 ```
-Browser (xterm.js) <-> WebSocket <-> API (terminal.ts) <-> FIFO pipes <-> Firecracker VM
+Browser (ghostty-web) <-> WebSocket <-> API (ws/terminal.ts) <-> SSH <-> Firecracker VM
 ```
 
 Key files:
 
-- `packages/api/src/ws/terminal.ts` - WebSocket upgrade + serial bridge
+- `packages/api/src/ws/terminal.ts` - WebSocket upgrade (transport is a stub)
 - `packages/api/src/routes/terminal.ts` - HTTP preflight + OpenAPI metadata
-- `packages/api/src/services/firecracker/serial.ts` - Serial console FIFO management
-- `packages/web/src/components/Terminal.tsx` - Frontend terminal component
+- `packages/api/src/services/ssh.ts` - ssh2 wrapper, the intended transport
+- `packages/api/src/services/ssh-keys.ts` - per-VM keypair generation/injection
+- `packages/web/src/components/Terminal.tsx` - Frontend terminal component (complete)
 
 ## Common Issues and Solutions
-
-### Terminal Reconnection Issues
-
-**Problem**: Garbled output when reconnecting to VM terminal after page refresh.
-
-**Cause**: FIFO pipes buffer VM output while no WebSocket is connected. On reconnect, buffered data floods the terminal.
-
-**Solution**: Data gating - only forward data to client after ready message is sent. See `packages/api/src/ws/terminal.ts`.
 
 ### Docker API Changes Not Taking Effect
 
@@ -347,25 +350,25 @@ Use conventional commits:
 Example:
 
 ```
-fix: terminal reconnection - gate data forwarding to prevent FIFO buffer flood
+fix: release TAP device when VM start fails after allocation
 
-When reconnecting to a VM terminal, the FIFO pipe buffers VM output while
-no WebSocket is connected. On reconnect, this buffered data floods the
-terminal causing garbled output.
+If Firecracker failed to spawn after the network resources were allocated,
+the TAP device and IP lease were left behind, eventually exhausting the pool.
 
 Changes:
-- terminal.ts: Send reset sequence and wait for buffer drain
-- serial.ts: Use fsOpen file handle for reliable FIFO reading
-- Terminal.tsx: Clear terminal on reconnection
+- vms.ts: Release network resources in the failure path
+- ip-pool.ts: Make release idempotent
 ```
 
 ## Debugging Tips
 
 1. **API Logs**: `docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml logs -f api`
 
-2. **Terminal Issues**: Add `console.log` statements in `terminal.ts` with `[Terminal:${id}]` prefix
+2. **Terminal Issues**: The in-browser terminal is not wired up (see above).
+   For VM shell access use `bonfire vm ssh <name>`.
 
-3. **Serial Console**: Check `serial.ts` for FIFO read/write issues
+3. **SSH Issues**: Check `ssh-keys.ts` for key injection and `ssh.ts` for the
+   connection itself; keys land under `/var/lib/bonfire/`
 
 4. **Frontend State**: Use React DevTools or add console.log in component effects
 

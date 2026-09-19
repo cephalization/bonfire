@@ -1,16 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import {
-  Menu,
-  LayoutDashboard,
-  Image,
-  Settings,
-  LogOut,
-  User,
-  Flame,
-  Shield,
-  Bot,
-} from "lucide-react";
+import { Menu, LayoutDashboard, Image, LogOut, User, Flame, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Drawer,
@@ -35,9 +25,7 @@ interface LayoutProps {
 
 const navItems = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard },
-  { path: "/agent/sessions", label: "Agent", icon: Bot },
   { path: "/images", label: "Images", icon: Image },
-  { path: "/settings", label: "Settings", icon: Settings },
 ];
 
 function NavLink({
@@ -118,13 +106,6 @@ function UserMenu() {
           </div>
           <p className="text-xs text-muted-foreground">{userEmail}</p>
         </div>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem asChild className="min-h-[44px]">
-          <Link to="/settings" className="cursor-pointer">
-            <Settings className="mr-2 size-4" />
-            Settings
-          </Link>
-        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onClick={handleLogout}

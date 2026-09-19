@@ -16,12 +16,9 @@ services:
     environment:
       NODE_ENV: production
       DATABASE_URL: /var/lib/bonfire/bonfire.db
-      # In production, override these via environment or docker/docker-compose.prod.yml
-      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-dev-secret-do-not-use-in-production}
-      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
-      INITIAL_ADMIN_EMAIL: ${INITIAL_ADMIN_EMAIL:-admin@example.com}
-      INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:-changeme123}
-      INITIAL_ADMIN_NAME: ${INITIAL_ADMIN_NAME:-Admin}
+      # The shared API key clients send as X-API-Key. NODE_ENV=production means
+      # the API refuses to start unless this is set to something real.
+      BONFIRE_API_KEY: ${BONFIRE_API_KEY:-}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 30s

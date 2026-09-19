@@ -10,10 +10,16 @@ A self-hosted platform for ephemeral Firecracker microVMs, optimized for remote 
 ## Features
 
 - **Web UI** - Manage VMs from your browser (mobile-responsive)
-- **Terminal Access** - Connect to VMs via ghostty-web terminal in the browser
+- **SSH Access** - Per-VM keypairs, injected at boot; connect with `bonfire vm ssh`
 - **TypeScript SDK** - Programmatic control of your VMs
 - **CLI** - Full-featured command-line interface
 - **Ephemeral VMs** - Spin up and tear down VMs in seconds
+
+> **Not currently working**: in-browser terminal access. The ghostty-web
+> frontend is built and the WebSocket route exists, but the serial-console
+> transport behind it was removed and its SSH-backed replacement is not wired
+> up yet — connections are accepted and immediately closed with an error. Use
+> `bonfire vm ssh` in the meantime. See [CLAUDE.md](./CLAUDE.md).
 
 ## Tech Stack
 
@@ -21,8 +27,8 @@ A self-hosted platform for ephemeral Firecracker microVMs, optimized for remote 
 - **Backend**: Hono
 - **Frontend**: React + Vite + shadcn/ui
 - **Database**: SQLite + Drizzle
-- **Auth**: Better Auth
-- **Terminal**: ghostty-web
+- **Auth**: Shared API key (`X-API-Key`) — see Authentication below
+- **Terminal**: ghostty-web (frontend only; backend transport not wired up)
 - **CLI**: Clack
 - **VMs**: Firecracker microVMs
 
@@ -70,7 +76,8 @@ npx @bonfire/cli
 ```bash
 bonfire login
 # API URL: http://localhost:3000
-# API Key: admin123
+# API Key: the value of BONFIRE_API_KEY, or `dev-api-key-change-in-production`
+#          if you have not set one (development only)
 ```
 
 5. **Create and connect to your first VM**:
@@ -89,9 +96,8 @@ That's it! You're now connected to your Firecracker microVM via SSH.
 If you prefer a graphical interface:
 
 1. Open http://localhost:5173 in your browser
-2. Log in with default credentials:
-   - Email: `admin@example.com`
-   - Password: `admin123`
+2. Log in. There are no user accounts yet: the email field is not checked, and
+   the password field is where you paste your `BONFIRE_API_KEY`.
 3. Click "New VM", select `local:agent-ready` image
 4. Start the VM and click "SSH" to connect
 
@@ -100,8 +106,7 @@ If you prefer a graphical interface:
 For a production-like setup (static web served by nginx with `/api` reverse-proxied to the API):
 
 ```bash
-BETTER_AUTH_SECRET="change-me" \
-BETTER_AUTH_URL="https://your-hostname" \
+BONFIRE_API_KEY="$(openssl rand -base64 32)" \
 docker compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml up
 ```
 
@@ -164,7 +169,7 @@ curl -X POST http://localhost:3000/api/images/local \
 npm install -g @bonfire/cli
 bonfire login
 # API URL: http://localhost:3000
-# API Key: admin123 (from .env)
+# API Key: the value of BONFIRE_API_KEY from your .env
 ```
 
 7. **Create and connect to your first VM**:
@@ -374,34 +379,25 @@ Review and update the values as needed:
 
 ```env
 DATABASE_URL=/var/lib/bonfire/bonfire.db
-BETTER_AUTH_SECRET=<generate-a-secure-random-string>
-BETTER_AUTH_URL=http://localhost:3000
+BONFIRE_API_KEY=<generate with: openssl rand -base64 32>
 PORT=3000
 NODE_ENV=development
-
-# Initial admin user (required for first login)
-INITIAL_ADMIN_EMAIL=admin@example.com
-INITIAL_ADMIN_PASSWORD=<choose-a-strong-password>
-INITIAL_ADMIN_NAME=Admin
 ```
 
-#### Authentication Setup
+See [.env.example](./.env.example) for the annotated version.
 
-Bonfire uses Better Auth for authentication with email/password. On first startup, if `INITIAL_ADMIN_EMAIL` and `INITIAL_ADMIN_PASSWORD` are configured, an admin user will be automatically created.
+#### Authentication
 
-### Agent Sessions (Bootstrap)
+Bonfire currently authenticates with a **single shared API key**, sent as the
+`X-API-Key` header. There are no user accounts, sessions or roles — every
+authenticated caller is treated as the same admin.
 
-Agent sessions currently rely on a guest bootstrap process to become `ready`.
+Set it with `BONFIRE_API_KEY`. In production the API refuses to start if it is
+unset or left at the development default.
 
-- Historical approach: SSH-based bootstrap.
-- Planned approach: serial-console bootstrap (no SSH). See `docs/AGENT_SERIAL_BOOTSTRAP.md`.
-
-> **Security Note**: The default credentials (`admin@example.com` / `admin123`) are for local development only. Always change these values in your `.env` file before exposing the service to any network.
-
-- Users can have either `admin` or `member` role
-- Admin users have full permissions (all API endpoints)
-- Member users have limited access (can be restricted per-endpoint)
-- The initial admin user can create additional users through the API
+> **This is not adequate for a multi-user or internet-facing deployment.**
+> Real per-user authentication and permissioning is the next planned milestone;
+> see [CLAUDE.md](./CLAUDE.md).
 
 ### Running Tests
 
@@ -452,18 +448,18 @@ pnpm run build -- --filter=@bonfire/api
 1. **API Server** (`packages/api`)
    - Hono web framework with OpenAPI spec
    - RESTful endpoints for VM lifecycle
-   - WebSocket proxy for terminal access
-   - Better Auth integration
+   - Firecracker, network (TAP/bridge) and SSH services
+   - Shared API key auth (`X-API-Key`)
 
 2. **Web UI** (`packages/web`)
    - React with TypeScript
    - Tailwind CSS + shadcn/ui components
-   - ghostty-web for terminal emulation
+   - ghostty-web terminal component (backend transport not wired up)
    - Mobile-responsive design
 
 3. **SDK** (`packages/sdk`)
-   - Auto-generated from OpenAPI spec
-   - TypeScript client with full type safety
+   - Hand-written TypeScript client
+   - The API serves `/api/openapi.json`; generating the SDK from it is planned
 
 4. **CLI** (`packages/cli`)
    - Clack for interactive prompts
@@ -472,10 +468,14 @@ pnpm run build -- --filter=@bonfire/api
 ### VM Lifecycle
 
 1. **Create** - VM record created in DB with `creating` status
-2. **Start** - Network resources allocated, Firecracker process spawned with serial console pipes
-3. **Running** - VM boots, serial console available via WebSocket terminal
-4. **Stop** - Firecracker process stopped, network resources and pipes released
+2. **Start** - Network resources allocated, Firecracker process spawned, a per-VM
+   SSH keypair generated and injected into the rootfs
+3. **Running** - VM boots and is reachable over SSH (`bonfire vm ssh <name>`)
+4. **Stop** - Firecracker process stopped, network resources released
 5. **Delete** - VM record removed from DB
+
+A watchdog (`services/vm-watchdog.ts`) reconciles VMs marked `running` in the
+DB against their actual Firecracker processes every 20s.
 
 ### Network Architecture
 
@@ -504,12 +504,18 @@ pnpm run build -- --filter=@bonfire/api
 
 ## Documentation
 
-- [PLAN.md](./PLAN.md) - Full implementation plan and technical details
+- [CLAUDE.md](./CLAUDE.md) - Architecture, conventions, and what is deliberately
+  missing. Start here if you (or an agent) are working on the code.
 - [CONTRIBUTING.md](./CONTRIBUTING.md) - Contribution guidelines
+- [docs/](./docs/) - Agent image and bootstrap notes
+- [docs/history/](./docs/history/) - Superseded plans and migration notes, kept
+  for reference. These describe past intentions, not the current code.
 
 ## Status
 
-This is an experimental learning project under active development. Expect breaking changes, incomplete features, and potential security issues. See [PLAN.md](./PLAN.md) for implementation status.
+Experimental. VM lifecycle, networking and SSH access work. In-browser terminal
+access and real multi-user authentication do not — see [CLAUDE.md](./CLAUDE.md)
+for the current state and what is planned next.
 
 ## License
 
