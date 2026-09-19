@@ -16,9 +16,15 @@ services:
     environment:
       NODE_ENV: production
       DATABASE_URL: /var/lib/bonfire/bonfire.db
-      # The shared API key clients send as X-API-Key. NODE_ENV=production means
-      # the API refuses to start unless this is set to something real.
-      BONFIRE_API_KEY: ${BONFIRE_API_KEY:-}
+      # Signs session cookies. NODE_ENV=production means the API refuses to
+      # start unless this is set to something real.
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
+      # Public URL the browser uses to reach Bonfire (the nginx `web` service).
+      # Cookies and CSRF origin checks are tied to it.
+      BONFIRE_URL: ${BONFIRE_URL:-http://localhost}
+      # Set to "true" to let anyone who can reach the server create an account.
+      # By default only the first user and invited people can sign up.
+      BONFIRE_OPEN_SIGNUP: ${BONFIRE_OPEN_SIGNUP:-false}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 30s

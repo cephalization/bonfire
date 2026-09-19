@@ -1,6 +1,18 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Menu, LayoutDashboard, Image, LogOut, User, Flame, Shield } from "lucide-react";
+import {
+  Menu,
+  LayoutDashboard,
+  Image,
+  LogOut,
+  User,
+  Flame,
+  Settings as SettingsIcon,
+  Building2,
+  ChevronsUpDown,
+  Plus,
+  Check,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Drawer,
@@ -13,11 +25,12 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { authClient, type UserWithRole } from "@/lib/auth";
+import { authClient, useSession } from "@/lib/auth";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -26,6 +39,7 @@ interface LayoutProps {
 const navItems = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard },
   { path: "/images", label: "Images", icon: Image },
+  { path: "/settings", label: "Settings", icon: SettingsIcon },
 ];
 
 function NavLink({
@@ -72,19 +86,76 @@ function Logo({ mobile = false }: { mobile?: boolean }) {
   );
 }
 
+/**
+ * Switch between the organizations the user belongs to. Changing the active
+ * organization is a session-level setting, so every page follows it.
+ */
+export function OrganizationSwitcher({ className }: { className?: string }) {
+  const navigate = useNavigate();
+  const { data: organizations } = authClient.useListOrganizations();
+  const { data: active } = authClient.useActiveOrganization();
+
+  const switchTo = async (organizationId: string) => {
+    if (organizationId === active?.id) return;
+    await authClient.organization.setActive({ organizationId });
+    navigate("/");
+  };
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="outline"
+          className={cn("min-h-[44px] w-full justify-between", className)}
+          aria-label="Switch organization"
+        >
+          <span className="flex min-w-0 items-center gap-2">
+            <Building2 className="size-4 shrink-0" />
+            <span className="truncate">{active?.name ?? "No organization"}</span>
+          </span>
+          <ChevronsUpDown className="size-4 shrink-0 opacity-60" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-56">
+        <DropdownMenuLabel>Organizations</DropdownMenuLabel>
+        {(organizations ?? []).map((org) => (
+          <DropdownMenuItem
+            key={org.id}
+            onClick={() => switchTo(org.id)}
+            className="min-h-[40px] cursor-pointer"
+          >
+            <span className="flex-1 truncate">{org.name}</span>
+            {org.id === active?.id && <Check className="size-4" />}
+          </DropdownMenuItem>
+        ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem asChild className="min-h-[40px] cursor-pointer">
+          <Link to="/organizations/new">
+            <Plus className="mr-2 size-4" />
+            New organization
+          </Link>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function useCurrentUser() {
+  const { data: session } = useSession();
+  return {
+    name: session?.user.name || "User",
+    email: session?.user.email || "",
+  };
+}
+
 function UserMenu() {
   const navigate = useNavigate();
-  const { data: session } = authClient.useSession();
-  const user = session?.user as UserWithRole | undefined;
+  const { name, email } = useCurrentUser();
 
   const handleLogout = async () => {
     await authClient.signOut();
     navigate("/login");
   };
-
-  const userName = user?.name || "User";
-  const userEmail = user?.email || "";
-  const isAdmin = user?.role === "admin";
 
   return (
     <DropdownMenu>
@@ -100,11 +171,8 @@ function UserMenu() {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         <div className="px-2 py-1.5">
-          <div className="flex items-center gap-2">
-            <p className="text-sm font-medium">{userName}</p>
-            {isAdmin && <Shield className="size-3 text-primary" />}
-          </div>
-          <p className="text-xs text-muted-foreground">{userEmail}</p>
+          <p className="text-sm font-medium">{name}</p>
+          <p className="text-xs text-muted-foreground">{email}</p>
         </div>
         <DropdownMenuSeparator />
         <DropdownMenuItem
@@ -120,17 +188,15 @@ function UserMenu() {
 }
 
 function DesktopSidebar() {
-  const { data: session } = authClient.useSession();
-  const user = session?.user as UserWithRole | undefined;
-
-  const userName = user?.name || "User";
-  const userEmail = user?.email || "";
-  const isAdmin = user?.role === "admin";
+  const { name, email } = useCurrentUser();
 
   return (
     <aside className="fixed left-0 top-0 z-40 hidden h-screen w-64 flex-col border-r bg-background lg:flex">
       <div className="flex h-16 items-center border-b px-6">
         <Logo />
+      </div>
+      <div className="border-b p-4">
+        <OrganizationSwitcher />
       </div>
       <nav className="flex-1 space-y-1 p-4">
         {navItems.map((item) => (
@@ -146,11 +212,8 @@ function DesktopSidebar() {
               <User className="size-5 text-muted-foreground" />
             </div>
             <div className="hidden xl:block">
-              <div className="flex items-center gap-1">
-                <p className="text-sm font-medium">{userName}</p>
-                {isAdmin && <Shield className="size-3 text-primary" />}
-              </div>
-              <p className="text-xs text-muted-foreground">{userEmail}</p>
+              <p className="text-sm font-medium">{name}</p>
+              <p className="text-xs text-muted-foreground">{email}</p>
             </div>
           </div>
           <UserMenu />
@@ -187,12 +250,7 @@ function MobileMenu({
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { data: session } = authClient.useSession();
-  const user = session?.user as UserWithRole | undefined;
-
-  const userName = user?.name || "User";
-  const userEmail = user?.email || "";
-  const isAdmin = user?.role === "admin";
+  const { name, email } = useCurrentUser();
 
   // Close menu when location changes (navigation occurs)
   const handleNavClick = () => {
@@ -207,6 +265,9 @@ function MobileMenu({
             <Logo mobile />
           </DrawerTitle>
         </DrawerHeader>
+        <div className="border-b p-4">
+          <OrganizationSwitcher />
+        </div>
         <nav className="flex-1 space-y-1 p-4">
           {navItems.map((item) => (
             <DrawerClose key={item.path} asChild>
@@ -222,11 +283,8 @@ function MobileMenu({
               <User className="size-6 text-muted-foreground" />
             </div>
             <div className="flex-1">
-              <div className="flex items-center gap-1">
-                <p className="font-medium">{userName}</p>
-                {isAdmin && <Shield className="size-3 text-primary" />}
-              </div>
-              <p className="text-sm text-muted-foreground">{userEmail}</p>
+              <p className="font-medium">{name}</p>
+              <p className="text-sm text-muted-foreground">{email}</p>
             </div>
           </div>
         </div>

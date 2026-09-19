@@ -101,6 +101,7 @@ COPY --from=prod-deps /app/node_modules /app/node_modules
 COPY --from=prod-deps /app/packages /app/packages
 
 COPY --from=builder /app/packages/api/dist /app/packages/api/dist
+COPY --from=builder /app/packages/api/drizzle /app/packages/api/drizzle
 COPY --from=builder /app/packages/api/scripts /app/packages/api/scripts
 
 RUN chmod +x /app/packages/api/scripts/init-network.sh || true

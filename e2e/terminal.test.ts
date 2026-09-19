@@ -19,14 +19,15 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { BonfireClient } from "@bonfire/sdk";
 import type { Image, VM } from "@bonfire/sdk";
+import { bootstrapE2EAuth } from "./auth-helper";
 
 // Test configuration
 const API_URL = process.env.BONFIRE_API_URL || "http://localhost:3000";
 const TEST_TIMEOUT = 120000; // 120 seconds per test (VM boot can take time)
 const VM_BOOT_WAIT = 15000; // Wait for VM to boot and present login prompt
 
-// Shared API key from docker-compose.test.yml
-const API_KEY = process.env.BONFIRE_API_KEY || "test-api-key-not-for-production";
+// Minted per run by bootstrapE2EAuth; see e2e/auth-helper.ts.
+let API_KEY = "";
 
 let client: BonfireClient;
 
@@ -216,6 +217,8 @@ async function waitForReady(ws: WebSocket, timeout = 10000): Promise<void> {
 
 describe("Terminal WebSocket - SSH pty (E2E)", () => {
   beforeAll(async () => {
+    const auth = await bootstrapE2EAuth(API_URL);
+    API_KEY = auth.apiKey;
     client = new BonfireClient({ baseUrl: API_URL, apiKey: API_KEY });
 
     // Check API health

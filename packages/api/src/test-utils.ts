@@ -10,44 +10,11 @@ import { randomUUID } from "crypto";
 import { unlinkSync } from "fs";
 import * as schema from "./db/schema";
 import { createApp } from "./index";
+import { applyMigrations } from "./db/migrate";
+import { createAuth, type Auth, type PasswordHasher } from "./lib/auth";
 
 import type { FirecrackerProcess } from "./services/firecracker/process";
 import type { NetworkResources } from "./services/network/index";
-import type { OpenAPIHono } from "@hono/zod-openapi";
-
-// Migration SQL - simplified schema without Better Auth tables
-const MIGRATION_SQL = `
--- Application tables
-CREATE TABLE IF NOT EXISTS \`images\` (
-  \`id\` text PRIMARY KEY NOT NULL,
-  \`reference\` text NOT NULL,
-  \`kernel_path\` text NOT NULL,
-  \`rootfs_path\` text NOT NULL,
-  \`size_bytes\` integer,
-  \`pulled_at\` integer NOT NULL
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS \`images_reference_unique\` ON \`images\` (\`reference\`);
-
-CREATE TABLE IF NOT EXISTS \`vms\` (
-  \`id\` text PRIMARY KEY NOT NULL,
-  \`name\` text NOT NULL,
-  \`status\` text DEFAULT 'creating' NOT NULL,
-  \`vcpus\` integer DEFAULT 1 NOT NULL,
-  \`memory_mib\` integer DEFAULT 512 NOT NULL,
-  \`image_id\` text,
-  \`pid\` integer,
-  \`socket_path\` text,
-  \`tap_device\` text,
-  \`mac_address\` text,
-  \`ip_address\` text,
-  \`created_at\` integer NOT NULL,
-  \`updated_at\` integer NOT NULL,
-  FOREIGN KEY (\`image_id\`) REFERENCES \`images\`(\`id\`) ON UPDATE no action ON DELETE no action
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS \`vms_name_unique\` ON \`vms\` (\`name\`);
-`;
 
 /**
  * Mock Firecracker Service interface
@@ -277,38 +244,93 @@ export function createMockNetworkService(subnet: string = "10.0.100.0/24"): Mock
 export interface TestAppConfig {
   firecracker?: MockFirecrackerService;
   network?: MockNetworkService;
-  skipAuth?: boolean;
+  /** Let anyone sign up. Default false, as in production. */
+  openSignup?: boolean;
+}
+
+/** Origin the test app is served from; Better Auth requires it on cookie POSTs. */
+export const TEST_ORIGIN = "http://localhost";
+
+/**
+ * A signed-in test user. `headers` carries their session cookie plus the
+ * Origin header Better Auth's CSRF check expects on cookie-authenticated POSTs.
+ */
+export interface TestPrincipal {
+  id: string;
+  name: string;
+  email: string;
+  password: string;
+  cookie: string;
+  headers: Record<string, string>;
+}
+
+export interface TestOrganization {
+  id: string;
+  name: string;
+  slug: string;
 }
 
 /**
  * Test app context returned by createTestApp
  */
 export interface TestApp {
-  app: OpenAPIHono;
+  app: ReturnType<typeof createApp>;
   db: ReturnType<typeof drizzle>;
   sqlite: Database.Database;
-  request: OpenAPIHono["request"];
+  auth: Auth;
+  /**
+   * Like `app.request`, but authenticated as `user` unless the call already
+   * carries a `cookie` or `x-api-key` header.
+   */
+  request: (path: string, init?: RequestInit) => Promise<Response>;
   cleanup: () => void;
-  mockUserId: string;
+  /** The first user, who already has `organization` as their active org. */
+  user: TestPrincipal;
+  organization: TestOrganization;
+  /** Sign up another user through the real auth endpoints. */
+  signUp: (input?: { name?: string; email?: string; password?: string }) => Promise<TestPrincipal>;
+  signIn: (email: string, password: string) => Promise<TestPrincipal | null>;
+  /** Create an organization as `who`; it becomes their active organization. */
+  createOrganization: (who: TestPrincipal, name?: string) => Promise<TestOrganization>;
+  /** Mint an API key for `who`, bound to `organizationId`. Returns the plaintext key. */
+  createApiKey: (who: TestPrincipal, organizationId: string, name?: string) => Promise<string>;
   mocks: {
     firecracker: MockFirecrackerService;
     network: MockNetworkService;
   };
 }
 
+/** scrypt is deliberately slow; tests do not need to pay for it. */
+export const fastPasswordHasher: PasswordHasher = {
+  hash: async (password) => `plain:${password}`,
+  verify: async ({ hash, password }) => hash === `plain:${password}`,
+};
+
+/** Turn a response's Set-Cookie headers into a Cookie request header. */
+export function cookieHeaderFromResponse(res: Response): string {
+  return res.headers
+    .getSetCookie()
+    .map((c) => c.split(";")[0])
+    .filter((pair) => !pair.endsWith("="))
+    .join("; ");
+}
+
+let userCounter = 0;
+
 /**
  * Creates a Hono app with fresh temp SQLite DB and mocked services.
  *
- * @param config - Optional test configuration with mock services
- * @returns Test app context with app, db, request helper, and cleanup
+ * The database is migrated with the real migrations, auth is the real Better
+ * Auth instance (with a fast password hasher), and one user with one
+ * organization is signed up so most tests can start making VM requests.
  *
  * @example
  * ```typescript
- * const { app, db, request, cleanup, mocks } = await createTestApp();
+ * const { request, organization, cleanup, mocks } = await createTestApp();
  *
  * const res = await request('/api/vms', {
  *   method: 'POST',
- *   body: JSON.stringify({ name: 'test-vm' }),
+ *   body: JSON.stringify({ name: 'test-vm', imageId }),
  * });
  *
  * expect(res.status).toBe(201);
@@ -323,27 +345,108 @@ export async function createTestApp(config: TestAppConfig = {}): Promise<TestApp
   const sqlite = new Database(dbPath);
   const db = drizzle(sqlite, { schema });
 
-  // Run migrations
-  sqlite.exec(MIGRATION_SQL);
+  applyMigrations(sqlite);
 
   // Create mocked services
   const firecracker = config.firecracker ?? createMockFirecrackerService();
   const network = config.network ?? createMockNetworkService();
 
-  // Create a mock user ID for testing
-  const mockUserId = `test-user-${randomUUID()}`;
+  const auth = createAuth({
+    db,
+    baseUrl: TEST_ORIGIN,
+    trustedOrigins: [TEST_ORIGIN],
+    webUrl: "http://localhost:5173",
+    openSignup: config.openSignup ?? false,
+    password: fastPasswordHasher,
+    log: () => {},
+  });
 
   // Create app using the real createApp function with injected dependencies
   const app = createApp({
     db,
+    auth,
     networkService: network as any,
     spawnFirecrackerFn: firecracker.spawnFirecracker as any,
     configureVMProcessFn: firecracker.configureVMProcess as any,
     startVMProcessFn: firecracker.startVMProcess as any,
     stopVMProcessFn: firecracker.stopVMProcess as any,
-    skipAuth: config.skipAuth ?? true,
-    mockUserId,
   });
+
+  const json = (path: string, body: unknown, headers: Record<string, string> = {}) =>
+    app.request(path, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: TEST_ORIGIN, ...headers },
+      body: JSON.stringify(body),
+    });
+
+  const principalFromAuthResponse = async (
+    res: Response,
+    password: string
+  ): Promise<TestPrincipal | null> => {
+    if (!res.ok) return null;
+    const body = (await res.json()) as { user: { id: string; name: string; email: string } };
+    const cookie = cookieHeaderFromResponse(res);
+    return { ...body.user, password, cookie, headers: { cookie, origin: TEST_ORIGIN } };
+  };
+
+  const signUp: TestApp["signUp"] = async (input = {}) => {
+    userCounter += 1;
+    const name = input.name ?? `Test User ${userCounter}`;
+    const email = input.email ?? `user-${userCounter}-${randomUUID().slice(0, 8)}@example.com`;
+    const password = input.password ?? "correct horse battery staple";
+
+    const res = await json("/api/auth/sign-up/email", { name, email, password });
+    const principal = await principalFromAuthResponse(res, password);
+    if (!principal) {
+      const text = await res.text();
+      throw new Error(`Sign-up failed (${res.status}): ${text}`);
+    }
+    return principal;
+  };
+
+  const signIn: TestApp["signIn"] = async (email, password) => {
+    const res = await json("/api/auth/sign-in/email", { email, password });
+    return principalFromAuthResponse(res, password);
+  };
+
+  const createOrganization: TestApp["createOrganization"] = async (who, name) => {
+    const orgName = name ?? `Org ${randomUUID().slice(0, 8)}`;
+    const slug = orgName.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    const res = await json("/api/auth/organization/create", { name: orgName, slug }, who.headers);
+    if (!res.ok) {
+      throw new Error(`Organization creation failed (${res.status}): ${await res.text()}`);
+    }
+    const org = (await res.json()) as TestOrganization;
+    return { id: org.id, name: org.name, slug: org.slug };
+  };
+
+  const createApiKey: TestApp["createApiKey"] = async (who, organizationId, name = "test key") => {
+    const res = await json(
+      "/api/auth/api-key/create",
+      { name, metadata: { organizationId } },
+      who.headers
+    );
+    if (!res.ok) {
+      throw new Error(`API key creation failed (${res.status}): ${await res.text()}`);
+    }
+    const body = (await res.json()) as { key: string };
+    return body.key;
+  };
+
+  // The first user may always sign up; they then get an organization.
+  const user = await signUp();
+  const organization = await createOrganization(user, "Test Org");
+
+  const request: TestApp["request"] = (path, init = {}) => {
+    const headers = new Headers(init.headers);
+    if (!headers.has("cookie") && !headers.has("x-api-key")) {
+      headers.set("cookie", user.cookie);
+    }
+    if (headers.has("cookie") && !headers.has("origin")) {
+      headers.set("origin", TEST_ORIGIN);
+    }
+    return Promise.resolve(app.request(path, { ...init, headers }));
+  };
 
   // Cleanup function
   const cleanup = () => {
@@ -359,9 +462,15 @@ export async function createTestApp(config: TestAppConfig = {}): Promise<TestApp
     app,
     db,
     sqlite,
-    request: app.request.bind(app),
+    auth,
+    request,
     cleanup,
-    mockUserId,
+    user,
+    organization,
+    signUp,
+    signIn,
+    createOrganization,
+    createApiKey,
     mocks: {
       firecracker,
       network,

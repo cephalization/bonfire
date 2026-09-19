@@ -1,8 +1,8 @@
 /**
  * Bonfire SDK Types
  *
- * Auto-generated from OpenAPI specification.
- * Do not edit manually.
+ * Hand-written to match the API. See CLAUDE.md on generating this from
+ * /api/openapi.json.
  */
 
 // ============================================================================
@@ -16,6 +16,10 @@ export interface VM {
   vcpus: number;
   memoryMib: number;
   imageId: string | null;
+  /** Organization that owns the VM. */
+  organizationId: string | null;
+  /** User who created the VM. */
+  createdById: string | null;
   pid: number | null;
   socketPath: string | null;
   tapDevice: string | null;
@@ -30,6 +34,11 @@ export interface CreateVMRequest {
   vcpus?: number;
   memoryMib?: number;
   imageId: string;
+  /**
+   * Organization to create the VM in. Defaults to the organization the API
+   * key was created for.
+   */
+  organizationId?: string;
 }
 
 // ============================================================================

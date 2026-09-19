@@ -4,8 +4,11 @@ import { Button } from "@/components/ui/button";
 import { VMList } from "@/components/VMList";
 import { CreateVMDialog } from "@/components/CreateVMDialog";
 import { listVMs, startVM, stopVM, deleteVM, type VM, BonfireAPIError } from "@/lib/api";
+import { authClient } from "@/lib/auth";
 
 export function Dashboard() {
+  const { data: activeOrg } = authClient.useActiveOrganization();
+  const organizationId = activeOrg?.id;
   const [vms, setVms] = useState<VM[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -15,7 +18,7 @@ export function Dashboard() {
     try {
       setIsLoading(true);
       setError(null);
-      const data = await listVMs();
+      const data = await listVMs(undefined, { organizationId });
       setVms(data);
     } catch (err) {
       const message =
@@ -24,7 +27,7 @@ export function Dashboard() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [organizationId]);
 
   useEffect(() => {
     fetchVMs();

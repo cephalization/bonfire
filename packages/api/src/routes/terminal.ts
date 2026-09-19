@@ -11,10 +11,9 @@
  */
 
 import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
-import { eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type * as schema from "../db/schema";
-import { vms } from "../db/schema";
+import { loadAuthorizedVm } from "../lib/authz";
 import type { TerminalTicketStore } from "../lib/terminal-tickets";
 
 // ==========================================================================
@@ -41,7 +40,8 @@ export const terminalTicketRoute = createRoute({
     "Returns a short-lived, single-use ticket for opening the terminal WebSocket. " +
     "Browsers cannot set an X-API-Key header on a WebSocket handshake, so they " +
     "authenticate this endpoint normally and then pass the ticket as the " +
-    "`ticket` query parameter on the WebSocket URL.",
+    "`ticket` query parameter on the WebSocket URL. The caller must be a member " +
+    "of the VM's organization.",
   request: {
     params: TerminalParamsSchema,
   },
@@ -201,7 +201,7 @@ export function createTerminalRouter(config: TerminalRouterConfig): OpenAPIHono 
 
   app.openapi(terminalTicketRoute, async (c) => {
     const id = c.req.param("id");
-    const [vm] = await db.select().from(vms).where(eq(vms.id, id));
+    const vm = await loadAuthorizedVm(db, c.get("principal"), id);
 
     if (!vm) {
       return c.json({ error: "VM not found" }, 404);
@@ -217,7 +217,7 @@ export function createTerminalRouter(config: TerminalRouterConfig): OpenAPIHono 
 
   app.openapi(terminalRoute, async (c) => {
     const id = c.req.param("id");
-    const [vm] = await db.select().from(vms).where(eq(vms.id, id));
+    const vm = await loadAuthorizedVm(db, c.get("principal"), id);
 
     if (!vm) {
       return c.json({ error: "VM not found" }, 404);

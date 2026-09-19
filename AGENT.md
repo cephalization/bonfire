@@ -16,7 +16,7 @@ Bonfire is a self-hosted platform for ephemeral Firecracker microVMs with a web 
 - **Backend**: Hono (TypeScript)
 - **Frontend**: React + Vite + shadcn/ui + ghostty-web terminal component
 - **Database**: SQLite + Drizzle ORM
-- **Auth**: Shared API key via `X-API-Key` (no user accounts — see CLAUDE.md)
+- **Auth**: Better Auth — email/password sessions, organizations, invitations and per-user API keys (see CLAUDE.md)
 - **VMs**: Firecracker microVMs
 - **Build**: Turborepo monorepo
 
@@ -48,7 +48,7 @@ Services:
 
 - **API**: http://localhost:3000
 - **Web UI**: http://localhost:5173
-- **Default login**: admin@example.com / admin123
+- **First run**: open the web UI, create the first account (open to the first user only), then create an organization
 
 ### Docker Commands
 
@@ -100,9 +100,6 @@ pnpm --filter @bonfire/web exec vitest run packages/web/src/components/Terminal.
 # Run tests matching a pattern
 pnpm -r test -- --testNamePattern "resize"
 
-# Integration tests (requires Docker)
-pnpm run test:int
-
 # E2E tests (requires KVM, Linux only)
 pnpm run test:e2e
 
@@ -112,17 +109,14 @@ pnpm run test:all
 
 ### Test Types
 
-1. **Unit tests** (`*.test.ts`) - Fast, isolated
+1. **Unit tests** (`*.test.ts`) - Fast, hermetic
    - Located next to source files
-   - No external dependencies
-   - Run with: `pnpm -r test`
+   - Route tests use `createTestApp()` from `packages/api/src/test-utils.ts`:
+     a migrated temp database, real auth with a signed-in user and
+     organization, mocked Firecracker and network services
+   - Run with: `pnpm test`
 
-2. **Integration tests** (`*.integration.test.ts`)
-   - Use `createTestApp()` from `packages/api/src/test-utils.ts`
-   - Mock external services (Firecracker, Network)
-   - Run with: `pnpm run test:int`
-
-3. **E2E tests** (`e2e/*.test.ts`)
+2. **E2E tests** (`e2e/*.test.ts`)
    - Full VM lifecycle and browser tests
    - Require Linux with KVM
    - Run with: `pnpm run test:e2e`
@@ -376,12 +370,12 @@ Changes:
 API (packages/api/.env):
 
 ```env
-DB_PATH=/var/lib/bonfire/bonfire.db
-BETTER_AUTH_SECRET=change-me-in-production
-BETTER_AUTH_URL=http://localhost:3000
+DATABASE_URL=/var/lib/bonfire/bonfire.db
+BETTER_AUTH_SECRET=<openssl rand -base64 32>
+BONFIRE_URL=http://localhost:3000
+BONFIRE_OPEN_SIGNUP=false
 PORT=3000
 NODE_ENV=development
-INITIAL_ADMIN_EMAIL=admin@example.com
-INITIAL_ADMIN_PASSWORD=changeme123
-INITIAL_ADMIN_NAME=Admin
 ```
+
+See `.env.example` for the annotated list.

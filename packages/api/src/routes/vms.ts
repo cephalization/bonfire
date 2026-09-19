@@ -2,10 +2,13 @@
  * VMs API Routes
  *
  * REST endpoints for VM management:
- * - GET /api/vms - List all VMs
- * - POST /api/vms - Create VM record
+ * - GET /api/vms - List the VMs of an organization
+ * - POST /api/vms - Create VM record in an organization
  * - GET /api/vms/:id - Get single VM details
  * - DELETE /api/vms/:id - Delete VM record
+ *
+ * Every VM belongs to an organization and every route requires the principal
+ * (set by middleware/auth.ts) to be a member of it. See lib/authz.ts.
  */
 
 import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
@@ -27,6 +30,7 @@ import {
 } from "../services/firecracker/process";
 import type { VMConfiguration } from "../services/firecracker/socket-client";
 import { injectSSHKeys } from "../services/ssh-keys";
+import { loadAuthorizedVm, requireOrganizationAccess } from "../lib/authz";
 
 const execFileAsync = promisify(execFile);
 
@@ -108,6 +112,14 @@ const VMSchema = z
       example: "img-abc123",
       description: "Associated image ID",
     }),
+    organizationId: z.string().nullable().openapi({
+      example: "org-abc123",
+      description: "Organization that owns the VM",
+    }),
+    createdById: z.string().nullable().openapi({
+      example: "user-abc123",
+      description: "User who created the VM",
+    }),
     pid: z.number().nullable().openapi({
       example: 1234,
       description: "Firecracker process PID (when running)",
@@ -157,8 +169,27 @@ const CreateVMRequestSchema = z
       example: "img-abc123",
       description: "Image ID to use for the VM (required)",
     }),
+    organizationId: z.string().optional().openapi({
+      example: "org-abc123",
+      description:
+        "Organization to create the VM in. Defaults to the session's active organization, or the organization the API key was created for.",
+    }),
   })
   .openapi("CreateVMRequest");
+
+const ForbiddenResponseSchema = z
+  .object({
+    error: z.string().openapi({ example: "You are not a member of this organization" }),
+  })
+  .openapi("ForbiddenResponse");
+
+const OrganizationQuerySchema = z.object({
+  organizationId: z.string().optional().openapi({
+    example: "org-abc123",
+    description:
+      "Organization whose VMs to list. Defaults to the session's active organization, or the organization the API key was created for.",
+  }),
+});
 
 const ErrorResponseSchema = z
   .object({
@@ -192,14 +223,33 @@ const listVMsRoute = createRoute({
   method: "get",
   path: "/vms",
   tags: ["VMs"],
-  summary: "List all VMs",
-  description: "Returns all VMs from the database",
+  summary: "List VMs",
+  description: "Returns the VMs of an organization the caller belongs to",
+  request: {
+    query: OrganizationQuerySchema,
+  },
   responses: {
     200: {
       description: "List of VMs",
       content: {
         "application/json": {
           schema: z.array(VMSchema),
+        },
+      },
+    },
+    400: {
+      description: "No organization selected",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+    403: {
+      description: "Not a member of the organization",
+      content: {
+        "application/json": {
+          schema: ForbiddenResponseSchema,
         },
       },
     },
@@ -227,7 +277,8 @@ const createVMRoute = createRoute({
   path: "/vms",
   tags: ["VMs"],
   summary: "Create a new VM",
-  description: "Creates a new VM record with status 'creating'",
+  description:
+    "Creates a new VM record with status 'creating' in an organization the caller belongs to",
   request: {
     body: {
       content: {
@@ -259,6 +310,14 @@ const createVMRoute = createRoute({
       content: {
         "application/json": {
           schema: ErrorResponseSchema,
+        },
+      },
+    },
+    403: {
+      description: "Not a member of the organization",
+      content: {
+        "application/json": {
+          schema: ForbiddenResponseSchema,
         },
       },
     },
@@ -580,11 +639,20 @@ export function createVMsRouter(config: VMsRouterConfig): OpenAPIHono {
     };
   }
 
-  // GET /api/vms - List all VMs
+  // GET /api/vms - List the VMs of an organization
   app.openapi(listVMsRoute, async (c) => {
     try {
-      const allVMs = await db.select().from(vms);
-      return c.json(allVMs.map(serializeVM), 200);
+      const access = await requireOrganizationAccess(
+        db,
+        c.get("principal"),
+        c.req.query("organizationId")
+      );
+      if (!access.ok) {
+        return c.json({ error: access.error }, access.status);
+      }
+
+      const rows = await db.select().from(vms).where(eq(vms.organizationId, access.organizationId));
+      return c.json(rows.map(serializeVM), 200);
     } catch (error) {
       console.error("Failed to list VMs:", error);
       return c.json({ error: "Failed to list VMs" }, 500);
@@ -612,7 +680,22 @@ export function createVMsRouter(config: VMsRouterConfig): OpenAPIHono {
         );
       }
 
-      const { name, vcpus, memoryMib, imageId } = validationResult.data;
+      const { name, vcpus, memoryMib, imageId, organizationId } = validationResult.data;
+
+      const principal = c.get("principal");
+      const access = await requireOrganizationAccess(db, principal, organizationId);
+      if (!access.ok) {
+        if (access.status === 403) {
+          return c.json({ error: access.error }, 403);
+        }
+        return c.json(
+          {
+            error: "Validation failed",
+            details: [{ path: ["organizationId"], message: access.error }],
+          },
+          400
+        );
+      }
 
       // Check if VM with this name already exists
       const existingVM = await db.select().from(vms).where(eq(vms.name, name));
@@ -632,6 +715,8 @@ export function createVMsRouter(config: VMsRouterConfig): OpenAPIHono {
         vcpus: vcpus ?? 1,
         memoryMib: memoryMib ?? 512,
         imageId,
+        organizationId: access.organizationId,
+        createdById: principal.user.id,
         pid: null,
         socketPath: null,
         tapDevice: null,
@@ -656,7 +741,7 @@ export function createVMsRouter(config: VMsRouterConfig): OpenAPIHono {
     try {
       const id = c.req.param("id");
 
-      const [vm] = await db.select().from(vms).where(eq(vms.id, id));
+      const vm = await loadAuthorizedVm(db, c.get("principal"), id);
 
       if (!vm) {
         return c.json({ error: "VM not found" }, 404);
@@ -675,7 +760,7 @@ export function createVMsRouter(config: VMsRouterConfig): OpenAPIHono {
       const id = c.req.param("id");
 
       // Check if VM exists
-      const [vm] = await db.select().from(vms).where(eq(vms.id, id));
+      const vm = await loadAuthorizedVm(db, c.get("principal"), id);
 
       if (!vm) {
         return c.json({ error: "VM not found" }, 404);
@@ -723,7 +808,7 @@ export function createVMsRouter(config: VMsRouterConfig): OpenAPIHono {
       const id = c.req.param("id");
 
       // Get VM from DB
-      const [vm] = await db.select().from(vms).where(eq(vms.id, id));
+      const vm = await loadAuthorizedVm(db, c.get("principal"), id);
 
       if (!vm) {
         return c.json({ error: "VM not found" }, 404);
@@ -848,7 +933,7 @@ export function createVMsRouter(config: VMsRouterConfig): OpenAPIHono {
       const id = c.req.param("id");
 
       // Get VM from DB
-      const [vm] = await db.select().from(vms).where(eq(vms.id, id));
+      const vm = await loadAuthorizedVm(db, c.get("principal"), id);
 
       if (!vm) {
         return c.json({ error: "VM not found" }, 404);
@@ -913,7 +998,7 @@ export function createVMsRouter(config: VMsRouterConfig): OpenAPIHono {
       const id = c.req.param("id");
 
       // Check if VM exists
-      const [vm] = await db.select().from(vms).where(eq(vms.id, id));
+      const vm = await loadAuthorizedVm(db, c.get("principal"), id);
 
       if (!vm) {
         return c.json({ error: "VM not found" }, 404);

@@ -18,14 +18,11 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { BonfireClient } from "@bonfire/sdk";
 import type { VM, Image } from "@bonfire/sdk";
+import { bootstrapE2EAuth } from "./auth-helper";
 
 // Test configuration
 const API_URL = process.env.BONFIRE_API_URL || "http://localhost:3000";
 const TEST_TIMEOUT = 120000; // 120 seconds per test
-
-// Test credentials from docker-compose.test.yml
-const TEST_EMAIL = process.env.TEST_ADMIN_EMAIL || "admin@example.com";
-const TEST_PASSWORD = process.env.TEST_ADMIN_PASSWORD || "admin123";
 
 // Test client (initialized after authentication)
 let client: BonfireClient;
@@ -33,31 +30,6 @@ let client: BonfireClient;
 // Track created resources for cleanup
 const createdVMs: string[] = [];
 let testImage: Image | null = null;
-
-/**
- * Authenticate and get session cookie
- */
-async function authenticate(): Promise<string> {
-  const response = await fetch(`${API_URL}/api/auth/sign-in/email`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: TEST_EMAIL, password: TEST_PASSWORD }),
-  });
-
-  const data = await response.json().catch(() => ({ error: "Unknown error" }));
-
-  if (!response.ok) {
-    const errorMessage = data?.error || response.statusText;
-    throw new Error(`Authentication failed: ${errorMessage}`);
-  }
-
-  // Return the cookie header from the response
-  const cookie = response.headers.get("set-cookie");
-  if (!cookie) {
-    throw new Error("No session cookie received from authentication");
-  }
-  return cookie;
-}
 
 /**
  * Wait for VM to reach a specific status
@@ -86,13 +58,12 @@ async function waitForVMStatus(
 
 describe("VM Lifecycle (E2E)", () => {
   beforeAll(async () => {
-    // Authenticate first
+    // Sign up the e2e user, give them an organization and mint an API key.
     console.log("Authenticating...");
-    const cookie = await authenticate();
+    const auth = await bootstrapE2EAuth(API_URL);
     console.log("Authentication successful");
 
-    // Create client with authentication cookie
-    client = new BonfireClient({ baseUrl: API_URL, cookie });
+    client = new BonfireClient({ baseUrl: API_URL, apiKey: auth.apiKey });
 
     // Check API health
     const health = await client.getHealth();

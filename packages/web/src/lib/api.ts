@@ -46,6 +46,8 @@ export interface VM {
   vcpus: number;
   memoryMib: number;
   imageId: string | null;
+  organizationId: string | null;
+  createdById: string | null;
   pid: number | null;
   socketPath: string | null;
   tapDevice: string | null;
@@ -69,6 +71,8 @@ export interface CreateVMRequest {
   vcpus?: number;
   memoryMib?: number;
   imageId?: string;
+  /** Defaults to the session's active organization. */
+  organizationId?: string;
 }
 
 export interface PullImageRequest {
@@ -109,6 +113,11 @@ export class BonfireAPIError extends Error {
 // API Client configuration
 export interface APIClientConfig {
   baseUrl?: string;
+  /**
+   * An API key to send as `X-API-Key`. The web app itself does not set this:
+   * it is signed in with a session cookie, which the browser attaches because
+   * requests are made with `credentials: "include"`.
+   */
   getAuthToken?: () => string | null;
   onAuthError?: () => void;
 }
@@ -128,13 +137,14 @@ async function apiFetch<T>(
     ...((options.headers as Record<string, string>) || {}),
   };
 
-  // Inject auth token if available
+  // Inject an API key if one was configured
   const token = config.getAuthToken?.();
   if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
+    headers["X-API-Key"] = token;
   }
 
   const fetchOptions: RequestInit = {
+    credentials: "include",
     ...options,
     headers,
   };
@@ -190,8 +200,14 @@ async function apiFetch<T>(
 
 // VM Endpoints
 
-export async function listVMs(config?: APIClientConfig): Promise<VM[]> {
-  return apiFetch<VM[]>("/api/vms", { method: "GET" }, config);
+export async function listVMs(
+  config?: APIClientConfig,
+  options: { organizationId?: string } = {}
+): Promise<VM[]> {
+  const query = options.organizationId
+    ? `?organizationId=${encodeURIComponent(options.organizationId)}`
+    : "";
+  return apiFetch<VM[]>(`/api/vms${query}`, { method: "GET" }, config);
 }
 
 export async function getVM(id: string, config?: APIClientConfig): Promise<VM> {

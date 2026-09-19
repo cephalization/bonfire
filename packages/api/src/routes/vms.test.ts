@@ -12,7 +12,7 @@ import { eq } from "drizzle-orm";
 describe("VM Lifecycle Endpoints", () => {
   describe("POST /api/vms/:id/start", () => {
     it("should start a VM from creating status", async () => {
-      const { app, db, cleanup, mocks } = await createTestApp();
+      const { request, organization, db, cleanup, mocks } = await createTestApp();
 
       // Create an image first
       await db.insert(images).values({
@@ -27,6 +27,7 @@ describe("VM Lifecycle Endpoints", () => {
       // Create a VM in 'creating' status
       await db.insert(vms).values({
         id: "vm-test-001",
+        organizationId: organization.id,
         name: "test-vm",
         status: "creating",
         vcpus: 2,
@@ -41,11 +42,7 @@ describe("VM Lifecycle Endpoints", () => {
         updatedAt: new Date(),
       });
 
-      const req = new Request("http://localhost/api/vms/vm-test-001/start", {
-        method: "POST",
-      });
-
-      const res = await app.fetch(req);
+      const res = await request("/api/vms/vm-test-001/start", { method: "POST" });
 
       expect(res.status).toBe(200);
 
@@ -72,7 +69,7 @@ describe("VM Lifecycle Endpoints", () => {
     });
 
     it("should start a VM from stopped status", async () => {
-      const { app, db, cleanup, mocks } = await createTestApp();
+      const { request, organization, db, cleanup, mocks } = await createTestApp();
 
       // Create an image first
       await db.insert(images).values({
@@ -87,6 +84,7 @@ describe("VM Lifecycle Endpoints", () => {
       // Create a VM in 'stopped' status
       await db.insert(vms).values({
         id: "vm-test-002",
+        organizationId: organization.id,
         name: "test-vm-stopped",
         status: "stopped",
         vcpus: 1,
@@ -101,11 +99,7 @@ describe("VM Lifecycle Endpoints", () => {
         updatedAt: new Date(),
       });
 
-      const req = new Request("http://localhost/api/vms/vm-test-002/start", {
-        method: "POST",
-      });
-
-      const res = await app.fetch(req);
+      const res = await request("/api/vms/vm-test-002/start", { method: "POST" });
 
       expect(res.status).toBe(200);
 
@@ -121,13 +115,9 @@ describe("VM Lifecycle Endpoints", () => {
     });
 
     it("should return 404 if VM not found", async () => {
-      const { app, cleanup } = await createTestApp();
+      const { request, organization, cleanup } = await createTestApp();
 
-      const req = new Request("http://localhost/api/vms/vm-nonexistent/start", {
-        method: "POST",
-      });
-
-      const res = await app.fetch(req);
+      const res = await request("/api/vms/vm-nonexistent/start", { method: "POST" });
 
       expect(res.status).toBe(404);
       const body = await res.json();
@@ -137,7 +127,7 @@ describe("VM Lifecycle Endpoints", () => {
     });
 
     it("should return 400 if VM is already running", async () => {
-      const { app, db, cleanup } = await createTestApp();
+      const { request, organization, db, cleanup } = await createTestApp();
 
       // Create an image first
       await db.insert(images).values({
@@ -152,6 +142,7 @@ describe("VM Lifecycle Endpoints", () => {
       // Create a VM in 'running' status
       await db.insert(vms).values({
         id: "vm-test-003",
+        organizationId: organization.id,
         name: "test-vm-running",
         status: "running",
         vcpus: 2,
@@ -166,11 +157,7 @@ describe("VM Lifecycle Endpoints", () => {
         updatedAt: new Date(),
       });
 
-      const req = new Request("http://localhost/api/vms/vm-test-003/start", {
-        method: "POST",
-      });
-
-      const res = await app.fetch(req);
+      const res = await request("/api/vms/vm-test-003/start", { method: "POST" });
 
       expect(res.status).toBe(400);
       const body = await res.json();
@@ -180,11 +167,12 @@ describe("VM Lifecycle Endpoints", () => {
     });
 
     it("should return 400 if image not found", async () => {
-      const { app, db, cleanup } = await createTestApp();
+      const { request, organization, db, cleanup } = await createTestApp();
 
       // Create a VM without a valid image
       await db.insert(vms).values({
         id: "vm-test-004",
+        organizationId: organization.id,
         name: "test-vm-no-image",
         status: "creating",
         vcpus: 2,
@@ -199,11 +187,7 @@ describe("VM Lifecycle Endpoints", () => {
         updatedAt: new Date(),
       });
 
-      const req = new Request("http://localhost/api/vms/vm-test-004/start", {
-        method: "POST",
-      });
-
-      const res = await app.fetch(req);
+      const res = await request("/api/vms/vm-test-004/start", { method: "POST" });
 
       expect(res.status).toBe(400);
       const body = await res.json();
@@ -254,7 +238,7 @@ describe("VM Lifecycle Endpoints", () => {
         },
       };
 
-      const { app, db, cleanup, mocks } = await createTestApp({
+      const { request, organization, db, cleanup, mocks } = await createTestApp({
         firecracker: failingFirecracker as any,
       });
 
@@ -271,6 +255,7 @@ describe("VM Lifecycle Endpoints", () => {
       // Create a VM
       await db.insert(vms).values({
         id: "vm-test-005",
+        organizationId: organization.id,
         name: "test-vm-fail",
         status: "creating",
         vcpus: 2,
@@ -280,14 +265,10 @@ describe("VM Lifecycle Endpoints", () => {
         updatedAt: new Date(),
       });
 
-      const req = new Request("http://localhost/api/vms/vm-test-005/start", {
-        method: "POST",
-      });
-
       // Suppress expected console.error during test
       const originalError = console.error;
       console.error = () => {};
-      const res = await app.fetch(req);
+      const res = await request("/api/vms/vm-test-005/start", { method: "POST" });
       console.error = originalError;
 
       expect(res.status).toBe(500);
@@ -301,7 +282,7 @@ describe("VM Lifecycle Endpoints", () => {
 
   describe("POST /api/vms/:id/stop", () => {
     it("should stop a running VM", async () => {
-      const { app, db, cleanup, mocks } = await createTestApp();
+      const { request, organization, db, cleanup, mocks } = await createTestApp();
 
       // Create an image
       await db.insert(images).values({
@@ -316,6 +297,7 @@ describe("VM Lifecycle Endpoints", () => {
       // Create a running VM
       await db.insert(vms).values({
         id: "vm-test-006",
+        organizationId: organization.id,
         name: "test-vm-stop",
         status: "running",
         vcpus: 2,
@@ -330,11 +312,7 @@ describe("VM Lifecycle Endpoints", () => {
         updatedAt: new Date(),
       });
 
-      const req = new Request("http://localhost/api/vms/vm-test-006/stop", {
-        method: "POST",
-      });
-
-      const res = await app.fetch(req);
+      const res = await request("/api/vms/vm-test-006/stop", { method: "POST" });
 
       expect(res.status).toBe(200);
 
@@ -360,13 +338,9 @@ describe("VM Lifecycle Endpoints", () => {
     });
 
     it("should return 404 if VM not found", async () => {
-      const { app, cleanup } = await createTestApp();
+      const { request, organization, cleanup } = await createTestApp();
 
-      const req = new Request("http://localhost/api/vms/vm-nonexistent/stop", {
-        method: "POST",
-      });
-
-      const res = await app.fetch(req);
+      const res = await request("/api/vms/vm-nonexistent/stop", { method: "POST" });
 
       expect(res.status).toBe(404);
       const body = await res.json();
@@ -376,7 +350,7 @@ describe("VM Lifecycle Endpoints", () => {
     });
 
     it("should return 400 if VM is not running", async () => {
-      const { app, db, cleanup } = await createTestApp();
+      const { request, organization, db, cleanup } = await createTestApp();
 
       // Create an image
       await db.insert(images).values({
@@ -391,6 +365,7 @@ describe("VM Lifecycle Endpoints", () => {
       // Create a stopped VM
       await db.insert(vms).values({
         id: "vm-test-007",
+        organizationId: organization.id,
         name: "test-vm-stopped",
         status: "stopped",
         vcpus: 1,
@@ -405,11 +380,7 @@ describe("VM Lifecycle Endpoints", () => {
         updatedAt: new Date(),
       });
 
-      const req = new Request("http://localhost/api/vms/vm-test-007/stop", {
-        method: "POST",
-      });
-
-      const res = await app.fetch(req);
+      const res = await request("/api/vms/vm-test-007/stop", { method: "POST" });
 
       expect(res.status).toBe(400);
       const body = await res.json();
@@ -419,7 +390,7 @@ describe("VM Lifecycle Endpoints", () => {
     });
 
     it("should return 500 if VM is missing runtime information", async () => {
-      const { app, db, cleanup } = await createTestApp();
+      const { request, organization, db, cleanup } = await createTestApp();
 
       // Create an image
       await db.insert(images).values({
@@ -434,6 +405,7 @@ describe("VM Lifecycle Endpoints", () => {
       // Create a running VM without proper runtime info
       await db.insert(vms).values({
         id: "vm-test-008",
+        organizationId: organization.id,
         name: "test-vm-missing-info",
         status: "running",
         vcpus: 2,
@@ -448,11 +420,7 @@ describe("VM Lifecycle Endpoints", () => {
         updatedAt: new Date(),
       });
 
-      const req = new Request("http://localhost/api/vms/vm-test-008/stop", {
-        method: "POST",
-      });
-
-      const res = await app.fetch(req);
+      const res = await request("/api/vms/vm-test-008/stop", { method: "POST" });
 
       expect(res.status).toBe(500);
       const body = await res.json();
@@ -462,7 +430,7 @@ describe("VM Lifecycle Endpoints", () => {
     });
 
     it("should transition from running to stopped correctly", async () => {
-      const { app, db, cleanup } = await createTestApp();
+      const { request, organization, db, cleanup } = await createTestApp();
 
       // Create an image
       await db.insert(images).values({
@@ -477,6 +445,7 @@ describe("VM Lifecycle Endpoints", () => {
       // Create a running VM
       await db.insert(vms).values({
         id: "vm-test-009",
+        organizationId: organization.id,
         name: "test-vm-transition",
         status: "running",
         vcpus: 4,
@@ -492,11 +461,7 @@ describe("VM Lifecycle Endpoints", () => {
       });
 
       // Stop the VM
-      const stopReq = new Request("http://localhost/api/vms/vm-test-009/stop", {
-        method: "POST",
-      });
-
-      const stopRes = await app.fetch(stopReq);
+      const stopRes = await request("/api/vms/vm-test-009/stop", { method: "POST" });
       expect(stopRes.status).toBe(200);
 
       const stopBody = await stopRes.json();
@@ -517,7 +482,7 @@ describe("VM Lifecycle Endpoints", () => {
 
   describe("VM Lifecycle Transitions", () => {
     it("should handle full lifecycle: create -> start -> stop", async () => {
-      const { app, db, cleanup, mocks } = await createTestApp();
+      const { request, organization, db, cleanup, mocks } = await createTestApp();
 
       // Create an image
       await db.insert(images).values({
@@ -532,6 +497,7 @@ describe("VM Lifecycle Endpoints", () => {
       // Create a VM
       await db.insert(vms).values({
         id: "vm-test-010",
+        organizationId: organization.id,
         name: "test-lifecycle-vm",
         status: "creating",
         vcpus: 2,
@@ -542,18 +508,14 @@ describe("VM Lifecycle Endpoints", () => {
       });
 
       // 1. Start the VM
-      const startReq = new Request("http://localhost/api/vms/vm-test-010/start", {
-        method: "POST",
-      });
-      const startRes = await app.fetch(startReq);
+      const startRes = await request("/api/vms/vm-test-010/start", { method: "POST" });
 
       expect(startRes.status).toBe(200);
       const startBody = await startRes.json();
       expect(startBody.status).toBe("running");
 
       // 2. Stop the VM
-      const stopReq = new Request("http://localhost/api/vms/vm-test-010/stop", { method: "POST" });
-      const stopRes = await app.fetch(stopReq);
+      const stopRes = await request("/api/vms/vm-test-010/stop", { method: "POST" });
 
       expect(stopRes.status).toBe(200);
       const stopBody = await stopRes.json();
@@ -563,10 +525,7 @@ describe("VM Lifecycle Endpoints", () => {
       mocks.firecracker.clearCalls();
       mocks.network.clearCalls();
 
-      const restartReq = new Request("http://localhost/api/vms/vm-test-010/start", {
-        method: "POST",
-      });
-      const restartRes = await app.fetch(restartReq);
+      const restartRes = await request("/api/vms/vm-test-010/start", { method: "POST" });
 
       expect(restartRes.status).toBe(200);
       const restartBody = await restartRes.json();
@@ -577,6 +536,237 @@ describe("VM Lifecycle Endpoints", () => {
       expect(mocks.network.calls.allocate).toHaveLength(1);
 
       cleanup();
+    });
+  });
+});
+
+describe("VM CRUD endpoints", () => {
+  const seedImage = async (testApp: Awaited<ReturnType<typeof createTestApp>>) => {
+    await testApp.db.insert(images).values({
+      id: "test-image-1",
+      reference: "test:image",
+      kernelPath: "/kernel",
+      rootfsPath: "/rootfs",
+      sizeBytes: 1,
+      pulledAt: new Date(),
+    });
+    return "test-image-1";
+  };
+
+  const postJson = (body: unknown) => ({
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  describe("GET /api/vms", () => {
+    it("returns an empty array when the organization has no VMs", async () => {
+      const { request, cleanup } = await createTestApp();
+
+      const res = await request("/api/vms");
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual([]);
+
+      cleanup();
+    });
+
+    it("returns the organization's VMs", async () => {
+      const testApp = await createTestApp();
+      const { request, organization, db, cleanup } = testApp;
+      const imageId = await seedImage(testApp);
+      const now = new Date();
+      await db.insert(vms).values([
+        {
+          id: "vm-1",
+          name: "vm-one",
+          status: "stopped",
+          organizationId: organization.id,
+          imageId,
+          createdAt: now,
+          updatedAt: now,
+        },
+        {
+          id: "vm-2",
+          name: "vm-two",
+          status: "running",
+          organizationId: organization.id,
+          imageId,
+          createdAt: now,
+          updatedAt: now,
+        },
+      ]);
+
+      const res = await request("/api/vms");
+      const body = await res.json();
+      expect(body.map((vm: { name: string }) => vm.name)).toEqual(["vm-one", "vm-two"]);
+
+      cleanup();
+    });
+  });
+
+  describe("POST /api/vms", () => {
+    it("creates a VM with default values", async () => {
+      const testApp = await createTestApp();
+      const imageId = await seedImage(testApp);
+
+      const res = await testApp.request("/api/vms", postJson({ name: "test-vm", imageId }));
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body).toMatchObject({
+        name: "test-vm",
+        status: "creating",
+        vcpus: 1,
+        memoryMib: 512,
+        imageId,
+      });
+      expect(typeof body.id).toBe("string");
+
+      testApp.cleanup();
+    });
+
+    it("creates a VM with custom values", async () => {
+      const testApp = await createTestApp();
+      const imageId = await seedImage(testApp);
+
+      const res = await testApp.request(
+        "/api/vms",
+        postJson({ name: "custom-vm", vcpus: 4, memoryMib: 2048, imageId })
+      );
+      expect(res.status).toBe(201);
+      expect(await res.json()).toMatchObject({ name: "custom-vm", vcpus: 4, memoryMib: 2048 });
+
+      testApp.cleanup();
+    });
+
+    it.each([
+      ["missing name", { imageId: "test-image-1" }],
+      ["missing imageId", { name: "test-vm" }],
+      ["vcpus below minimum", { name: "test-vm", imageId: "test-image-1", vcpus: 0 }],
+      ["memory below minimum", { name: "test-vm", imageId: "test-image-1", memoryMib: 64 }],
+    ])("returns 400 for %s", async (_label, body) => {
+      const testApp = await createTestApp();
+      await seedImage(testApp);
+
+      const res = await testApp.request("/api/vms", postJson(body));
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toBeDefined();
+
+      testApp.cleanup();
+    });
+
+    it("returns 409 for a duplicate name", async () => {
+      const testApp = await createTestApp();
+      const imageId = await seedImage(testApp);
+
+      await testApp.request("/api/vms", postJson({ name: "duplicate-vm", imageId }));
+      const res = await testApp.request("/api/vms", postJson({ name: "duplicate-vm", imageId }));
+      expect(res.status).toBe(409);
+      expect((await res.json()).error).toContain("already exists");
+
+      testApp.cleanup();
+    });
+  });
+
+  describe("GET /api/vms/:id", () => {
+    it("returns VM details", async () => {
+      const testApp = await createTestApp();
+      const imageId = await seedImage(testApp);
+      await testApp.db.insert(vms).values({
+        id: "vm-detail-test",
+        name: "detail-vm",
+        status: "stopped",
+        organizationId: testApp.organization.id,
+        imageId,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      const res = await testApp.request("/api/vms/vm-detail-test");
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ id: "vm-detail-test", name: "detail-vm" });
+
+      testApp.cleanup();
+    });
+
+    it("returns 404 for an unknown VM", async () => {
+      const testApp = await createTestApp();
+
+      const res = await testApp.request("/api/vms/non-existent-id");
+      expect(res.status).toBe(404);
+
+      testApp.cleanup();
+    });
+  });
+
+  describe("DELETE /api/vms/:id", () => {
+    const insertVm = async (
+      testApp: Awaited<ReturnType<typeof createTestApp>>,
+      overrides: Partial<typeof vms.$inferInsert> & { id: string; name: string }
+    ) => {
+      await testApp.db.insert(vms).values({
+        status: "stopped",
+        organizationId: testApp.organization.id,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        ...overrides,
+      });
+    };
+
+    it("deletes a stopped VM", async () => {
+      const testApp = await createTestApp();
+      await insertVm(testApp, { id: "vm-to-delete", name: "delete-me" });
+
+      const res = await testApp.request("/api/vms/vm-to-delete", { method: "DELETE" });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ success: true });
+      expect(await testApp.db.select().from(vms).where(eq(vms.id, "vm-to-delete"))).toHaveLength(0);
+
+      testApp.cleanup();
+    });
+
+    it("releases network resources on delete", async () => {
+      const testApp = await createTestApp();
+      await insertVm(testApp, {
+        id: "vm-with-network",
+        name: "network-vm",
+        tapDevice: "tap-test",
+        ipAddress: "192.168.100.10",
+      });
+
+      await testApp.request("/api/vms/vm-with-network", { method: "DELETE" });
+
+      expect(testApp.mocks.network.calls.release).toEqual([
+        [{ tapDevice: "tap-test", ipAddress: "192.168.100.10" }],
+      ]);
+
+      testApp.cleanup();
+    });
+
+    it("refuses to delete a running VM", async () => {
+      const testApp = await createTestApp();
+      await insertVm(testApp, {
+        id: "vm-running",
+        name: "running-vm",
+        status: "running",
+        pid: 1234,
+      });
+
+      const res = await testApp.request("/api/vms/vm-running", { method: "DELETE" });
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toContain("running");
+      expect(await testApp.db.select().from(vms).where(eq(vms.id, "vm-running"))).toHaveLength(1);
+
+      testApp.cleanup();
+    });
+
+    it.each(["creating", "error"] as const)("deletes a VM in '%s' status", async (status) => {
+      const testApp = await createTestApp();
+      await insertVm(testApp, { id: `vm-${status}`, name: `${status}-vm`, status });
+
+      const res = await testApp.request(`/api/vms/vm-${status}`, { method: "DELETE" });
+      expect(res.status).toBe(200);
+
+      testApp.cleanup();
     });
   });
 });

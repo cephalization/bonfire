@@ -20,11 +20,14 @@ import type {
   startVMProcess,
   stopVMProcess,
 } from "./services/firecracker/process";
-import { apiKeyAuth, skipAuth } from "./middleware/auth";
+import { createAuthMiddleware } from "./middleware/auth";
+import { createAuth, type Auth } from "./lib/auth";
 import { serve } from "@hono/node-server";
+import { cors } from "hono/cors";
 import { fileURLToPath } from "url";
 import { attachTerminalWebSocketServer } from "./ws/terminal";
 import { startVmWatchdog } from "./services/vm-watchdog";
+import { bootstrapDefaultImage } from "./services/images";
 import { createTerminalTicketStore, type TerminalTicketStore } from "./lib/terminal-tickets";
 
 export const API_VERSION = config.apiVersion;
@@ -88,9 +91,9 @@ export interface AppConfig {
   configureVMProcessFn?: typeof configureVMProcess;
   startVMProcessFn?: typeof startVMProcess;
   stopVMProcessFn?: typeof stopVMProcess;
-  skipAuth?: boolean;
-  mockUserId?: string;
   ticketStore?: TerminalTicketStore;
+  /** Injected by tests; otherwise built from `config` for the app's database. */
+  auth?: Auth;
 }
 
 /**
@@ -136,23 +139,36 @@ export function createApp(appConfig: AppConfig = {}) {
   // Without either, the app still serves /health and the OpenAPI document.
   const db = appConfig.db ?? createDefaultDatabase();
 
+  // Set once the database is known; null means only /health and the OpenAPI
+  // document are served.
+  let auth: Auth | null = null;
+
   if (db) {
     const networkService = appConfig.networkService ?? new NetworkService();
+    auth = appConfig.auth ?? createAuth({ db });
 
-    // Choose auth middleware based on configuration
-    const authMiddleware = appConfig.skipAuth ? skipAuth() : apiKeyAuth();
+    // Browsers send the session cookie, so cross-origin callers (the Vite dev
+    // server) need credentialed CORS. Same-origin deployments are unaffected.
+    app.use(
+      "/api/*",
+      cors({
+        origin: config.trustedOrigins,
+        credentials: true,
+        allowHeaders: ["Content-Type", "X-API-Key"],
+        allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+      })
+    );
 
-    // Apply auth middleware to protected routes
-    app.use("/api/images/*", async (c, next) => {
-      // Dev DX: allow registering a local agent image without requiring auth.
-      // This endpoint only registers paths that must already exist on disk.
-      const url = new URL(c.req.url);
-      if (process.env.NODE_ENV === "development" && url.pathname === "/api/images/local") {
-        return next();
-      }
-      return authMiddleware(c, next);
-    });
-    app.use("/api/vms/*", authMiddleware);
+    // Better Auth owns everything under /api/auth: sign-up, sign-in, sessions,
+    // organizations, invitations and API keys.
+    app.on(["GET", "POST"], "/api/auth/*", (c) => auth!.handler(c.req.raw));
+
+    // Everything else needs a principal: a session cookie or an X-API-Key.
+    const requireAuth = createAuthMiddleware({ auth, db });
+    app.use("/api/images", requireAuth);
+    app.use("/api/images/*", requireAuth);
+    app.use("/api/vms", requireAuth);
+    app.use("/api/vms/*", requireAuth);
 
     app.route("/api", createImagesRouter({ db }));
     app.route(
@@ -169,19 +185,18 @@ export function createApp(appConfig: AppConfig = {}) {
     app.route("/api", createTerminalRouter({ db, ticketStore }));
   }
 
-  return Object.assign(app, { ticketStore });
+  return Object.assign(app, { ticketStore, auth });
 }
-
-export const app = createApp();
 
 // Start server if this file is run directly
 if (process.argv[1] && process.argv[1] === fileURLToPath(import.meta.url)) {
   console.log(`🚀 Bonfire API v${API_VERSION} starting on port ${config.port}...`);
 
-  // Create DB connection
   const dbPath = process.env.DATABASE_URL || DEFAULT_DB_PATH;
   const sqlite = new Database(dbPath);
   const db = drizzle(sqlite, { schema });
+
+  const app = createApp({ db });
 
   const server = serve({
     port: config.port,
@@ -190,6 +205,7 @@ if (process.argv[1] && process.argv[1] === fileURLToPath(import.meta.url)) {
 
   attachTerminalWebSocketServer(server as any, {
     db,
+    auth: app.auth!,
     ticketStore: app.ticketStore,
   });
 
@@ -202,5 +218,13 @@ if (process.argv[1] && process.argv[1] === fileURLToPath(import.meta.url)) {
     intervalMs: 20_000,
   });
 
+  // The Docker image ships a default agent image; register it if present.
+  void bootstrapDefaultImage(db)
+    .then((image) => {
+      if (image) console.log(`🖼️  Default image registered: ${image.reference}`);
+    })
+    .catch((error) => console.warn("Failed to register the default image:", error));
+
   console.log(`✅ Server running at http://localhost:${config.port}`);
+  console.log(`   Sign in at ${config.webUrl}`);
 }

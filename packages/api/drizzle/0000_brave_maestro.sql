@@ -1,4 +1,4 @@
-CREATE TABLE `images` (
+CREATE TABLE IF NOT EXISTS `images` (
 	`id` text PRIMARY KEY NOT NULL,
 	`reference` text NOT NULL,
 	`kernel_path` text NOT NULL,
@@ -7,8 +7,8 @@ CREATE TABLE `images` (
 	`pulled_at` integer NOT NULL
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `images_reference_unique` ON `images` (`reference`);--> statement-breakpoint
-CREATE TABLE `vms` (
+CREATE UNIQUE INDEX IF NOT EXISTS `images_reference_unique` ON `images` (`reference`);--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `vms` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,
 	`status` text DEFAULT 'creating' NOT NULL,
@@ -25,4 +25,4 @@ CREATE TABLE `vms` (
 	FOREIGN KEY (`image_id`) REFERENCES `images`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `vms_name_unique` ON `vms` (`name`);
+CREATE UNIQUE INDEX IF NOT EXISTS `vms_name_unique` ON `vms` (`name`);

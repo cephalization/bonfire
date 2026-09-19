@@ -28,6 +28,8 @@ vi.mock("@/lib/api", async () => {
           vcpus: 2,
           memoryMib: 1024,
           imageId: "img-1",
+          organizationId: "org-1",
+          createdById: "user-1",
           pid: null,
           socketPath: null,
           tapDevice: null,

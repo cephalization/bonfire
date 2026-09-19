@@ -48,7 +48,7 @@ describe("API Client Error Handling", () => {
   });
 
   describe("apiFetch base wrapper", () => {
-    it("injects authorization header when token is available", async () => {
+    it("sends a configured API key as X-API-Key", async () => {
       mockFetch.mockImplementation(() =>
         Promise.resolve(new Response(JSON.stringify([]), { status: 200 }))
       );
@@ -60,10 +60,10 @@ describe("API Client Error Handling", () => {
         { headers: Record<string, string> },
       ][];
       expect(calls.length).toBeGreaterThan(0);
-      expect(calls[0][1].headers["Authorization"]).toBe("Bearer test-token");
+      expect(calls[0][1].headers["X-API-Key"]).toBe("test-token");
     });
 
-    it("does not inject auth header when token is null", async () => {
+    it("sends no API key header when none is configured, relying on the session cookie", async () => {
       mockFetch.mockImplementation(() =>
         Promise.resolve(new Response(JSON.stringify([]), { status: 200 }))
       );
@@ -80,7 +80,8 @@ describe("API Client Error Handling", () => {
         { headers: Record<string, string> },
       ][];
       expect(calls.length).toBeGreaterThan(0);
-      expect(calls[0][1].headers["Authorization"]).toBeUndefined();
+      expect(calls[0][1].headers["X-API-Key"]).toBeUndefined();
+      expect((calls[0][1] as { credentials?: string }).credentials).toBe("include");
     });
 
     it("throws BonfireAPIError with NETWORK_ERROR for fetch failures", async () => {
@@ -197,6 +198,8 @@ describe("API Client Error Handling", () => {
           vcpus: 2,
           memoryMib: 1024,
           imageId: "img-1",
+          organizationId: "org-1",
+          createdById: "user-1",
           pid: null,
           socketPath: null,
           tapDevice: null,
@@ -227,6 +230,8 @@ describe("API Client Error Handling", () => {
         vcpus: 2,
         memoryMib: 1024,
         imageId: null,
+        organizationId: "org-1",
+        createdById: "user-1",
         pid: 12345,
         socketPath: "/tmp/test.sock",
         tapDevice: "tap0",
@@ -256,6 +261,8 @@ describe("API Client Error Handling", () => {
         vcpus: 1,
         memoryMib: 512,
         imageId: "default-img",
+        organizationId: "org-1",
+        createdById: "user-1",
         pid: null,
         socketPath: null,
         tapDevice: null,
@@ -286,6 +293,8 @@ describe("API Client Error Handling", () => {
         vcpus: 2,
         memoryMib: 1024,
         imageId: "img-1",
+        organizationId: "org-1",
+        createdById: "user-1",
         pid: 12345,
         socketPath: "/tmp/test.sock",
         tapDevice: "tap0",
@@ -314,6 +323,8 @@ describe("API Client Error Handling", () => {
         vcpus: 2,
         memoryMib: 1024,
         imageId: "img-1",
+        organizationId: "org-1",
+        createdById: "user-1",
         pid: null,
         socketPath: null,
         tapDevice: null,
@@ -407,6 +418,8 @@ describe("API Client Error Handling", () => {
           vcpus: 2,
           memoryMib: 1024,
           imageId: null,
+          organizationId: "org-1",
+          createdById: "user-1",
           pid: null,
           socketPath: null,
           tapDevice: null,
@@ -435,6 +448,8 @@ describe("API Client Error Handling", () => {
           vcpus: 2,
           memoryMib: 1024,
           imageId: null,
+          organizationId: "org-1",
+          createdById: "user-1",
           pid: null,
           socketPath: null,
           tapDevice: null,

@@ -4,4 +4,4 @@
 services:
   api:
     environment:
-      BONFIRE_API_KEY: ${BONFIRE_API_KEY:?set BONFIRE_API_KEY (openssl rand -base64 32)}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET (openssl rand -base64 32)}

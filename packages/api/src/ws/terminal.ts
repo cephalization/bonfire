@@ -4,8 +4,10 @@ import { eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type * as schema from "../db/schema";
 import { vms } from "../db/schema";
-import { config as appConfig } from "../lib/config";
 import { parseResizeMessage } from "../routes/terminal";
+import { findMembership } from "../lib/authz";
+import { resolvePrincipal, type Principal } from "../middleware/auth";
+import type { Auth } from "../lib/auth";
 import { loadPrivateKey } from "../services/ssh-keys";
 import {
   sshService as defaultSSHService,
@@ -25,6 +27,7 @@ type PrivateKeyLoader = (vmId: string) => Promise<string | null>;
 
 export type TerminalWsConfig = {
   db: BetterSQLite3Database<typeof schema>;
+  auth: Auth;
   ticketStore: TerminalTicketStore;
   /** Injected so tests can drive the bridge without a VM. */
   sshService?: SSHService;
@@ -50,30 +53,40 @@ function headersFromNodeRequest(req: IncomingMessage): Headers {
   return headers;
 }
 
+export type UpgradeAuthenticator = {
+  ticketStore: TerminalTicketStore;
+  /** Resolves a principal from the handshake headers (cookie or X-API-Key). */
+  resolvePrincipalFn: (headers: Headers) => Promise<Principal | null>;
+  /** Whether that principal belongs to the VM's organization. */
+  isMemberFn: (userId: string, organizationId: string) => Promise<boolean>;
+};
+
 /**
- * Authenticate a WebSocket upgrade.
+ * Authenticate a WebSocket upgrade for a VM.
  *
- * Two accepted forms: the `X-API-Key` header, for clients that can set headers
- * (CLI, tests, server-to-server), and a single-use `ticket` query parameter,
- * for browsers, which cannot. See lib/terminal-tickets.ts.
+ * Two accepted forms: a single-use `ticket` query parameter, minted by an
+ * already-authorized POST (see lib/terminal-tickets.ts), or ordinary request
+ * credentials, an X-API-Key header or the session cookie, in which case the
+ * principal must be a member of the VM's organization. Browsers use tickets
+ * because they cannot set headers on a handshake and may be cross-origin.
  */
-export function authenticateUpgrade(
+export async function authenticateUpgrade(
   url: URL,
   headers: Headers,
-  vmId: string,
-  ticketStore: TerminalTicketStore
-): boolean {
-  const apiKey = headers.get("X-API-Key");
-  if (apiKey) {
-    return apiKey === appConfig.apiKey;
-  }
-
+  vm: { id: string; organizationId: string | null },
+  authenticator: UpgradeAuthenticator
+): Promise<boolean> {
   const ticket = url.searchParams.get("ticket");
   if (ticket) {
-    return ticketStore.redeem(ticket, vmId);
+    return authenticator.ticketStore.redeem(ticket, vm.id);
   }
 
-  return false;
+  if (!vm.organizationId) return false;
+
+  const principal = await authenticator.resolvePrincipalFn(headers);
+  if (!principal) return false;
+
+  return authenticator.isMemberFn(principal.user.id, vm.organizationId);
 }
 
 /**
@@ -208,23 +221,30 @@ export function attachTerminalWebSocketServer(server: Server, wsConfig: Terminal
     });
   };
 
+  const authenticator: UpgradeAuthenticator = {
+    ticketStore: wsConfig.ticketStore,
+    resolvePrincipalFn: (headers) =>
+      resolvePrincipal({ auth: wsConfig.auth, db: wsConfig.db }, headers),
+    isMemberFn: async (userId, organizationId) =>
+      (await findMembership(wsConfig.db, userId, organizationId)) !== null,
+  };
+
   server.on("upgrade", (req, socket: any, head) => {
     (async () => {
       const url = new URL(req.url ?? "/", "http://localhost");
       const vmId = extractVmIdFromPath(url.pathname);
       if (!vmId) return; // Not ours
 
+      const [vm] = await wsConfig.db.select().from(vms).where(eq(vms.id, vmId));
+
+      // Authenticate before revealing whether the VM exists.
       const headers = headersFromNodeRequest(req);
-      if (!authenticateUpgrade(url, headers, vmId, wsConfig.ticketStore)) {
-        rejectWith(req, socket, head, "Unauthorized - valid API key or ticket required");
+      const authorized = vm && (await authenticateUpgrade(url, headers, vm, authenticator));
+      if (!authorized) {
+        rejectWith(req, socket, head, "Unauthorized - valid ticket, session or API key required");
         return;
       }
 
-      const [vm] = await wsConfig.db.select().from(vms).where(eq(vms.id, vmId));
-      if (!vm) {
-        rejectWith(req, socket, head, "VM not found");
-        return;
-      }
       if (vm.status !== "running") {
         rejectWith(req, socket, head, `VM is not running. Current status: '${vm.status}'`);
         return;

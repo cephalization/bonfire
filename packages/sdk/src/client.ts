@@ -1,24 +1,36 @@
 /**
  * Bonfire SDK Client
  *
- * Auto-generated from OpenAPI specification.
- * Do not edit manually.
+ * Hand-written to match the API. See CLAUDE.md on generating this from
+ * /api/openapi.json.
  */
 
 import type { HealthResponse, VM, CreateVMRequest, Image, SuccessResponse } from "./types";
 
 export interface ClientConfig {
   baseUrl?: string;
-  apiKey?: string; // API key for authentication (X-API-Key header)
+  /**
+   * API key sent as the `X-API-Key` header. Create one in the web UI under
+   * Settings → API keys; it acts as you, in the organization it was created
+   * for.
+   */
+  apiKey?: string;
+  /**
+   * Organization to act in, for calls that need one (listing and creating
+   * VMs). Defaults to the organization the API key was created for.
+   */
+  organizationId?: string;
 }
 
 export class BonfireClient {
   private baseUrl: string;
   private apiKey?: string;
+  private organizationId?: string;
 
   constructor(config: ClientConfig = {}) {
     this.baseUrl = config.baseUrl || "http://localhost:3000";
     this.apiKey = config.apiKey;
+    this.organizationId = config.organizationId;
   }
 
   private async request<T>(
@@ -73,11 +85,14 @@ export class BonfireClient {
   // ============================================================================
 
   /**
-   * List all VMs
-   * Returns all VMs from the database
+   * List VMs
+   * Returns the VMs of the organization the client acts in
    */
-  async listVMs(): Promise<VM[]> {
-    return this.request<VM[]>("GET", "/api/vms");
+  async listVMs(options: { organizationId?: string } = {}): Promise<VM[]> {
+    const organizationId = options.organizationId ?? this.organizationId;
+    return this.request<VM[]>("GET", "/api/vms", {
+      params: organizationId ? { organizationId } : undefined,
+    });
   }
 
   /**
@@ -90,10 +105,14 @@ export class BonfireClient {
 
   /**
    * Create a new VM
-   * Creates a new VM record with status 'creating'
+   * Creates a new VM record with status 'creating' in the organization the client acts in
    */
   async createVM(request: CreateVMRequest): Promise<VM> {
-    return this.request<VM>("POST", "/api/vms", { body: request });
+    const body: CreateVMRequest = {
+      ...request,
+      organizationId: request.organizationId ?? this.organizationId,
+    };
+    return this.request<VM>("POST", "/api/vms", { body });
   }
 
   /**
