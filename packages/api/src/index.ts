@@ -40,6 +40,7 @@ import { attachTerminalWebSocketServer } from "./ws/terminal";
 import { startVmWatchdog } from "./services/vm-watchdog";
 import { bootstrapDefaultImage } from "./services/images";
 import { createTerminalTicketStore, type TerminalTicketStore } from "./lib/terminal-tickets";
+import { mountWebApp } from "./lib/web-assets";
 
 export const API_VERSION = config.apiVersion;
 
@@ -229,6 +230,10 @@ export function createApp(appConfig: AppConfig = {}) {
       createConversationsRouter({ db, events: conversationEvents, agents: agentManager })
     );
   }
+
+  // Last, so every API route above answers before a request can fall through
+  // to the static build.
+  if (config.webRoot) mountWebApp(app, config.webRoot);
 
   return Object.assign(app, { ticketStore, auth, agentManager, conversationEvents });
 }

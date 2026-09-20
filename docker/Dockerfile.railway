@@ -1,0 +1,95 @@
+# syntax=docker/dockerfile:1.7
+#
+# Single-container image for a managed host (Railway).
+#
+# Unlike docker/Dockerfile.api this image carries no Firecracker and no
+# container networking: a managed host has no /dev/kvm, so VMs cannot run
+# there. It serves the API and the built web app from one process on $PORT,
+# which keeps the app on one origin and needs no nginx.
+#
+# The SQLite database belongs on a mounted volume; see docs/RAILWAY.md.
+
+FROM node:24-bookworm AS pruner
+
+WORKDIR /repo
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+
+RUN corepack enable \
+  && corepack prepare pnpm@10.0.0 --activate
+
+COPY . .
+
+# One pruned monorepo holding both workspaces this image builds.
+RUN pnpm dlx turbo@2.8.0 prune @bonfire/api @bonfire/web --docker
+
+
+FROM node:24-bookworm AS builder
+
+WORKDIR /app
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+
+RUN corepack enable \
+  && corepack prepare pnpm@10.0.0 --activate \
+  && pnpm config set store-dir /pnpm/store
+
+# Install deps (cacheable)
+COPY --from=pruner /repo/out/json/ ./
+COPY --from=pruner /repo/out/pnpm-lock.yaml ./pnpm-lock.yaml
+COPY --from=pruner /repo/out/pnpm-workspace.yaml ./pnpm-workspace.yaml
+
+RUN pnpm install --frozen-lockfile
+
+COPY --from=pruner /repo/out/full/ ./
+COPY --from=pruner /repo/tsconfig.json ./tsconfig.json
+
+RUN pnpm --filter @bonfire/api build \
+  && pnpm --filter @bonfire/web build
+
+
+FROM node:24-bookworm AS prod-deps
+
+WORKDIR /app
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+ENV NODE_ENV=production
+
+RUN corepack enable \
+  && corepack prepare pnpm@10.0.0 --activate \
+  && pnpm config set store-dir /pnpm/store
+
+COPY --from=pruner /repo/out/json/ ./
+COPY --from=pruner /repo/out/pnpm-lock.yaml ./pnpm-lock.yaml
+COPY --from=pruner /repo/out/pnpm-workspace.yaml ./pnpm-workspace.yaml
+
+# Scripts stay enabled so better-sqlite3 builds its native binding.
+RUN pnpm install --prod --frozen-lockfile --filter @bonfire/api...
+
+
+FROM node:24-bookworm-slim AS runtime
+
+WORKDIR /app
+ENV NODE_ENV=production
+# Relative to WORKDIR; the static handler resolves relative roots only.
+ENV BONFIRE_WEB_ROOT=./public
+ENV DATABASE_URL=/var/lib/bonfire/bonfire.db
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    tini \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY --from=prod-deps /app/node_modules /app/node_modules
+COPY --from=prod-deps /app/packages /app/packages
+
+COPY --from=builder /app/packages/api/dist /app/packages/api/dist
+COPY --from=builder /app/packages/api/drizzle /app/packages/api/drizzle
+COPY --from=builder /app/packages/web/dist /app/public
+
+# The server creates the database file and its directory and applies pending
+# migrations on start, so there is no separate migrate step here.
+EXPOSE 3000
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["node", "/app/packages/api/dist/index.js"]

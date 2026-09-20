@@ -206,6 +206,12 @@ pnpm run test:e2e   # e2e, needs KVM + Linux
 the routes end to end (real auth, real migrations, mocked hardware); there is
 no separate "integration" tier.
 
+There is also a hosted instance on Railway built from
+`docker/Dockerfile.railway`, which serves the API and the web build from one
+process on one origin (`BONFIRE_WEB_ROOT`) and carries no Firecracker: Railway
+has no `/dev/kvm`, so VMs and agent turns cannot run there. See
+`docs/RAILWAY.md`.
+
 ## What is deliberately missing
 
 This repo went through a large refactor in early 2026 that removed several
