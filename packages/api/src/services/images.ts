@@ -7,7 +7,10 @@
  */
 
 import { createHash } from "crypto";
+import { existsSync } from "fs";
 import { stat } from "fs/promises";
+import { dirname, join } from "path";
+import { fileURLToPath } from "url";
 import { eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
@@ -16,7 +19,40 @@ import { images } from "../db/schema";
 type Db = BetterSQLite3Database<typeof schema>;
 
 export const DEFAULT_IMAGE_REFERENCE = "local:agent-ready";
-export const DEFAULT_IMAGES_DIR = process.env.IMAGES_DIR || "/var/lib/bonfire/images";
+export const DOCKER_IMAGES_DIR = "/var/lib/bonfire/images";
+
+/**
+ * Walk up from this module to the pnpm workspace root, in both `src/` and the
+ * bundled `dist/` layout. Null when the package is installed somewhere else.
+ */
+export function findRepoRoot(
+  from: string = dirname(fileURLToPath(import.meta.url))
+): string | null {
+  let current = from;
+  for (let i = 0; i < 8; i++) {
+    if (existsSync(join(current, "pnpm-workspace.yaml")) || existsSync(join(current, ".git"))) {
+      return current;
+    }
+    const parent = dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+  return null;
+}
+
+/**
+ * Where the kernel and rootfs files live. `IMAGES_DIR` wins; otherwise the
+ * Docker data directory when it exists, else `images/` at the repo root,
+ * which is where `scripts/build-agent-image-docker.sh` writes.
+ */
+export function resolveDefaultImagesDir(env: NodeJS.ProcessEnv = process.env): string {
+  if (env.IMAGES_DIR) return env.IMAGES_DIR;
+  if (existsSync(DOCKER_IMAGES_DIR)) return DOCKER_IMAGES_DIR;
+  const repoRoot = findRepoRoot();
+  return repoRoot ? join(repoRoot, "images") : DOCKER_IMAGES_DIR;
+}
+
+export const DEFAULT_IMAGES_DIR = resolveDefaultImagesDir();
 
 export interface RegisterLocalImageInput {
   reference: string;

@@ -15,16 +15,15 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { eq } from "drizzle-orm";
 import { access, stat } from "fs/promises";
 import { isAbsolute, resolve, join, dirname } from "path";
-import { fileURLToPath } from "url";
 import * as schema from "../db/schema";
 import { images, vms } from "../db/schema";
-import { registerLocalImage } from "../services/images";
+import { DEFAULT_IMAGES_DIR, findRepoRoot, registerLocalImage } from "../services/images";
 
 // ============================================================================
 // Configuration
 // ============================================================================
 
-const IMAGES_DIR = process.env.IMAGES_DIR || "/var/lib/bonfire/images";
+const IMAGES_DIR = DEFAULT_IMAGES_DIR;
 
 // ============================================================================
 // OpenAPI Schemas
@@ -294,11 +293,11 @@ export function createImagesRouter(config: ImagesRouterConfig): OpenAPIHono {
       const kernelPathInput =
         typeof body.kernelPath === "string" && body.kernelPath.trim()
           ? body.kernelPath.trim()
-          : "/app/images/agent-kernel";
+          : join(IMAGES_DIR, "agent-kernel");
       const rootfsPathInput =
         typeof body.rootfsPath === "string" && body.rootfsPath.trim()
           ? body.rootfsPath.trim()
-          : "/app/images/agent-rootfs.ext4";
+          : join(IMAGES_DIR, "agent-rootfs.ext4");
 
       const kernelResolved = await resolveExistingPath(kernelPathInput);
       const rootfsResolved = await resolveExistingPath(rootfsPathInput);
@@ -395,27 +394,13 @@ async function getRootCandidates(): Promise<string[]> {
   add(IMAGES_DIR);
   add(dirname(IMAGES_DIR));
 
-  const repoRoot = await findRepoRootFromModule();
+  const repoRoot = findRepoRoot();
   if (repoRoot) {
     add(repoRoot);
     add(join(repoRoot, "images"));
   }
 
   return roots;
-}
-
-async function findRepoRootFromModule(): Promise<string | null> {
-  // Walk up a few levels from this module location to find the workspace root.
-  // Works in both ts-node (src/..) and built dist (dist/..).
-  let cur = dirname(fileURLToPath(import.meta.url));
-  for (let i = 0; i < 8; i++) {
-    if (await exists(join(cur, "pnpm-workspace.yaml"))) return cur;
-    if (await exists(join(cur, ".git"))) return cur;
-    const parent = dirname(cur);
-    if (parent === cur) break;
-    cur = parent;
-  }
-  return null;
 }
 
 async function exists(path: string): Promise<boolean> {

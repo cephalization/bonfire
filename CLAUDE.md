@@ -285,6 +285,11 @@ Roughly in order:
   better-call wants another), which installs two `@better-auth/core` instances
   and breaks the API typecheck on a fresh `pnpm install --frozen-lockfile`.
   Revisit when bumping better-auth.
+- Kernel and rootfs files are looked up in `IMAGES_DIR`, else
+  `/var/lib/bonfire/images` when it exists (Docker), else `images/` at the
+  repo root, which is where the build script writes. The default image is
+  registered from there at start; the Create VM dialog's local-image form
+  uses the same directory when its paths are left blank.
 - The VM watchdog exists because dev hot-reload kills Firecracker children and
   leaves rows marked `running`. If VMs seem stuck, check it.
 - E2E tests need a self-hosted KVM runner; they only run on pushes to `main`.
