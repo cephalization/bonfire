@@ -133,3 +133,82 @@
   image-rendering: -webkit-optimize-contrast;
   image-rendering: crisp-edges;
 }
+
+/*
+ * Utilities from shadcn/ui's chat components (June 2026): a bottom scroll
+ * fade for the message viewport and a text shimmer for live status. Copied
+ * from shadcn/tailwind.css so the project does not depend on the CLI package.
+ */
+@property --scroll-fade-b {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@keyframes scroll-fade-reveal-b {
+  from {
+    --scroll-fade-b: var(--scroll-fade-size, 2.5rem);
+  }
+  to {
+    --scroll-fade-b: 0px;
+  }
+}
+
+@utility scroll-fade-b {
+  --scroll-fade-mask: linear-gradient(
+    to bottom,
+    #000 0,
+    #000 calc(100% - var(--scroll-fade-b, 0px)),
+    transparent 100%
+  );
+  -webkit-mask-image: var(--scroll-fade-mask);
+  mask-image: var(--scroll-fade-mask);
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+
+  @supports (animation-timeline: scroll()) {
+    animation: scroll-fade-reveal-b 1ms ease-in-out;
+    animation-timeline: scroll(self y);
+    animation-range: calc(100% - 6rem) 100%;
+    animation-fill-mode: both;
+  }
+
+  @supports not (animation-timeline: scroll()) {
+    --scroll-fade-b: var(--scroll-fade-size, 2.5rem);
+  }
+}
+
+@keyframes tw-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+@utility shimmer {
+  --_spread: var(--shimmer-spread, calc(3ch + 40px));
+  --_base: currentColor;
+  --_highlight: var(--shimmer-color, oklch(from currentColor l c h / calc(alpha* 0.2)));
+  background-image: linear-gradient(
+    90deg,
+    var(--_base) calc(50% - var(--_spread)),
+    var(--_highlight) 50%,
+    var(--_base) calc(50% + var(--_spread))
+  );
+  background-repeat: no-repeat;
+  background-size: calc(200% + var(--_spread) * 2) 100%;
+  background-position: 0 0;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: tw-shimmer var(--shimmer-duration, 2s) linear infinite;
+
+  @variant dark {
+    --_highlight: var(
+      --shimmer-color,
+      oklch(from currentColor max(0.8, calc(l + 0.4)) c h / calc(alpha + 0.4))
+    );
+  }
+}

@@ -6,7 +6,14 @@ import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { applyMigrations } from "../db/migrate";
-import { bootstrapDefaultImage, DEFAULT_IMAGE_REFERENCE, registerLocalImage } from "./images";
+import {
+  bootstrapDefaultImage,
+  DEFAULT_IMAGE_REFERENCE,
+  DOCKER_IMAGES_DIR,
+  findRepoRoot,
+  registerLocalImage,
+  resolveDefaultImagesDir,
+} from "./images";
 
 function createDb() {
   const sqlite = new Database(":memory:");
@@ -54,5 +61,18 @@ describe("images service", () => {
 
     // A second boot leaves the existing row alone.
     expect((await bootstrapDefaultImage(db, dir))?.id).toBe(image!.id);
+  });
+});
+
+describe("resolveDefaultImagesDir", () => {
+  it("prefers IMAGES_DIR", () => {
+    expect(resolveDefaultImagesDir({ IMAGES_DIR: "/somewhere/images" })).toBe("/somewhere/images");
+  });
+
+  it("falls back to images/ at the repo root outside Docker", () => {
+    const repoRoot = findRepoRoot();
+    expect(repoRoot).not.toBeNull();
+    const resolved = resolveDefaultImagesDir({});
+    expect([join(repoRoot!, "images"), DOCKER_IMAGES_DIR]).toContain(resolved);
   });
 });

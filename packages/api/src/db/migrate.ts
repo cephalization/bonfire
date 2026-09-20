@@ -10,7 +10,7 @@
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
-import { existsSync } from "fs";
+import { existsSync, mkdirSync } from "fs";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { config } from "../lib/config";
@@ -70,9 +70,28 @@ export function applyMigrations(sqlite: Database.Database, options: MigrateOptio
   migrate(drizzle(sqlite), { migrationsFolder: resolveMigrationsFolder() });
 }
 
+/**
+ * Open (creating if needed) the SQLite database at `dbPath` and bring it up
+ * to date. The parent directory is created too, so a fresh checkout can start
+ * with the default `./bonfire.db` and Docker with `/var/lib/bonfire/bonfire.db`
+ * without any manual setup.
+ */
+export function openDatabase(dbPath: string = config.dbPath): Database.Database {
+  if (dbPath !== ":memory:") mkdirSync(dirname(dbPath), { recursive: true });
+  const sqlite = new Database(dbPath);
+  try {
+    applyMigrations(sqlite);
+  } catch (error) {
+    sqlite.close();
+    throw error;
+  }
+  return sqlite;
+}
+
 /** Open `dbPath`, apply pending migrations and close it. */
 export function runMigrations(dbPath: string = config.dbPath): void {
   console.log("🔧 Running database migrations...");
+  if (dbPath !== ":memory:") mkdirSync(dirname(dbPath), { recursive: true });
   const sqlite = new Database(dbPath);
   try {
     applyMigrations(sqlite, { log: (message) => console.log(`   ${message}`) });

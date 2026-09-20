@@ -12,6 +12,8 @@ A self-hosted platform for ephemeral Firecracker microVMs, optimized for remote 
 - **Web UI** - Manage VMs from your browser (mobile-responsive)
 - **Terminal Access** - Full interactive terminal in the browser, backed by an SSH pty on the VM
 - **SSH Access** - Per-VM keypairs, injected at boot; connect with `bonfire vm ssh`
+- **Conversations** - Group chats per organization, live for everyone in them
+- **Agents** - Add an [opencode](https://opencode.ai) agent to any conversation; it runs inside one of your VMs with the LLM provider keys your organization admins configured
 - **TypeScript SDK** - Programmatic control of your VMs
 - **CLI** - Full-featured command-line interface
 - **Ephemeral VMs** - Spin up and tear down VMs in seconds
@@ -24,6 +26,8 @@ A self-hosted platform for ephemeral Firecracker microVMs, optimized for remote 
 - **Database**: SQLite + Drizzle
 - **Auth**: Better Auth — accounts, organizations, invitations, API keys (see Authentication below)
 - **Terminal**: ghostty-web in the browser, over a WebSocket bridged to SSH
+- **Chat**: shadcn/ui chat components (MessageScroller, Message, Bubble, Marker), server-sent events for realtime
+- **Agents**: opencode's HTTP API, served from inside the VM
 - **CLI**: Clack
 - **VMs**: Firecracker microVMs
 
@@ -375,12 +379,16 @@ For bare metal (running `packages/api` directly), you can also put them in `pack
 Review and update the values as needed:
 
 ```env
-DATABASE_URL=/var/lib/bonfire/bonfire.db
+DATABASE_URL=./bonfire.db   # Docker uses /var/lib/bonfire/bonfire.db
 BETTER_AUTH_SECRET=<generate with: openssl rand -base64 32>
 BONFIRE_URL=http://localhost:3000
 PORT=3000
 NODE_ENV=development
 ```
+
+None of these are required for local development: `pnpm dev` starts the API on
+port 3000 with a development auth secret, creates and migrates `./bonfire.db`
+on first start, and serves the web app on http://localhost:5173.
 
 See [.env.example](./.env.example) for the annotated version.
 

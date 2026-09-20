@@ -4,6 +4,7 @@ import {
   Menu,
   LayoutDashboard,
   Image,
+  MessagesSquare,
   LogOut,
   User,
   Flame,
@@ -38,6 +39,7 @@ interface LayoutProps {
 
 const navItems = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard },
+  { path: "/conversations", label: "Chats", icon: MessagesSquare },
   { path: "/images", label: "Images", icon: Image },
   { path: "/settings", label: "Settings", icon: SettingsIcon },
 ];
@@ -56,7 +58,7 @@ function NavLink({
   mobile?: boolean;
 }) {
   const location = useLocation();
-  const isActive = location.pathname === to;
+  const isActive = to === "/" ? location.pathname === "/" : location.pathname.startsWith(to);
 
   return (
     <Link

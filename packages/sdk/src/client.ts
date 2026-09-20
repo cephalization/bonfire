@@ -5,7 +5,18 @@
  * /api/openapi.json.
  */
 
-import type { HealthResponse, VM, CreateVMRequest, Image, SuccessResponse } from "./types";
+import type {
+  HealthResponse,
+  VM,
+  CreateVMRequest,
+  Image,
+  SuccessResponse,
+  Conversation,
+  ConversationDetail,
+  ConversationMessage,
+  AgentModel,
+  Provider,
+} from "./types";
 
 export interface ClientConfig {
   baseUrl?: string;
@@ -165,6 +176,130 @@ export class BonfireClient {
    */
   async deleteImage(id: string): Promise<SuccessResponse> {
     return this.request<SuccessResponse>("DELETE", `/api/images/${id}`);
+  }
+
+  // ============================================================================
+  // Conversations
+  // ============================================================================
+
+  /** List the organization's conversations, most recently active first. */
+  async listConversations(options: { organizationId?: string } = {}): Promise<Conversation[]> {
+    const organizationId = options.organizationId ?? this.organizationId;
+    return this.request<Conversation[]>("GET", "/api/conversations", {
+      params: organizationId ? { organizationId } : undefined,
+    });
+  }
+
+  /** Start a conversation. The caller becomes its first participant. */
+  async createConversation(
+    request: { title?: string; organizationId?: string } = {}
+  ): Promise<ConversationDetail> {
+    return this.request<ConversationDetail>("POST", "/api/conversations", {
+      body: { organizationId: this.organizationId, ...request },
+    });
+  }
+
+  async getConversation(id: string): Promise<ConversationDetail> {
+    return this.request<ConversationDetail>("GET", `/api/conversations/${id}`);
+  }
+
+  async deleteConversation(id: string): Promise<SuccessResponse> {
+    return this.request<SuccessResponse>("DELETE", `/api/conversations/${id}`);
+  }
+
+  /** Messages, oldest first. `after` is an ISO timestamp. */
+  async listMessages(
+    conversationId: string,
+    options: { after?: string; limit?: number } = {}
+  ): Promise<ConversationMessage[]> {
+    const params: Record<string, string> = {};
+    if (options.after) params.after = options.after;
+    if (options.limit) params.limit = String(options.limit);
+    return this.request<ConversationMessage[]>(
+      "GET",
+      `/api/conversations/${conversationId}/messages`,
+      { params }
+    );
+  }
+
+  /** Post a message. When an agent is attached it is forwarded to the agent. */
+  async postMessage(conversationId: string, body: string): Promise<ConversationMessage> {
+    return this.request<ConversationMessage>(
+      "POST",
+      `/api/conversations/${conversationId}/messages`,
+      { body: { body } }
+    );
+  }
+
+  /**
+   * Attach an agent running in one of the organization's running VMs.
+   * Provisioning continues after the response; poll `getConversation` or
+   * follow the event stream until `agentStatus` leaves "provisioning".
+   */
+  async attachAgent(
+    conversationId: string,
+    request: { vmId: string; model?: string }
+  ): Promise<ConversationDetail> {
+    return this.request<ConversationDetail>("POST", `/api/conversations/${conversationId}/agent`, {
+      body: request,
+    });
+  }
+
+  async detachAgent(conversationId: string): Promise<ConversationDetail> {
+    return this.request<ConversationDetail>("DELETE", `/api/conversations/${conversationId}/agent`);
+  }
+
+  async interruptAgent(conversationId: string): Promise<SuccessResponse> {
+    return this.request<SuccessResponse>(
+      "POST",
+      `/api/conversations/${conversationId}/agent/interrupt`
+    );
+  }
+
+  async listAgentModels(conversationId: string): Promise<AgentModel[]> {
+    return this.request<AgentModel[]>("GET", `/api/conversations/${conversationId}/agent/models`);
+  }
+
+  /**
+   * The URL of a conversation's server-sent event stream. Connect with an
+   * EventSource (or any SSE client) sending the same `X-API-Key` header.
+   */
+  conversationEventsUrl(conversationId: string): string {
+    return new URL(`/api/conversations/${conversationId}/events`, this.baseUrl).toString();
+  }
+
+  // ============================================================================
+  // Provider keys
+  // ============================================================================
+
+  async listProviders(organizationId = this.organizationId): Promise<Provider[]> {
+    if (!organizationId) throw new Error("An organizationId is required");
+    return this.request<Provider[]>("GET", `/api/organizations/${organizationId}/providers`);
+  }
+
+  /** Set an organization's key for a provider (admins and owners only). */
+  async setProviderKey(
+    providerId: string,
+    request: { apiKey: string; label?: string },
+    organizationId = this.organizationId
+  ): Promise<Provider> {
+    if (!organizationId) throw new Error("An organizationId is required");
+    return this.request<Provider>(
+      "PUT",
+      `/api/organizations/${organizationId}/providers/${providerId}`,
+      { body: request }
+    );
+  }
+
+  async deleteProviderKey(
+    providerId: string,
+    organizationId = this.organizationId
+  ): Promise<Provider> {
+    if (!organizationId) throw new Error("An organizationId is required");
+    return this.request<Provider>(
+      "DELETE",
+      `/api/organizations/${organizationId}/providers/${providerId}`
+    );
   }
 
   // ============================================================================

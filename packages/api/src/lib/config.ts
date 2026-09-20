@@ -81,4 +81,10 @@ export const config = {
    * who can reach the server create an account.
    */
   openSignup: process.env.BONFIRE_OPEN_SIGNUP === "true",
+  /**
+   * Directory of built web assets the API should serve, relative to its
+   * working directory. Set in single-container deployments, where there is no
+   * nginx in front; unset in development, where Vite serves the app.
+   */
+  webRoot: process.env.BONFIRE_WEB_ROOT || undefined,
 };

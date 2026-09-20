@@ -85,8 +85,10 @@ function CreateVMForm({
   const [isRegisteringLocal, setIsRegisteringLocal] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [localKernelPath, setLocalKernelPath] = useState("/app/images/agent-kernel");
-  const [localRootfsPath, setLocalRootfsPath] = useState("/app/images/agent-rootfs.ext4");
+  // Blank means "the server's images directory": images/ at the repo root
+  // when running from a checkout, /var/lib/bonfire/images in Docker.
+  const [localKernelPath, setLocalKernelPath] = useState("");
+  const [localRootfsPath, setLocalRootfsPath] = useState("");
 
   useEffect(() => {
     const fetchImages = async () => {
@@ -119,8 +121,8 @@ function CreateVMForm({
     try {
       const img = await registerLocalImage({
         reference: "local:agent-ready",
-        kernelPath: localKernelPath,
-        rootfsPath: localRootfsPath,
+        kernelPath: localKernelPath.trim() || undefined,
+        rootfsPath: localRootfsPath.trim() || undefined,
       });
 
       setImages((prev) => {
@@ -252,6 +254,7 @@ function CreateVMForm({
                     id="local-kernel"
                     value={localKernelPath}
                     onChange={(e) => setLocalKernelPath(e.target.value)}
+                    placeholder="agent-kernel in the server's images directory"
                     disabled={isLoading || isRegisteringLocal}
                     className="min-h-[40px] font-mono text-xs"
                     inputMode="text"
@@ -269,6 +272,7 @@ function CreateVMForm({
                     id="local-rootfs"
                     value={localRootfsPath}
                     onChange={(e) => setLocalRootfsPath(e.target.value)}
+                    placeholder="agent-rootfs.ext4 in the server's images directory"
                     disabled={isLoading || isRegisteringLocal}
                     className="min-h-[40px] font-mono text-xs"
                     inputMode="text"
@@ -279,8 +283,8 @@ function CreateVMForm({
                 </div>
 
                 <div className="rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-                  If registration fails, the files probably don’t exist yet. Build the image first,
-                  then try again.
+                  Leave both blank to use the files the build script wrote to the server’s images
+                  directory. If registration fails, the files probably don’t exist yet.
                 </div>
               </div>
             </CardContent>
@@ -292,12 +296,7 @@ function CreateVMForm({
                 type="button"
                 variant="secondary"
                 onClick={handleRegisterLocalAgentImage}
-                disabled={
-                  isLoading ||
-                  isRegisteringLocal ||
-                  !localKernelPath.trim() ||
-                  !localRootfsPath.trim()
-                }
+                disabled={isLoading || isRegisteringLocal}
                 className="min-h-[40px]"
                 data-testid="register-local-agent-image"
               >

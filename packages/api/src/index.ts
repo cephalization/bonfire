@@ -6,13 +6,24 @@
  */
 
 import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
-import { drizzle, type BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import Database from "better-sqlite3";
+import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { config } from "./lib/config";
 import * as schema from "./db/schema";
+import { createDatabase } from "./db";
 import { createImagesRouter } from "./routes/images";
 import { createVMsRouter } from "./routes/vms";
 import { createTerminalRouter } from "./routes/terminal";
+import { createProvidersRouter } from "./routes/providers";
+import { createConversationsRouter } from "./routes/conversations";
+import {
+  createConversationEventBus,
+  type ConversationEventBus,
+} from "./services/conversation-events";
+import { createAgentManager, type AgentManager } from "./services/agent/manager";
+import type { AgentClientFactory } from "./services/agent/opencode";
+import type { provisionAgent } from "./services/agent/provisioner";
+import type { SSHService } from "./services/ssh";
+import { createSecretBox, type SecretBox } from "./lib/secrets";
 import { NetworkService } from "./services/network";
 import type {
   spawnFirecracker,
@@ -29,10 +40,9 @@ import { attachTerminalWebSocketServer } from "./ws/terminal";
 import { startVmWatchdog } from "./services/vm-watchdog";
 import { bootstrapDefaultImage } from "./services/images";
 import { createTerminalTicketStore, type TerminalTicketStore } from "./lib/terminal-tickets";
+import { mountWebApp } from "./lib/web-assets";
 
 export const API_VERSION = config.apiVersion;
-
-const DEFAULT_DB_PATH = "/var/lib/bonfire/bonfire.db";
 
 // OpenAPI schemas
 const HealthResponseSchema = z
@@ -94,10 +104,23 @@ export interface AppConfig {
   ticketStore?: TerminalTicketStore;
   /** Injected by tests; otherwise built from `config` for the app's database. */
   auth?: Auth;
+  /** Encryption for stored provider keys; derived from BETTER_AUTH_SECRET by default. */
+  secrets?: SecretBox;
+  conversationEvents?: ConversationEventBus;
+  /** How the agent manager reaches opencode in a VM; tests inject a fake. */
+  agentClientFactory?: AgentClientFactory;
+  /** SSH access used to provision the agent in a VM; tests inject the mock. */
+  sshService?: SSHService;
+  loadPrivateKeyFn?: (vmId: string) => Promise<string | null>;
+  provisionAgentFn?: typeof provisionAgent;
+  /** Pre-built manager (tests); otherwise one is created from the options above. */
+  agentManager?: AgentManager;
+  agentHealthTimeoutMs?: number;
 }
 
 /**
- * Open the default on-disk database.
+ * Open the configured on-disk database (see `config.dbPath`), creating and
+ * migrating it if needed.
  *
  * Returns null when no database is reachable (e.g. a test environment with no
  * writable data directory), in which case route mounting is skipped.
@@ -107,8 +130,7 @@ function createDefaultDatabase(): BetterSQLite3Database<typeof schema> | null {
     return null;
   }
   try {
-    const sqlite = new Database(process.env.DATABASE_URL || DEFAULT_DB_PATH);
-    return drizzle(sqlite, { schema });
+    return createDatabase().db;
   } catch {
     return null;
   }
@@ -142,6 +164,8 @@ export function createApp(appConfig: AppConfig = {}) {
   // Set once the database is known; null means only /health and the OpenAPI
   // document are served.
   let auth: Auth | null = null;
+  let agentManager: AgentManager | null = null;
+  const conversationEvents = appConfig.conversationEvents ?? createConversationEventBus();
 
   if (db) {
     const networkService = appConfig.networkService ?? new NetworkService();
@@ -169,6 +193,23 @@ export function createApp(appConfig: AppConfig = {}) {
     app.use("/api/images/*", requireAuth);
     app.use("/api/vms", requireAuth);
     app.use("/api/vms/*", requireAuth);
+    app.use("/api/conversations", requireAuth);
+    app.use("/api/conversations/*", requireAuth);
+    app.use("/api/organizations/*", requireAuth);
+
+    const secrets = appConfig.secrets ?? createSecretBox();
+    agentManager =
+      appConfig.agentManager ??
+      createAgentManager({
+        db,
+        events: conversationEvents,
+        secrets,
+        clientFactory: appConfig.agentClientFactory,
+        sshService: appConfig.sshService,
+        loadPrivateKeyFn: appConfig.loadPrivateKeyFn,
+        provisionFn: appConfig.provisionAgentFn,
+        healthTimeoutMs: appConfig.agentHealthTimeoutMs,
+      });
 
     app.route("/api", createImagesRouter({ db }));
     app.route(
@@ -183,18 +224,28 @@ export function createApp(appConfig: AppConfig = {}) {
       })
     );
     app.route("/api", createTerminalRouter({ db, ticketStore }));
+    app.route("/api", createProvidersRouter({ db, secrets }));
+    app.route(
+      "/api",
+      createConversationsRouter({ db, events: conversationEvents, agents: agentManager })
+    );
   }
 
-  return Object.assign(app, { ticketStore, auth });
+  // Last, so every API route above answers before a request can fall through
+  // to the static build.
+  if (config.webRoot) mountWebApp(app, config.webRoot);
+
+  return Object.assign(app, { ticketStore, auth, agentManager, conversationEvents });
 }
 
 // Start server if this file is run directly
 if (process.argv[1] && process.argv[1] === fileURLToPath(import.meta.url)) {
   console.log(`🚀 Bonfire API v${API_VERSION} starting on port ${config.port}...`);
 
-  const dbPath = process.env.DATABASE_URL || DEFAULT_DB_PATH;
-  const sqlite = new Database(dbPath);
-  const db = drizzle(sqlite, { schema });
+  // Creates the file (and its directory) and applies pending migrations, so
+  // `pnpm dev` on a fresh checkout works without a separate migrate step.
+  const { db } = createDatabase(config.dbPath);
+  console.log(`💾 Database: ${config.dbPath}`);
 
   const app = createApp({ db });
 

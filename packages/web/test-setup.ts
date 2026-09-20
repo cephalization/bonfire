@@ -69,3 +69,21 @@ global.ResizeObserver = MockResizeObserver;
 global.fetch = (..._args: any[]) => {
   return Promise.reject(new Error("Unexpected fetch in unit test"));
 };
+
+// The chat components' scroller observes visibility and scrolls elements;
+// happy-dom has neither IntersectionObserver nor Element.scrollTo.
+class MockIntersectionObserver {
+  constructor(_callback: IntersectionObserverCallback) {}
+  observe(_target: Element) {}
+  unobserve(_target: Element) {}
+  disconnect() {}
+  takeRecords(): IntersectionObserverEntry[] {
+    return [];
+  }
+}
+// @ts-ignore
+global.IntersectionObserver = MockIntersectionObserver;
+// @ts-ignore
+if (!window.Element.prototype.scrollTo) window.Element.prototype.scrollTo = () => {};
+// @ts-ignore
+if (!window.Element.prototype.scrollIntoView) window.Element.prototype.scrollIntoView = () => {};

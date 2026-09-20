@@ -722,6 +722,7 @@ export function createVMsRouter(config: VMsRouterConfig): OpenAPIHono {
         tapDevice: null,
         macAddress: null,
         ipAddress: null,
+        agentPasswordCiphertext: null,
         createdAt: now,
         updatedAt: now,
       };

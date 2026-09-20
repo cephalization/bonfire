@@ -85,3 +85,6 @@ Thumbs.db
 
 # VM images (built via scripts/build-agent-image-docker.sh)
 images/
+
+# Leftover fixture dirs from the static-serving test, if a run is interrupted
+packages/api/web-assets-test-*/

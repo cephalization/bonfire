@@ -226,12 +226,17 @@ Read /tmp/screenshot.png
 - `packages/api/src/services/firecracker/` - VM management
 - `packages/api/src/services/network/` - Network allocation
 - `packages/api/src/db/schema.ts` - Database schema
+- `packages/api/src/routes/conversations.ts` - Conversations, messages, SSE stream, agent attach/detach
+- `packages/api/src/routes/providers.ts` - Per-organization LLM provider keys
+- `packages/api/src/services/agent/` - opencode client, VM provisioning over SSH, agent manager
 
 ### Web
 
 - `packages/web/src/components/Terminal.tsx` - Terminal component (ghostty-web)
 - `packages/web/src/pages/` - Page components
 - `packages/web/src/lib/api.ts` - API client
+- `packages/web/src/pages/Conversation.tsx` - Chat page (shadcn MessageScroller/Message/Bubble/Marker)
+- `packages/web/src/components/ProviderKeysCard.tsx` - Provider keys in Settings
 
 ### Terminal Architecture
 

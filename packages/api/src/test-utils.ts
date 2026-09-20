@@ -15,6 +15,12 @@ import { createAuth, type Auth, type PasswordHasher } from "./lib/auth";
 
 import type { FirecrackerProcess } from "./services/firecracker/process";
 import type { NetworkResources } from "./services/network/index";
+import {
+  createMockAgentClientFactory,
+  type MockAgentClientFactory,
+} from "./services/agent/opencode";
+import { createMockSSHService, type MockSSHService } from "./services/ssh";
+import { createSecretBox } from "./lib/secrets";
 
 /**
  * Mock Firecracker Service interface
@@ -244,6 +250,9 @@ export function createMockNetworkService(subnet: string = "10.0.100.0/24"): Mock
 export interface TestAppConfig {
   firecracker?: MockFirecrackerService;
   network?: MockNetworkService;
+  /** Fake opencode; default records sessions and prompts and lets tests emit events. */
+  agentClientFactory?: MockAgentClientFactory;
+  ssh?: MockSSHService;
   /** Let anyone sign up. Default false, as in production. */
   openSignup?: boolean;
 }
@@ -297,6 +306,8 @@ export interface TestApp {
   mocks: {
     firecracker: MockFirecrackerService;
     network: MockNetworkService;
+    agentClientFactory: MockAgentClientFactory;
+    ssh: MockSSHService;
   };
 }
 
@@ -350,6 +361,8 @@ export async function createTestApp(config: TestAppConfig = {}): Promise<TestApp
   // Create mocked services
   const firecracker = config.firecracker ?? createMockFirecrackerService();
   const network = config.network ?? createMockNetworkService();
+  const agentClientFactory = config.agentClientFactory ?? createMockAgentClientFactory();
+  const ssh = config.ssh ?? createMockSSHService();
 
   const auth = createAuth({
     db,
@@ -370,6 +383,12 @@ export async function createTestApp(config: TestAppConfig = {}): Promise<TestApp
     configureVMProcessFn: firecracker.configureVMProcess as any,
     startVMProcessFn: firecracker.startVMProcess as any,
     stopVMProcessFn: firecracker.stopVMProcess as any,
+    secrets: createSecretBox("test-secret"),
+    agentClientFactory,
+    sshService: ssh,
+    loadPrivateKeyFn: async () =>
+      "-----BEGIN OPENSSH PRIVATE KEY-----\ntest\n-----END OPENSSH PRIVATE KEY-----",
+    agentHealthTimeoutMs: 1_000,
   });
 
   const json = (path: string, body: unknown, headers: Record<string, string> = {}) =>
@@ -451,6 +470,7 @@ export async function createTestApp(config: TestAppConfig = {}): Promise<TestApp
   // Cleanup function
   const cleanup = () => {
     try {
+      app.agentManager?.shutdown();
       sqlite.close();
       unlinkSync(dbPath);
     } catch {
@@ -474,6 +494,8 @@ export async function createTestApp(config: TestAppConfig = {}): Promise<TestApp
     mocks: {
       firecracker,
       network,
+      agentClientFactory,
+      ssh,
     },
   };
 }

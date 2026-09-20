@@ -6,6 +6,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import { ProviderKeysCard } from "@/components/ProviderKeysCard";
 import { Copy, Check, Loader2, Trash2, UserPlus, KeyRound, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -153,6 +154,7 @@ export function Settings() {
         onError={setError}
       />
       <InvitationsCard org={org} canManage={canManage} onChanged={load} onError={setError} />
+      <ProviderKeysCard organizationId={org.id} canManage={canManage} onError={setError} />
       <ApiKeysCard organizationId={org.id} onError={setError} />
     </div>
   );

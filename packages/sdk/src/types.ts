@@ -75,3 +75,85 @@ export interface SuccessResponse {
 // ============================================================================
 
 export type gethealthResponse = HealthResponse;
+
+// ============================================================================
+// Conversations
+// ============================================================================
+
+export type AgentStatus = "offline" | "provisioning" | "idle" | "busy" | "error";
+
+export interface Conversation {
+  id: string;
+  organizationId: string;
+  title: string;
+  createdById: string | null;
+  /** The VM the attached agent runs in; null without an agent. */
+  agentVmId: string | null;
+  /** "provider/model" the agent was asked to use; null lets opencode pick. */
+  agentModel: string | null;
+  agentStatus: AgentStatus;
+  agentError: string | null;
+  lastMessageAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ConversationParticipant {
+  userId: string;
+  name: string;
+  email: string;
+  joinedAt: string;
+}
+
+export interface ConversationDetail extends Conversation {
+  participants: ConversationParticipant[];
+  agentVmName: string | null;
+}
+
+export type MessagePart =
+  | { type: "text"; id: string; text: string }
+  | {
+      type: "tool";
+      callId: string;
+      name: string;
+      status: "running" | "completed" | "error";
+      input?: unknown;
+      output?: string;
+      error?: string;
+    }
+  | { type: "error"; message: string };
+
+export interface ConversationMessage {
+  id: string;
+  conversationId: string;
+  authorKind: "user" | "agent" | "system";
+  authorId: string | null;
+  authorName: string;
+  body: string;
+  /** Ordered parts of an agent message (text, tool calls, errors); empty for people. */
+  parts: MessagePart[];
+  status: "complete" | "streaming" | "error";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AgentModel {
+  providerID: string;
+  id: string;
+  name: string;
+}
+
+// ============================================================================
+// Provider keys (per organization)
+// ============================================================================
+
+export interface Provider {
+  id: string;
+  name: string;
+  keysUrl: string;
+  configured: boolean;
+  /** Last characters of the stored key, for telling keys apart. */
+  keyHint: string | null;
+  label: string | null;
+  updatedAt: string | null;
+}

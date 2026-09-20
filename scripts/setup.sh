@@ -198,7 +198,11 @@ ENV_FILE="${API_DIR}/.env"
 
 if [ ! -f "$ENV_FILE" ]; then
     info "Creating default .env file..."
-    cat > "$ENV_FILE" << 'EOF'
+    # Generated here rather than inside the heredoc: a quoted heredoc does not
+    # expand anything, so the command substitution used to be written to the
+    # file literally and every host ended up sharing one well-known "secret".
+    GENERATED_SECRET="$(openssl rand -base64 32)"
+    cat > "$ENV_FILE" << EOF
 # Bonfire API Configuration
 #
 # IMPORTANT: Change these values before deploying to production!
@@ -208,7 +212,7 @@ DATABASE_URL=/var/lib/bonfire/bonfire.db
 
 # Signs session cookies. Required in production; generate with:
 #   openssl rand -base64 32
-BETTER_AUTH_SECRET=$(openssl rand -base64 32 2>/dev/null || echo change-me-in-production)
+BETTER_AUTH_SECRET=${GENERATED_SECRET}
 
 # URL the browser reaches Bonfire at (cookies and origin checks depend on it)
 BONFIRE_URL=http://localhost:3000

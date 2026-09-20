@@ -169,6 +169,13 @@ create_ext4_image() {
             # Extract tar
             tar -xf /input/rootfs.tar -C /mnt/rootfs
             
+            # Install the network files the Dockerfile staged (Docker mounts
+            # /etc/resolv.conf, /etc/hosts and /etc/hostname during builds)
+            for f in resolv.conf hosts hostname; do
+                rm -f /mnt/rootfs/etc/\$f
+                cp /mnt/rootfs/opt/bonfire/etc/\$f /mnt/rootfs/etc/\$f
+            done
+
             # Set up proper permissions for agent user
             chown -R 1000:1000 /mnt/rootfs/home/agent
             
