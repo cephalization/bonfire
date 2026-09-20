@@ -160,6 +160,13 @@ create_ext4_image() {
     # Extract tar to mount point
     sudo tar -xf "${tar_path}" -C "${mount_point}"
     
+    # Install the network files the Dockerfile staged (Docker mounts
+    # /etc/resolv.conf, /etc/hosts and /etc/hostname during builds)
+    for f in resolv.conf hosts hostname; do
+        sudo rm -f "${mount_point}/etc/${f}"
+        sudo cp "${mount_point}/opt/bonfire/etc/${f}" "${mount_point}/etc/${f}"
+    done
+
     # Set up proper permissions for agent user
     sudo chown -R 1000:1000 "${mount_point}/home/agent"
     

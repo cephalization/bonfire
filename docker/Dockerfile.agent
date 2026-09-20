@@ -104,22 +104,27 @@ RUN mkdir -p /var/lib/apt/lists/partial /var/cache/apt/archives/partial
 RUN corepack enable \
     && corepack prepare pnpm@latest --activate
 
-# Provide a sane default resolv.conf for early boot / minimal DNS setups.
-# We intentionally avoid relying on systemd-resolved's stub being wired up,
-# because serial bootstrap needs working DNS before any higher-level network
-# manager is guaranteed to be ready.
-RUN printf '%s\n' 'nameserver 1.1.1.1' 'nameserver 8.8.8.8' > /etc/resolv.conf \
-    && chmod 644 /etc/resolv.conf
-
-# Avoid sudo warnings about hostname resolution.
-RUN printf '%s\n' 'localhost' > /etc/hostname \
+# Network identity files for the VM. Docker bind-mounts /etc/resolv.conf,
+# /etc/hosts and /etc/hostname into every build step (read-only on Docker
+# Desktop), so they cannot be written here. They are staged under
+# /opt/bonfire/etc and the build scripts copy them into /etc after the
+# filesystem has been extracted into the ext4 image.
+#
+# resolv.conf uses public resolvers directly rather than systemd-resolved's
+# stub, because the serial bootstrap needs working DNS before any higher-level
+# network manager is guaranteed to be ready. hosts and hostname avoid sudo
+# warnings about hostname resolution.
+RUN mkdir -p /opt/bonfire/etc \
+    && printf '%s\n' 'nameserver 1.1.1.1' 'nameserver 8.8.8.8' > /opt/bonfire/etc/resolv.conf \
+    && printf '%s\n' 'localhost' > /opt/bonfire/etc/hostname \
     && printf '%s\n' \
       '127.0.0.1 localhost' \
       '127.0.1.1 localhost' \
       '::1 localhost ip6-localhost ip6-loopback' \
       'ff02::1 ip6-allnodes' \
       'ff02::2 ip6-allrouters' \
-      > /etc/hosts
+      > /opt/bonfire/etc/hosts \
+    && chmod 644 /opt/bonfire/etc/resolv.conf /opt/bonfire/etc/hostname /opt/bonfire/etc/hosts
 
 # Install OpenCode as agent user
 USER agent
