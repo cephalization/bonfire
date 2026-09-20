@@ -206,11 +206,12 @@ pnpm run test:e2e   # e2e, needs KVM + Linux
 the routes end to end (real auth, real migrations, mocked hardware); there is
 no separate "integration" tier.
 
-There is also a hosted instance on Railway built from
-`docker/Dockerfile.railway`, which serves the API and the web build from one
-process on one origin (`BONFIRE_WEB_ROOT`) and carries no Firecracker: Railway
-has no `/dev/kvm`, so VMs and agent turns cannot run there. See
-`docs/RAILWAY.md`.
+Bonfire cannot run in full on macOS, or on any container platform, because
+Firecracker needs `/dev/kvm`. Hosting it means bare metal or a VM with nested
+virtualization; `scripts/bootstrap-host.sh` takes a fresh Ubuntu host to a
+running stack and `docs/SELF_HOSTING.md` says which hosts qualify and which
+cannot. Setting `BONFIRE_WEB_ROOT` makes the API serve the built web app
+itself, for a single-container deployment with no nginx.
 
 ## What is deliberately missing
 

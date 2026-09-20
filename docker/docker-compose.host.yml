@@ -1,0 +1,32 @@
+# Self-hosted host overrides.
+#
+# Usage (with the base and prod files):
+#   docker compose -f docker/docker-compose.yml \
+#                  -f docker/docker-compose.prod.yml \
+#                  -f docker/docker-compose.host.yml up -d
+#
+# Two things differ from the base file:
+#
+# 1. Ports are published on the loopback interface only, so the host exposes
+#    nothing to the internet. Reach it over an SSH tunnel; see
+#    docs/SELF_HOSTING.md. This is the binding, not a firewall, because Docker
+#    publishes ports with its own DNAT rules that ufw does not filter — a ufw
+#    rule would look like it protects the service while the port stayed open.
+#
+# 2. The agent kernel and rootfs are bind-mounted in from the repo's `images/`
+#    directory, which `scripts/build-agent-image-docker.sh` writes. They are
+#    too large to ship inside the image (`.dockerignore` excludes them), and
+#    the API registers the default image from this directory at startup.
+
+services:
+  api:
+    ports: !override
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - bonfire-data:/var/lib/bonfire
+      - /dev/kvm:/dev/kvm
+      - ../images:/var/lib/bonfire/images
+
+  web:
+    ports: !override
+      - "127.0.0.1:80:80"
