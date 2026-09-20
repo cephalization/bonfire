@@ -13,7 +13,7 @@
 import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { eq } from "drizzle-orm";
-import { access, stat } from "fs/promises";
+import { stat } from "fs/promises";
 import { isAbsolute, resolve, join, dirname } from "path";
 import * as schema from "../db/schema";
 import { images, vms } from "../db/schema";
@@ -401,15 +401,6 @@ async function getRootCandidates(): Promise<string[]> {
   }
 
   return roots;
-}
-
-async function exists(path: string): Promise<boolean> {
-  try {
-    await access(path);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 // Helper function for basename
